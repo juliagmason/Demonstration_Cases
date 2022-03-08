@@ -1,0 +1,364 @@
+---
+title: "Nutrition optimization modeling - Nutricast walk through"
+author: "JGM"
+date: "2/15/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library (tidyverse)
+library (AFCD)
+
+
+# Species specific projection data from Chris Free 2020
+
+ds_spp <- readRDS("Data/Free_etal_2020_country_level_outcomes_time_series_for_julia.Rds")
+
+
+# nutrient key from nutrient_endowment
+spp_key <- read.csv(file.path ("../nutrient_endowment/output/Gaines_species_nutrient_content_key.csv"), as.is=T) 
+
+# Read projected human population growth
+pop_growth <- readRDS(file.path( "../nutrient_endowment/data/population_growth/processed/WB_UN_1960_2100_human_population_by_country.Rds"))
+
+# tidied productivity only vs BAU from calculate nutritional_upsides.R
+ds_prod_diff <- readRDS("Data/ds_prod_diff.Rds")
+
+# tidied GENUS nutrient data from calculate_nutritional_upsides.R
+
+# amount of nutrients available per capita per day
+ds_nutr_diff_percap <- readRDS("Data/ds_nutr_diff_dcap.Rds")
+
+# number of individuals each year for whom you could achieve EARs
+ds_nutr_diff_ear <- readRDS("Data/ds_nutr_diff_inds_per_year.Rds")
+```
+Overview of what we can and can't do with the available Nutricast and Aquatic Foods Composition Database data. 
+
+Big caveats/questions: no Malawi data; nutrition data are either extremely coarse ("pelagic fish", "crustaceans") or extremely complicated and patchy. 
+
+
+## Data overview
+
+Chris Free sent me a subset of his data for Chile, Indonesia, Peru, and Sierra Leone. They do not have projections from Malawi. 
+
+They model the spatial range, biomass, catch, profits, B/Bmsy, and F/Fmsy for single-species stocks from the RAM database and FAO marine cpature databases. They use the Costello et al. 2016 "upside" bioeconomic model for fish production and pair it with Garcia-Molinos's AquaMaps range shift models, where changes in projected range would alter the carrying capacity (K) parameter in the bioeconomic model. They use four RCP climate scenarios: 2.6, 4.5, 6.0, 8.5. 
+
+They look at four management scenarios: No Adaptation (BAU); Productivity Only--achieving an economically-optimal HCR (Maximum economic yield, MEY); Range shift only (transboundary management); Full Adaptation (both HCRs for MEY, and transboundary management). 
+
+
+```{r plot_mgmt_scenarios, echo = FALSE, message = FALSE}
+ds_spp %>%
+  filter (!scenario %in% c("Imperfect Full Adaptation", "Imperfect Productivity Only"), year > 2025) %>%
+  group_by (country, rcp, scenario, year) %>%
+  summarise (tot_cat = sum (catch_mt)) %>%
+  ggplot (aes (x = year, y = tot_cat, col = scenario)) +
+  geom_line () +
+  facet_grid (~country ~ rcp, scales = "free") +
+  theme_bw() +
+  labs (y = "Total Catch, mt", x = "") +
+  ggtitle ("Total projected catch under four management scenarios, \n Costello/Gaines/Free upsides model")
+```
+
+For our purposes, I think we want to look at "Productivity only" scenario, that is, focusing on addressing overfishing. I'm going to call this "MEY" from here on out--we're interested in the difference in catch and therefore nutrients between MEY and BAU. 
+
+We could also or alternatively calculate the difference between the Full Adaptation scenario and BAU if desired.
+
+Questions at this point:
+
+* Is the "Productivity Only" scenario the one we want to focus on?
+* Are there other analyses with stock status (F/Fmsy, B/Bmsy) that we should look at?
+* Are the below analyses (translating projected improvement in catch into available nutrients or # individuals' nutritional needs met) on the right track?
+
+For Sierra Leone, here's the difference in catch between MEY and BAU, where the colors represent different species:
+
+```{r SL_catch_project, echo=FALSE}
+ds_prod_diff %>%
+  filter (metric == "catch_mt", country == "Sierra Leone") %>%
+  ggplot (aes (x = year, y = diff)) +
+  geom_area (aes (fill = species)) +
+  facet_wrap(~ rcp, scales = "free") +
+  guides (fill = "none") + 
+  geom_hline (yintercept = 0, lty = 2) +
+  theme_bw() +
+  ggtitle ("Difference in catch (MT) by achieving MEY, Sierra Leone")
+
+```
+
+```{r allcountries_catch_project, echo=FALSE, eval = FALSE}
+
+# other countries for reference 
+
+ds_prod_diff %>%
+  filter (metric == "catch_mt") %>%
+  ggplot (aes (x = year, y = diff)) +
+  geom_area (aes (fill = species)) +
+  facet_grid(country ~ rcp, scales = "free") +
+  guides (fill = "none") + 
+  geom_hline (yintercept = 0, lty = 2) +
+  theme_bw() +
+  ggtitle ("Difference in catch (MT) by achieving MEY")
+
+# Chile
+ds_prod_diff %>%
+  filter (metric == "catch_mt", country == "Chile") %>%
+  ggplot (aes (x = year, y = diff)) +
+  geom_area (aes (fill = species)) +
+  facet_wrap(~ rcp, scales = "free") +
+  guides (fill = "none") + 
+  geom_hline (yintercept = 0, lty = 2) +
+  theme_bw() +
+  ggtitle ("Difference in catch (MT) by achieving MEY, Chile")
+
+# Indo
+ds_prod_diff %>%
+  filter (metric == "catch_mt", country == "Indonesia") %>%
+  ggplot (aes (x = year, y = diff)) +
+  geom_area (aes (fill = species)) +
+  facet_wrap(~ rcp, scales = "free") +
+  guides (fill = "none") + 
+  geom_hline (yintercept = 0, lty = 2) +
+  theme_bw() +
+  ggtitle ("Difference in catch (MT) by achieving MEY, Indonesia")
+
+# Peru
+ds_prod_diff %>%
+  filter (metric == "catch_mt", country == "Peru") %>%
+  ggplot (aes (x = year, y = diff)) +
+  geom_area (aes (fill = species)) +
+  facet_wrap(~ rcp, scales = "free") +
+  guides (fill = "none") + 
+  geom_hline (yintercept = 0, lty = 2) +
+  theme_bw() +
+  ggtitle ("Difference in catch (MT) by achieving MEY, Peru")
+
+```
+
+## Adding nutrition data
+
+
+### GENuS database
+
+We can then use available nutrition data to translate that difference in catch to nutrients. The most accessible option is the GENuS data, which Free/Golden et al. use in the Nutricast project. The nutrients included are: calcium, calories, carbohydrates, copper, fiber, fat, folate, iron, magnesium, monounsaturated fatty acids, niacin, phosphorus, polyunsaturated fatty acids, potassium, protein, riboflavin, saturated fatty acids, sodium thiamin, vitamin A, vitamin B6, vitamin C, and Zinc. 
+
+The problem with this option is that the aquatic foods resolution is very coarse. We have six categories: pelagic fish, demersal fish, "other marine fish," crustaceans, cephalopods, and molluscs.  
+
+Here's the same Sierra Leone map translated into nutrients from the GENuS data:
+
+```{r SL_catch_nutr, echo=FALSE, message = FALSE}
+
+ds_nutr_diff_percap %>%
+  filter (country == "Sierra Leone") %>%
+  group_by (rcp, year, nutrient) %>%
+  summarise (net_amount = sum(amount, na.rm = TRUE)) %>%
+  ggplot () +
+  geom_area (aes (x = year, y = net_amount, fill = nutrient)) +
+  facet_wrap (~rcp,  scales = "free") +
+  theme_bw() +
+  theme(legend.text = element_text (size = 6)) +
+  ggtitle ("Nutrient provisioning by achieving MEY \n varying units (mg, g) per capita per day" )
+
+```
+
+```{r allcountries_catch_nutr, echo=FALSE, eval = FALSE, message = FALSE}
+
+# other countries for reference 
+
+ds_nutr_diff_percap %>%
+  group_by (rcp, country, year, nutrient) %>%
+  summarise (net_amount = sum(amount, na.rm = TRUE)) %>%
+  ggplot () +
+  geom_area (aes (x = year, y = net_amount, fill = nutrient)) +
+  facet_grid (country~rcp,  scales = "free") +
+  theme_bw() +
+  #theme (legend.text = element_text (size = 6)) +
+  guides (fill ="none") +
+  ggtitle ("Nutrient provisioning by achieving MEY \n varying units (mg, g) per capita per day" )
+
+# Chile
+ds_nutr_diff_percap %>%
+  filter (country == "Chile") %>%
+  group_by (rcp, year, nutrient) %>%
+  summarise (net_amount = sum(amount, na.rm = TRUE)) %>%
+  ggplot () +
+  geom_area (aes (x = year, y = net_amount, fill = nutrient)) +
+  facet_wrap (~rcp,  scales = "free") +
+  theme_bw() +
+  theme (legend.text = element_text (size = 6)) +
+  ggtitle ("Nutrient provisioning by achieving MEY \n varying units (mg, g) per capita per day" )
+
+# Indo
+ds_nutr_diff_percap %>%
+  filter (country == "Indonesia") %>%
+  group_by (rcp, year, nutrient) %>%
+  summarise (net_amount = sum(amount, na.rm = TRUE)) %>%
+  ggplot () +
+  geom_area (aes (x = year, y = net_amount, fill = nutrient)) +
+ facet_wrap (~rcp,  scales = "free") +
+  theme_bw() +
+  theme (legend.text = element_text (size = 6)) +
+  ggtitle ("Nutrient provisioning by achieving MEY \n varying units (mg, g) per capita per day" )
+
+# Peru
+ds_nutr_diff_percap %>%
+    filter (country == "Peru") %>%
+  group_by (rcp, year, nutrient) %>%
+  summarise (net_amount = sum(amount, na.rm = TRUE)) %>%
+  ggplot () +
+  geom_area (aes (x = year, y = net_amount, fill = nutrient)) +
+  facet_wrap (~rcp,  scales = "free") +
+  theme_bw() +
+  theme (legend.text = element_text (size = 6))
+  ggtitle ("Nutrient provisioning by achieving MEY \n varying units (mg, g) per capita per day" )
+
+```
+
+This shows the amount of each nutrient available per person per day, using population projections. This is a bit silly to look at because the nutrients all have different units but gives a relative sense of availability. 
+
+Alternatively, we could just say how many individuals' nutrition requirements could be met with this increase in catch, using EARs (estimated average requirements). There are slightly fewer nutrients for which EARs are available. This is the same graph, but depicting how many additional individuals could have their nutrition needs met each year with each nutrient. 
+
+```{r SL_catch_ear, echo=FALSE, message = FALSE}
+ds_nutr_diff_ear %>%
+  filter (country == "Sierra Leone") %>%
+  group_by (rcp, year, nutrient) %>%
+  summarise (net_inds = sum(inds_per_yr, na.rm = TRUE)) %>% 
+  ggplot () +
+  geom_bar (aes (x = year, y = net_inds, fill = nutrient), stat = "identity") +
+  facet_wrap (~rcp,  scales = "free") +
+  theme_bw() +
+  ggtitle ("# of individuals' nutrition requirements met by achieving MEY" )
+
+```
+
+```{r allcountries_catch_ear, echo = FALSE, eval = FALSE, message = FALSE}
+
+# all countries
+s_nutr_diff_ear %>%
+  group_by (country, rcp, year, nutrient) %>%
+  summarise (net_inds = sum(inds_per_yr, na.rm = TRUE)) %>% 
+  ggplot () +
+  geom_bar (aes (x = year, y = net_inds, fill = nutrient), stat = "identity") +
+  facet_grid (country~rcp,  scales = "free") +
+  guides (fill = "none") +
+  theme_bw() +
+  ggtitle ("# of individuals' nutrition requirements met by achieving MEY, Chile" )
+
+# Chile
+s_nutr_diff_ear %>%
+  filter (country == "Chile") %>%
+  group_by (rcp, year, nutrient) %>%
+  summarise (net_inds = sum(inds_per_yr, na.rm = TRUE)) %>% 
+  ggplot () +
+  geom_bar (aes (x = year, y = net_inds, fill = nutrient), stat = "identity") +
+  facet_wrap (~rcp,  scales = "free") +
+  theme_bw() +
+  ggtitle ("# of individuals' nutrition requirements met by achieving MEY, Chile" )
+
+# Indo
+s_nutr_diff_ear %>%
+  filter (country == "Indonesia") %>%
+  group_by (rcp, year, nutrient) %>%
+  summarise (net_inds = sum(inds_per_yr, na.rm = TRUE)) %>% 
+  ggplot () +
+  geom_bar (aes (x = year, y = net_inds, fill = nutrient), stat = "identity") +
+  facet_wrap (~rcp,  scales = "free") +
+  theme_bw() +
+  ggtitle ("# of individuals' nutrition requirements met by achieving MEY, Indo" )
+
+# Peru
+s_nutr_diff_ear %>%
+  filter (country == "Chile") %>%
+  group_by (rcp, year, nutrient) %>%
+  summarise (net_inds = sum(inds_per_yr, na.rm = TRUE)) %>% 
+  ggplot () +
+  geom_bar (aes (x = year, y = net_inds, fill = nutrient), stat = "identity") +
+  facet_wrap (~rcp,  scales = "free") +
+  theme_bw() +
+  ggtitle ("# of individuals' nutrition requirements met by achieving MEY, Peru" )
+```
+
+### Aquatic Foods Composition Database
+
+The AFCD (Golden et al. 2021, Blue Foods Assessment) improves on the GENuS data by providing detailed nutritional information for different species of aquatic foods, with details about different preparations and processing, and geographic specificity. It is more comprehensive than Christina Hicks's 2019 FishNutrients data, which is based on a predictive model and only includes fish, not shellfish or crustaceans. 
+
+The data are from food composition tables and literature. It covers `r length (unique (afcd1$nutrient))` nutrients, most of which are different kinds of fatty acids. It also includes production type (farmed, wild capture, unknown), food part (whole, muscle tissue, roe, gutted, etc.), and food prep type (smoked, frozen, raw, canned, dried, etc.).
+
+In the 2021 paper, they looked at protein, iron, zinc, calcium, vitA, vitB12, DHA+EPA. They interpolated missing values from related species, and took means for multiple entries. So someone HAS gone to the trouble of making a usable summarized dataset, but it is not the dataset I have access to. 
+
+The data I have don't have interpolated values. So they're spotty--some species just have a few nutrients; others have hundreds of entries and different product types. There are also specific food composition tables for some countries but not others, so we have to decide which data sources to include for each of our focal countries. 
+
+
+
+
+#### What I need help with: 
+
+* Is it worth pursuing the AFCD??
+* For each of our countries, which data sources would be appropriate to use?
+* Do we care about different kinds of food preparation (raw, dried, canned)?
+* If so, how should we use those data?
+
+
+For example: In Sierra Leone, we have 143 species in the upsides model. 91 of those species have data in the AFCD. They don't have specific food composition tables for SL, but I pulled data from the FAO INFOODS West Africa study, FAO INFOODS Ufish, FAO Biodiv , Liberia, Cote d'Ivoire, Ghana, Senagal, Mauritania, and Nigeria. Is that too many neighboring countries?
+
+
+Available countries/data sources:
+```{r afcd_country, echo = FALSE}
+sort (unique (afcd1$country))
+```
+
+
+
+```{r SL_AFCD, echo = FALSE}
+sl_top_catch <- ds_spp %>%
+  filter (country == "Sierra Leone", rcp == "RCP60", year == 2012, scenario == "No Adaptation") %>%
+  slice_max (catch_mt, n = 5)
+
+sl_top5 <- afcd1 %>%
+  filter (sciname %in% sl_top_catch$species,
+          country %in% c ("FAO INFOODS Ufish", "FAO INFOODS West Africa", "FAO Biodiv 3", "Liberia", "Côte d’Ivoire", "Ghana", "Senegal", "Mauritania", "Nigeria" )) 
+
+
+
+## other countries
+chl_top_catch <- ds_spp %>%
+  filter (country == "Chile", rcp == "RCP60", year == 2012, scenario == "No Adaptation") %>%
+  slice_max (catch_mt, n = 5)
+
+sl_top5 <- afcd1 %>%
+  filter (sciname %in% sl_top_catch$species,
+          country %in% c ("FAO INFOODS Ufish", "FAO INFOODS West Africa", "FAO Biodiv 3", "Liberia", "Côte d’Ivoire", "Ghana", "Senegal", "Mauritania", "Nigeria" )) 
+```
+
+A brief glimpse for Sierra Leone--we can look in more depth as desired. Just looking at a few of the top species caught in SL for which we have modeling data: `r sl_top_catch$comm_name`. We have AFCD data for four of them. They're highly uneven--T. Trachurus (horse mackerel) has over 100 different nutrients, whereas S. maderensis (Madeiran sardinella) really only has fats. 
+
+```{r SL_AFCD_table, echo = FALSE}
+
+sl_top5 %>% 
+  group_by (sciname) %>% 
+  summarise (n_entries = n(), 
+             n_nutrients = length (unique (nutrient)), 
+             n_foodprep = length(unique(food_prep))
+             )
+
+```
+
+Nutrients available for S. maderensis: 
+```{r s_maderensis_nutrients, echo = FALSE}
+sl_top5 %>% filter (sciname =="Sardinella maderensis") %>% select (nutrient) %>% distinct()
+```
+
+
+```{r t_trach, echo = FALSE, eval = FALSE}
+sl_top5 %>%
+  filter (sciname== "Trachurus trachurus") %>%
+  group_by (nutrient) %>%
+  summarise (mn_value = mean(value, na.rm = TRUE),
+             units = first (nutrient_units)) %>%
+  filter (mn_value > 0)
+
+```
+
+
