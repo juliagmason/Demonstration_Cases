@@ -480,3 +480,51 @@ eng_ring <- afcd %>%
   discard(~all(is.na(.x))) %>%
   map_df(~.x) %>% View()
 
+# Delve into AFCD data ----
+sort (unique (afcd1$country))
+
+
+# just look at top catch spp for each country
+
+# sierra leone
+sl_catch <- ds_spp %>%
+  filter (country == "Sierra Leone", rcp == "RCP60", year == 2012, scenario == "No Adaptation", catch_mt > 0)
+sl_top_catch <- ds_spp %>%
+  filter (country == "Sierra Leone", rcp == "RCP60", year == 2012, scenario == "No Adaptation") %>%
+  slice_max (catch_mt, n = 5)
+
+sl_top5_afcd <- afcd1 %>%
+  filter (sciname %in% sl_top_catch$species,
+          country %in% c ("FAO INFOODS Ufish", "FAO INFOODS West Africa", "FAO Biodiv 3", "Liberia", "Côte d’Ivoire", "Ghana", "Senegal", "Mauritania", "Nigeria" )) 
+
+
+
+# chile 
+chl_top_catch <- ds_spp %>%
+  filter (country == "Chile", rcp == "RCP60", year == 2012, scenario == "No Adaptation") %>%
+  slice_max (catch_mt, n = 5)
+
+chl_top5_afcd <- afcd1 %>%
+  filter (sciname %in% chl_top_catch$species,
+          country %in% c ("FAO INFOODS Ufish", "Chile", "FAO Latin Foods", "Peru", "Argentina", "FAO Biodiv 3", "Not provided in unformatted AFCD")) 
+
+# Peru
+peru_top_catch <- ds_spp %>%
+  filter (country == "Peru", rcp == "RCP60", year == 2012, scenario == "No Adaptation") %>%
+  slice_max (catch_mt, n = 5)
+
+# can probably use the same sources?
+peru_top5_afcd <- afcd1 %>%
+  filter (sciname %in% peru_top_catch$species,
+          country %in% c ("FAO INFOODS Ufish", "Chile", "FAO Latin Foods", "Peru", "Argentina", "FAO Biodiv 3", "Not provided in unformatted AFCD")) 
+
+# indo
+indo_top_catch <- ds_spp %>%
+  filter (country == "Indonesia", rcp == "RCP60", year == 2012, scenario == "No Adaptation") %>%
+  slice_max (catch_mt, n = 5)
+
+indo_top5_afcd <- afcd1 %>%
+  filter (sciname %in% indo_top_catch$species,
+          country %in% c ("FAO INFOODS Ufish", "FAO Biodiv 3", "Not provided in unformatted AFCD", "Indonesia", "Pacific Region", "Malaysia"))
+
+
