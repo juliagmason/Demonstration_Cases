@@ -19,7 +19,7 @@ ds_spp <- readRDS("Data/Free_etal_2020_country_level_outcomes_time_series_for_ju
 fishnutr <- read_csv ("Data/Species_Nutrient_Predictions.csv")
 
 # truncate to just summary predicted value. eventually will want range?
-fishnutr_mu <- fishnutr_prod %>%
+fishnutr_mu <- fishnutr %>%
   select (species, ends_with ("_mu")) 
 
 # genus data for nonfish [eventually could use AFCD]
@@ -91,75 +91,10 @@ ds_spp_nutr_content <- ds_spp %>%
   pivot_longer (Selenium:Vitamin_A,
                 names_to = "nutrient",
                 values_to = "amount")
+  
+
+
 
 saveRDS(ds_spp_nutr_content, file = "Data/ds_spp_nutr_content_FishNutrientsGENuS.Rds")
 
 
-# What are the top five species that provide each nutrient? ----
-
-# careful, get a lot of ties for nonfish. high iron and zinc levels
-
-# also show proportion of overall catch
-catch_tot <- ds_spp %>% 
-  filter (year == 2012, rcp == "RCP26", scenario == "No Adaptation", catch_mt > 0) %>%
-  group_by (country) %>%
-  summarize (tot_cat = sum(catch_mt))
-
-ds_spp_nutr_content %>%
-  filter (!is.na (amount)) %>%
-  group_by (country, nutrient) %>%
-  slice_max (amount, n = 10) %>%
-  ungroup() %>%
-  arrange (country, nutrient, desc(amount)) %>% 
-  left_join (catch_tot, by = "country") %>%
-  mutate (prop_catch = catch_mt/tot_cat, .keep = "unused")
-
-# spider plots for top catch for each country ----
-
-
-# code following nutrient_endowment --> shiny --> v3 --> Page3_Fig2a_fish_radar.R
-# devtools::install_github("ricardo-bion/ggradar", 
-#                          dependencies = TRUE)
-library (ggradar)
-
-# make a function to do this by country
-
-plot_spp_nutr_radar <- function (country_name, n_spp) {
-  
-  # grab desired # of species
-  top_catch <- ds_spp %>% 
-    filter (country == country_name, year == 2012, rcp == "RCP26", scenario == "No Adaptation", catch_mt > 0) %>%
-    slice_max (catch_mt, n = n_spp)
-  
-  # filter nutrient content data
-  nutr_radar_plot <- ds_spp_nutr_content %>%
-    # from nutricast, express in terms of proportion of maximum. so first get proportion of maximum from within country catch, and then filter the top species
-    filter (country == country_name) %>%
-    group_by (nutrient) %>%
-    mutate(amount_prop=amount/max(amount, na.rm = TRUE)) %>% 
-    ungroup() %>%
-    filter (species %in% top_catch$species) %>%
-    select (-c(country, catch_mt, major_group, amount)) %>%
-    pivot_wider (
-                 names_from = nutrient,
-                 values_from = amount_prop) %>%
-    # radar plot can't deal with NA and non-fish don't have selenium
-    replace_na (list (Selenium = 0)) 
-  
-  # calculate maximum value for plot specification; looks like will be calcium
-  #max_value = max(nutr_radar_plot$Calcium)
-  
-  
-    ggradar(nutr_radar_plot,
-    grid.min = 0, grid.max = 1, 
-    group.point.size = 1.5,
-    group.line.width = 1,
-    legend.text.size = 8,
-    legend.position = "right") 
-}
-
-plot_spp_nutr_radar(country_name = "Sierra Leone", n_spp = 5)
-
-
-
-  
