@@ -1,0 +1,91 @@
+---
+title: "Nutrition optimization modeling--plots for review"
+author: "JGM"
+date: "3/11/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library (tidyverse)
+
+
+# data tables
+ds_spp_nutr_content <- readRDS("Data/ds_spp_nutr_content_FishNutrientsGENuS.Rds")
+demand_met_allscen <- readRDS("Data/nutr_demand_met_allscen.Rds")
+catch_prop <- readRDS("Data/ds_spp_catch_proportions_2012.Rds")
+
+# functions for plotting
+source ("Scripts/Plot_spp_nutr_density.R")
+source ("Scripts/Plot_nutr_demand_met.R")
+
+# vector of country names
+demonstration_countries <- c("Chile", "Peru", "Indonesia", "Sierra Leone")
+```
+
+Compiled Hicks et al. 2019 FishNutrients data for finfish. Still using GENuS data for non-fish (grouped by crustaceans, molluscs, cephalopods). Catch projection data from Free et al. 
+
+
+## Nutrient density of major species
+
+These cobweb plots tell us about the relative nutrient densities of the most-caught species in each country.
+
+I'm looking at the top 5 most caugh species by weight for each country (can add however many we want to see). The y-axis/height of the web represents the relative nutrient concentration compared to the most nutritious species for that county. So a point at 50% for Zinc mean that that species has half as much Zinc as the most Zinc-dense species in that country. Non-fish have no data for Selenium so this is shown as zero. 
+
+```{r spider_plots, echo = FALSE}
+
+radar_plots <- lapply (demonstration_countries, plot_spp_nutr_radar, n_spp = 5)
+#grid.arrange (radar_plots[[1]], radar_plots[[2]],radar_plots[[3]],radar_plots[[4]], ncol =1)
+
+radar_plots[[1]]
+
+```
+```{r, echo = FALSE}
+# surely a better way of doing this??
+radar_plots[[2]]
+```
+```{r, echo = FALSE}
+radar_plots[[3]]
+```
+```{r, echo = FALSE}
+radar_plots[[4]]
+```
+
+
+## Nutrient density of catch
+
+We can look at how much the most nutrient-dense species contribute to catch. Just showing one example here. 
+```{r catch_v_density, echo = FALSE, warning=FALSE}
+plot_spp_nutr_v_catch("Indonesia")
+
+```
+
+## Nutrition upside: Percent nutrient demand met with fisheries reforms
+Using Chris Free's management scenarios, population growth projections, and dietary reference intake data, we can look at how much of each country's projected nutrient demand can be met with fisheries management reforms. 
+
+The management scenarios: No Adaptation (BAU); Productivity Only--achieving an economically-optimal HCR (Maximum economic yield, MEY); Range shift only (transboundary management); Full Adaptation (both HCRs for MEY, and transboundary management). The "imperfect" scenarios mean these adaptations are implemented every 5-10 years instead of every year.  
+
+Here I'm looking at three periods, taking decadal averages for a near-term (2020-2030), mid-century (2050-2060), and end-century (2090-2100) period. The columns represent climate scenarios. 
+
+The dietary intake data doesn't include protein and omega-3s. 
+```{r demand_met_chile, echo = FALSE}
+plot_demand_met_scen("Chile", imperfect = TRUE)
+
+```
+
+A simplified view for the remaining countries, cutting out the "imperfect" scenarios
+```{r demand_met_peru, echo = FALSE}
+plot_demand_met_scen("Peru", imperfect = FALSE)
+
+```
+
+```{r demand_met_indonesia, echo = FALSE}
+plot_demand_met_scen("Indonesia", imperfect = FALSE)
+
+```
+
+```{r demand_met_SL, echo = FALSE}
+plot_demand_met_scen("Sierra Leone", imperfect = FALSE)
+
+```
+
+We can also just look at the *difference* between BAU and productivity only (MEY) or fully adaptive management, in terms of the total amount of additional nutrients available, the number of individuals whose nutritional needs could be met, or the percent nutrient demand met. 
