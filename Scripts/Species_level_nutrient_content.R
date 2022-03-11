@@ -27,10 +27,33 @@ spp_key <- read.csv(file.path ("../nutrient_endowment/output/Gaines_species_nutr
 
 #truncate to the nutrients we're using for fishnutrients. have to figure out how to get omegas? for now, assume PUFAS = omega 3s
 spp_key_sm <- spp_key %>% 
-  select (species, major_group, genus_food_name, calcium_mg, iron_mg, polyunsaturated_fatty_acids_g, protein_g, vitamin_a_mcg_rae, zinc_mg)
+  select (species, major_group, genus_food_name, calcium_mg, iron_mg, polyunsaturated_fatty_acids_g, protein_g, vitamin_a_mcg_rae, zinc_mg) %>%
+  # recode major_Group_ name from nutricast code
+  mutate (
+    major_group=recode(genus_food_name,
+                       "Cephalopods"="Cephalopods",
+                       "Crustaceans"="Crustaceans",
+                       "Demersal Fish"="Finfish",
+                       "Marine Fish; Other"="Finfish",
+                       "Molluscs; Other"="Molluscs",
+                       "Pelagic Fish"="Finfish")
+  )
 
 
-# join species and nutrients data
+# are there fish species that don't have data?
+
+ds_spp_fish <- ds_spp %>%
+  filter (year == 2012, rcp == "RCP26", scenario == "No Adaptation", catch_mt > 0) %>%
+  left_join (spp_key_sm) %>%
+  filter (major_group == "Finfish")
+  
+ds_spp_fish$species[which (!ds_spp_fish$species %in% fishnutr$species)]
+# Sebastes levis
+# Cynoponticus coniceps
+# Sebastes jordani ?
+
+
+# join species and nutrients data ----
 # just get relevant species for each country. Baseline year (2012) where catch > 0, unique species
 
 ds_spp_nutr_content <- ds_spp %>%
@@ -42,15 +65,6 @@ ds_spp_nutr_content <- ds_spp %>%
   left_join (fishnutr_mu, by = "species") %>%
   
   mutate (
-    #recategorize, from nutricast code
-    major_group=recode(genus_food_name,
-                             "Cephalopods"="Cephalopods",
-                             "Crustaceans"="Crustaceans",
-                             "Demersal Fish"="Finfish",
-                             "Marine Fish; Other"="Finfish",
-                             "Molluscs; Other"="Molluscs",
-                             "Pelagic Fish"="Finfish"),
-    
     # select appropriate source for finfish vs. other
     Selenium =  Selenium_mu, 
     Zinc = ifelse (major_group == "Finfish", 
@@ -101,6 +115,9 @@ ds_spp_nutr_content %>%
   mutate (prop_catch = catch_mt/tot_cat, .keep = "unused")
 
 # spider plots for top catch for each country ----
+
+
+# code following nutrient_endowment --> shiny --> v3 --> Page3_Fig2a_fish_radar.R
 # devtools::install_github("ricardo-bion/ggradar", 
 #                          dependencies = TRUE)
 library (ggradar)
