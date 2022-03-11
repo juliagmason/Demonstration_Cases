@@ -3,7 +3,6 @@
 # JGM
 
 library (tidyverse)
-library (AFCD)
 
 
 # Species specific projection data from Chris Free 2020
@@ -12,20 +11,7 @@ ds_spp <- readRDS("Data/Free_etal_2020_country_level_outcomes_time_series_for_ju
 # has 6 management scenarios, 4 rcps. 
 # Management scenarios: Full Adaptation, Imperfect Full Adaptation, Imperfect Productivity Only--don't know what this means. 5,10,20 year intervals? but what interval?, No Adaptation (BAU, current mortality maintained and gradually shifts to open access for transboundary stocks), Productivity Only (economically optimal fishing morality for static stocks; gradual shift to open access for transboundary), Range Shift Only. 
 
-# data overview: plot different management scenarios for each country and rcp ----
-
 # imperfect scenarios have big fluctuations. stick to the 4 main ones, and skip burn-in
-ds_spp %>%
-  filter (!scenario %in% c("Imperfect Full Adaptation", "Imperfect Productivity Only"), year > 2025) %>%
-  group_by (country, rcp, scenario, year) %>%
-  summarise (tot_cat = sum (catch_mt)) %>%
-  ggplot (aes (x = year, y = tot_cat, col = scenario)) +
-  geom_line () +
-  facet_grid (~country ~ rcp, scales = "free") +
-  theme_bw() +
-  labs (y = "Total Catch, mt", x = "") +
-  ggtitle ("Total projected catch under four management scenarios, \n Costello/Gaines")
-
 # I think what we want is productivity only, compare to BAU
 
 # filtering out zero catch, hopefully helps make the dataset more manageable
@@ -40,6 +26,9 @@ ds_prod_diff <- ds_spp %>%
   filter (!is.na(diff))
 
 saveRDS(ds_prod_diff, file = "Data/ds_prod_diff.Rds")
+
+
+# differences in other metrics--catch, profits ----
 
 png ("Figures/Diff_catch_MEY_byspecies.png", width = 14, height = 6, units = "in", res = 300)
 ds_prod_diff %>%
@@ -63,24 +52,34 @@ ds_prod_diff %>%
   ggtitle ("Difference in profits (USD) by achieving MEY")
 dev.off()
 
-# Convert difference to nutrients using GENUS data ----
-# nutrient key from nutrient_endowment
-spp_key <- read.csv(file.path ("../nutrient_endowment/output/Gaines_species_nutrient_content_key.csv"), as.is=T) 
-
-# Read projected human population growth
-pop_growth <- readRDS(file.path( "../nutrient_endowment/data/population_growth/processed/WB_UN_1960_2100_human_population_by_country.Rds"))
-
-
-# from nutrient_endowment, gives per capita availability by dividing by population growth. but we might want to say how many additional people you could feed?
-
-# taking forever, so just play with 1% of the data until the code is cleaner
+# Convert difference to nutrients using FishNutrients data ----
+# tidied productivity only vs BAU
 ds_prod_diff <- readRDS("Data/ds_prod_diff.Rds")
 
-ds_prod_diff_small <- ds_prod_diff %>% group_by (rcp, country) %>% sample_frac (0.01)
+# fish nutrients models, ran code from https://github.com/mamacneil/NutrientFishbase
+fishnutr <- read_csv ("Data/Species_Nutrient_Predictions.csv")
+#"a flat file with summary statistics for each nutrient for each species, including the scientific name of the species (species), the FishBase species code (spec_code), a highest posterior predictive density value (X_mu), a lower 95% highest posterior predictive density interval (X_l95), a lower 50% highest posterior predictive density interval (X_l50), an upper 50% highest posterior predictive density interval (X_h95), and an upper 95% highest posterior predictive density interval (X_h95)."
 
-ds_nutr_diff_percap <- ds_prod_diff %>%
+# summarise fishnutr, just estimate and an average?? for most nutritious?? robinson et al. 2022 sums, but that can't be right for different units? check their code
+
+# do fishnutr
+fishnutr_mu <- fishnutr %>%
+  select (species, ends_with ("_mu")) 
+
+
+
+# use genus data for non-fish
+spp_key <- read.csv(file.path ("../nutrient_endowment/output/Gaines_species_nutrient_content_key.csv"), as.is=T)
+
+#truncate to the nutrients we're using for fishnutrients. have to figure out how to get omegas? use PUFAs for now
+spp_key_sm <- spp_key %>% 
+  select (species, major_group, genus_food_name, calcium_mg, iron_mg, polyunsaturated_fatty_acids_g, protein_g, vitamin_a_mcg_rae, zinc_mg)
+
+
+# total nutrient availability ----
+ds_prod_diff_nutr_totavail <- ds_prod_diff %>%
   filter (metric == "catch_mt") %>%
-  left_join (spp_key, by = "species") %>%
+  left_join (spp_key_sm, by = "species") %>%
   # Step 3. Convert catch to edible meat
   filter(!is.na(genus_food_name)) %>% 
   mutate(major_group=recode(genus_food_name,
@@ -95,78 +94,150 @@ ds_nutr_diff_percap <- ds_prod_diff %>%
                         "Crustaceans"=0.36, 
                         "Molluscs"=0.17, 
                         "Cephalopods"=0.21), 
-         meat_mt= diff * pedible) %>% 
-  # Step 4. Add human population size
-  left_join(pop_growth %>% select(country, year, pop_size_50perc), by=c("country", "year")) %>% 
-  rename(human_pop_size=pop_size_50perc) %>% 
-  # Step 5. Calculate daily per capita meat availability [ now ADDITIONAL availability from improved mgmt]
-  mutate(meat_g_dcap= (meat_mt*1000*1000) / 365 / human_pop_size) %>% 
-  # Step 6. Calculate daily per capita nutrient availability
-  # ** divide by 100 because genus data provides values per 100g serving
-  mutate(calcium = meat_g_dcap * calcium_mg / 100,
-         calories = meat_g_dcap * calories_kcal / 100,
-         carbohydrates = meat_g_dcap * carbohydrates_g / 100,
-         copper = meat_g_dcap * copper_mg / 100,
-         fat = meat_g_dcap * fat_g / 100,
-         folate = meat_g_dcap * folate_mcg / 100,
-         iron = meat_g_dcap * iron_mg / 100,
-         magnesium = meat_g_dcap * magnesium_mg / 100,
-         monounsaturated_fatty_acids = meat_g_dcap * monounsaturated_fatty_acids_g / 100,
-         niacin = meat_g_dcap * niacin_mg / 100,
-         phosphorus = meat_g_dcap * phosphorus_mg / 100,
-         polyunsaturated_fatty_acids = meat_g_dcap * polyunsaturated_fatty_acids_g / 100,
-         potassium = meat_g_dcap * potassium_mg / 100,
-         protein = meat_g_dcap * protein_g / 100,
-         riboflavin = meat_g_dcap * riboflavin_mg / 100,
-         saturated_fatty_acids = meat_g_dcap * saturated_fatty_acids_g / 100,
-         sodium = meat_g_dcap * sodium_mg / 100,
-         thiamin_mg = meat_g_dcap * thiamin_mg / 100,
-         vitamin_a = meat_g_dcap * vitamin_a_mcg_rae / 100,
-         vitamin_b6 = meat_g_dcap * vitamin_b6_mg / 100,
-         vitamin_c = meat_g_dcap * vitamin_c_mg / 100,
-         zinc = meat_g_dcap * zinc_mg / 100,
-         .keep = "unused") %>% 
-  # Step 7. Final cleanup
-  # Eliminate regions without population growth data
-  # Format RCP scenarios
-  filter(!is.na(human_pop_size))  %>%
-  pivot_longer (calcium:zinc,
+         # multiply by diff by proportion edible, convert to grams. d
+         meat_g= diff * pedible * 1000*1000/100) %>% 
+  left_join (fishnutr_mu, by = "species") %>%
+# convert to amount available. have to convert mt to grams, and divide by 100 grams
+  mutate (
+    # no selenium in genus
+    Selenium = meat_g * Selenium_mu, 
+    Zinc = ifelse (major_group == "Finfish", 
+                   meat_g * Zinc_mu,
+                   meat_g * zinc_mg),
+    Protein = ifelse (major_group == "Finfish",
+                      meat_g * Protein_mu,
+                      meat_g * protein_g),
+    #### NEED to figure out omega 3 situation #####
+    Omega_3 = ifelse (major_group == "Finfish",
+                         meat_g * Omega_3_mu, 
+                         meat_g * polyunsaturated_fatty_acids_g),
+    Calcium = ifelse (major_group == "Finfish",
+                      meat_g * Calcium_mu,
+                      meat_g * calcium_mg),
+    Iron = ifelse (major_group == "Finfish",
+                   meat_g * Iron_mu,
+                   meat_g * iron_mg),
+    Vitamin_A = ifelse (major_group == "Finfish",
+                        meat_g * Vitamin_A_mu,
+                        meat_g * vitamin_a_mcg_rae),
+    .keep = "unused"
+  ) %>%
+  pivot_longer (Selenium:Vitamin_A,
                 names_to = "nutrient",
                 values_to = "amount") 
 
 
-saveRDS(ds_nutr_diff_percap, file = "Data/ds_nutr_diff_dcap.Rds")
+# plot available nutrients by country ----
+
+# code vaguely following nutrient_endownment --> shiny --> edible_meat_bau_reforms.R
+plot_nutr_avail_upside <- function (country_name) {
+  
+  nutr_avail_plot <- ds_prod_diff_nutr_totavail %>%
+    filter (country == country_name,
+            year %in% c(2040:2060)) %>%
+    group_by (rcp, nutrient) %>%
+    summarise (mean_avail = mean (amount, na.rm = TRUE)) %>%
+    ungroup() 
+  
+    ggplot (nutr_avail_plot, aes (y = nutrient, x = mean_avail)) +
+    geom_bar (stat = "identity") +
+    facet_wrap (~rcp, ncol = 4, scales = "free_x") +
+      geom_vline (xintercept = 0, lty = 2) +
+    theme_bw() +
+      labs(x = "Mean availability of nutrient, average of 2040-2060, units vary", y = "") +
+    ggtitle (paste0("Additional available nutrients from fisheries reforms at mid-century (2040-2060), ", country_name))
+  
+}
+
+plot_nutr_avail_upside ("Chile")
 
 
-ds_nutr_diff_percap %>%
-  filter (country == "Sierra Leone") %>%
-  ggplot () +
-  geom_bar (aes (x = year, y = amount, fill = nutrient), stat = "identity") +
-  facet_wrap (~rcp,  scales = "free")
-
-ds_nutr_diff_percap %>%
-  filter (country == "Sierra Leone") %>%
-  group_by (rcp, year, nutrient) %>%
-  summarise (net_amount = sum(amount, na.rm = TRUE)) %>%
-  ggplot () +
-  geom_area (aes (x = year, y = net_amount, fill = nutrient)) +
-  facet_wrap (~rcp,  scales = "free")
-
-# what do the negatives mean??
-
-ds_sl_temp <- ds_nutr_diff_percap %>%
-  filter (country == "Sierra Leone", rcp == "RCP26", year == 2040)
-# some species do have decreased catch, but it looks like the nutrients are reflected? more that I want to get a net. so would need to group by species
 
 
-## instead of nutrients available per capita; the number of additional people you could feed/meet nutrient requirements
 
-ear <- readRDS ("Data/dietary_reference_intake_data.Rds")
-# take average for adult men and women
-ear_avg <- ear %>%
-  filter (stage == "None") %>%
-  group_by (nutrient) %>%
-  summarize (mn_value = mean(value, na.rm = TRUE))
+# plot nutrient needs met ----
+
+#### *** also check out ouptut --> nutr_deficiencies_by_cntry_Sex_age
+
+# looking at nutrient_endowment --> shiny -->v3 --> Page3_Figc_reforms_prop_demand.R, code 
+
+
+# nutrition demand by country, from nutricast code --> calc_nutr_deficiencies/Step4_calculate_nutrient_demand_hist_proj.R
+# supply required is in metric tons for the whole year
+nutr_demand <- readRDS(file.path ("../nutrient_endowment/output/1960_2100_nutrient_demand_by_country.Rds"))
+
+# take mid century average
+nutr_demand_midcentury <- nutr_demand %>%
+  filter (year %in% c(2040:2060)) %>%
+  group_by (country, nutrient) %>%
+  mutate (across (starts_with ("supply"), ~mean (.x))) %>%
+  # this is doing what I want, but retaining the years; they all have the same value
+  select (-year) %>%
+  distinct()
+
+
+# so i have to convert the totavail nutrients back into mt. right now they're in their native units. 
+# can do overall by nutrient, and also by species?
+
+# mot all of the nutrients are available. calcium, iron, selenium, vitamin a, zinc
+library (measurements)
+
+# can't use conv_unit inside mutate. make a new function? from nutricast code
+# Function to calculate mt of nutrient from mt of edible meat
+# units: mg, ug=mcg 
+# meat_mt <- 29.88111; nutr_dens <- 35.5; nutr_dens_units <- "mg"
+convert_supply_mt <- function(nutrient_input, units_input){
+  unit <- ifelse (units_input == "µg", "ug", units_input)
+  avail_mt <- conv_unit (nutrient_input, from = unit, to = "metric_ton")
+  return (avail_mt)
+}
+  
+  
+# first group by nutrient
+demand_met_by_nutr <- ds_prod_diff_nutr_totavail %>%
+  filter (year %in% c(2040:2060)) %>%
+  group_by (country, rcp, nutrient) %>%
+  summarise (mean_avail = mean (amount, na.rm = TRUE)) %>%
+  left_join (nutr_demand_midcentury, by = c("country", "nutrient")) %>%
+  # get rid of omega 3 and protein, don't have that info
+  filter (!is.na (units)) 
+
+tmp <- demand_met_by_nutr %>%
+  # convert to units
+  mutate (
+    #avail_mt = convert_supply_mt (mean_avail, units_input = units_short)
+    avail_mt = ifelse (
+      units_short == "µg",
+      conv_unit (mean_avail, from = "ug", to = "metric_ton"),
+      conv_unit (mean_avail, from = "mg", to = "metric_ton")
+    )
+  )
+
+  
+
+conv_unit (1, "mg", "metric_ton")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ds_nutr_diff_ear <- ds_prod_diff %>%
   filter (metric == "catch_mt") %>%
