@@ -45,14 +45,16 @@ nutr_demand <- readRDS(file.path ("../nutrient_endowment/output/1960_2100_nutrie
 # Function to calculate mt of nutrient from mt of edible meat ----
 # units: mg, ug=mcg 
 # meat_mt <- 29.88111; nutr_dens <- 35.5; nutr_dens_units <- "mg"
+
+# adding--divide by 100 in here. I think Chris did that in his head but making me doubt everything
 calc_nutr_supply_mt <- function(meat_mt, nutr_dens, nutr_dens_units){
   
   # Convert meat to grams
   # "Mg" is metric tons
   meat_g <- measurements::conv_unit(meat_mt, "Mg", "g")
   
-  # Calculate amount of nutrient in density units
-  nutrient_q <- meat_g *  nutr_dens
+  # Calculate amount of nutrient in density units. divide by 100 because density units are per 100g
+  nutrient_q <- meat_g *  nutr_dens / 100
   
   # Calculate amount of nutrient in metric tons
   nutrient_mt <- measurements::conv_unit(nutrient_q, nutr_dens_units, "Mg")
