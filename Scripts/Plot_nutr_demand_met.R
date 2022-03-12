@@ -31,7 +31,7 @@ plot_demand_met_scen <- function (country_name, imperfect = TRUE) {
   country_demand_met$period <- factor(country_demand_met$period, levels = c("2090-2100", "2050-2060", "2020-2030"))
   
   # plot
-  ggplot(country_demand_met, aes(x=demand_prop, y=period, fill = scenario)) +
+  ggplot(country_demand_met, aes(x=demand_prop * 100, y=period, fill = scenario)) +
     facet_grid(nutrient~ rcp) +
     geom_bar(stat="identity", position = position_dodge2(reverse = TRUE)) +
     # Labels
