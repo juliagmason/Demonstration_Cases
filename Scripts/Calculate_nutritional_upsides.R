@@ -4,10 +4,96 @@
 
 library (tidyverse)
 
+# intake requirement data
 
-# Species specific projection data from Chris Free 2020
+# convert to # individuals nutrition needs met
+ear <- readRDS ("Data/dietary_reference_intake_data.Rds") # this is intake per day
 
-ds_spp <- readRDS("Data/Free_etal_2020_country_level_outcomes_time_series_for_julia.Rds")
+# take average for adult men and women
+ear_avg <- ear %>%
+  filter (stage == "None") %>%
+  group_by (nutrient) %>%
+  summarize (mn_value = mean(value, na.rm = TRUE)) %>%
+  # match nutrient names
+  mutate (nutrient = ifelse (grepl("Linolenic", nutrient), "Omega_3", nutrient),
+          #manually make a dumb units column?
+          units = case_when (
+            nutrient %in% c("Calcium", "Zinc", "Iron") ~ "mg",
+            nutrient %in% c("Protein", "Omega_3") ~ "g",
+            nutrient %in% c("Vitamin A", "Selenium") ~ "ug"
+          ))
+
+# try calculating difference from demand_met_ds
+demand_met_allscen <- readRDS("Data/nutr_demand_met_allscen.Rds")
+
+demand_met_diff <- demand_met_allscen %>%
+  filter (scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation")) %>%
+  group_by (rcp, country, period, nutrient) %>%
+  summarize (diff_prod = mean_avail_mt[scenario == "Productivity Only"] - mean_avail_mt[scenario == "No Adaptation"],
+             diff_adapt = mean_avail_mt[scenario == "Full Adaptation"] - mean_avail_mt[scenario == "No Adaptation"]) 
+  
+
+# number adults whose nutrition requirements could be met
+inds_met_upside <- demand_met_diff %>%
+  left_join (ear_avg, by = "nutrient") %>%
+  mutate (
+    # scalar from nutrient_endowment calc_nutr_deficiencies_step4_calcu_nutrient_demand
+    scalar=recode(units, 
+                  "g"=1,
+                  "mg"=1e3,
+                  "ug"=1e6),
+    inds_prod = diff_prod * scalar * 1000 * 1000 / 365 / mn_value,
+    inds_adapt = diff_adapt * scalar * 1000 * 1000 / 365/ mn_value
+  )
+
+# plot
+plot_n_inds_met_prod <- function (country_name) {
+  
+  country_upside <- inds_met_upside %>%
+    filter (country == country_name)
+  
+  # set levels
+  country_upside$period <- factor(country_upside$period, levels = c("2090-2100", "2050-2060", "2020-2030"))
+  
+    ggplot (country_upside, aes (x = inds_prod, y = period, fill = nutrient)) +
+    geom_bar (stat = "identity", position = position_dodge2(reverse = TRUE)) +
+    facet_wrap (~rcp, scales = "free") +
+      theme_bw() +
+      ggtitle (paste0(country_name, ", Upside with Productivity Only reforms (MEY)")) +
+      labs (x = "Number of additional adults' nutrition requirements met", y = "")
+
+  
+}
+
+plot_n_inds_met_adapt <- function (country_name) {
+  
+  country_upside <- inds_met_upside %>%
+    filter (country == country_name)
+  
+  # set levels
+  country_upside$period <- factor(country_upside$period, levels = c("2090-2100", "2050-2060", "2020-2030"))
+  
+  ggplot (country_upside, aes (x = inds_adapt, y = period, fill = nutrient)) +
+    geom_bar (stat = "identity", position = position_dodge2(reverse = TRUE)) +
+    facet_wrap (~rcp, scales = "free") +
+    theme_bw() +
+    ggtitle (paste0(country_name, ", Upside with Fully Adaptive reforms")) +
+  labs (x = "Number of additional adults' nutrition requirements met", y = "", fill = "Nutrient")
+  
+}
+
+
+
+plot_n_inds_met_prod (country_name = "Chile")
+plot_n_inds_met_adapt (country_name = "Sierra Leone")
+
+
+
+
+
+
+
+
 # has 6 management scenarios, 4 rcps. 
 # Management scenarios: Full Adaptation, Imperfect Full Adaptation, Imperfect Productivity Only--don't know what this means. 5,10,20 year intervals? but what interval?, No Adaptation (BAU, current mortality maintained and gradually shifts to open access for transboundary stocks), Productivity Only (economically optimal fishing morality for static stocks; gradual shift to open access for transboundary), Range Shift Only. 
 
@@ -151,6 +237,7 @@ plot_nutr_avail_upside <- function (country_name) {
     ggtitle (paste0("Additional available nutrients from fisheries reforms at mid-century (2040-2060), ", country_name))
   
 }
+}
 
 plot_nutr_avail_upside ("Chile")
 
@@ -264,255 +351,4 @@ conv_unit (1, "Mg", "g")
 conv_unit (1, "metric_ton", "g")
 
   
-
-##### Do this by all management scenarios ----
-
-# try to consolidate?
-
-# from nutrient_endowment --> shiny --> v3 --> :Page3_Fig2c_reforms_prop_demand, line 84
-
-# Function to calculate mt of nutrient from mt of edible meat
-# units: mg, ug=mcg 
-# meat_mt <- 29.88111; nutr_dens <- 35.5; nutr_dens_units <- "mg"
-calc_nutr_supply_mt <- function(meat_mt, nutr_dens, nutr_dens_units){
-  
-  # Convert meat to grams
-  # "Mg" is metric tons
-  meat_g <- measurements::conv_unit(meat_mt, "Mg", "g")
-  
-  # Calculate amount of nutrient in density units
-  nutrient_q <- meat_g *  nutr_dens
-  
-  # Calculate amount of nutrient in metric tons
-  nutrient_mt <- measurements::conv_unit(nutrient_q, nutr_dens_units, "Mg")
-  
-  # Return
-  return(nutrient_mt)
-  
-}
-
-nutr_avail_allscen_spp <- ds_spp %>%
-  filter (year > 2025, catch_mt > 0) %>%
-  select (rcp, scenario, country, species, year, catch_mt) %>%
-  # add genus nutrient data/edible proportion
-  left_join (spp_key_sm, by = "species") %>%
- # determine amt edible meat from cath
-  filter(!is.na(genus_food_name)) %>% 
-  mutate(major_group=recode(genus_food_name,
-                            "Cephalopods"="Cephalopods",
-                            "Crustaceans"="Crustaceans",
-                            "Demersal Fish"="Finfish",
-                            "Marine Fish; Other"="Finfish",
-                            "Molluscs; Other"="Molluscs",
-                            "Pelagic Fish"="Finfish"),
-         pedible=recode(major_group, 
-                        "Finfish"=0.87, 
-                        "Crustaceans"=0.36, 
-                        "Molluscs"=0.17, 
-                        "Cephalopods"=0.21), 
-         # edible meat in mt
-         meat_mt = catch_mt * pedible
-  ) %>%
-  # add Fishnutrient data 
-  left_join (fishnutr_mu, by = "species") %>%
-  # convert to amount nutrient available. have to convert mt to grams, and divide by 100 grams
-  mutate (
-    # no selenium in genus
-    Selenium = calc_nutr_supply_mt(meat_mt, Selenium_mu, "ug"), 
-    Zinc = ifelse (major_group == "Finfish", 
-                   calc_nutr_supply_mt(meat_mt, Zinc_mu, "mg"),
-                   calc_nutr_supply_mt(meat_mt, zinc_mg, "mg")),
-    Protein = ifelse (major_group == "Finfish",
-                      calc_nutr_supply_mt(meat_mt, Protein_mu, "g"),
-                      calc_nutr_supply_mt(meat_mt, protein_g, "g")),
-    #### NEED to figure out omega 3 situation #####
-    Omega_3 = ifelse (major_group == "Finfish",
-                      calc_nutr_supply_mt(meat_mt, Omega_3_mu, "g"), 
-                      calc_nutr_supply_mt(meat_mt, polyunsaturated_fatty_acids_g, "g")),
-    Calcium = ifelse (major_group == "Finfish",
-                      calc_nutr_supply_mt(meat_mt, Calcium_mu, "mg"),
-                      calc_nutr_supply_mt(meat_mt, calcium_mg, "mg")),
-    Iron = ifelse (major_group == "Finfish",
-                   calc_nutr_supply_mt(meat_mt, Iron_mu, "mg"),
-                   calc_nutr_supply_mt(meat_mt, iron_mg, "mg")),
-    Vitamin_A = ifelse (major_group == "Finfish",
-                        calc_nutr_supply_mt(meat_mt, Vitamin_A_mu, "ug"),
-                        calc_nutr_supply_mt(meat_mt, vitamin_a_mcg_rae, "ug")),
-    .keep = "unused"
-  ) %>%
-  pivot_longer (Selenium:Vitamin_A,
-                names_to = "nutrient",
-                values_to = "amount_mt") 
-
-
-# doesn't make sense to do by year bc nutr_demand is in 5 year blocks. do three periods, 2020-2030, 2050-2060, 2090-2100
-nutr_demand_periods <- nutr_demand %>%
-  mutate (period = case_when (
-    year %in% c(2020:2030) ~ "2020-2030",
-    year %in% c(2050:2060) ~ "2050-2060",
-    year %in% c(2090:2100) ~ "2090-2100"
-  )) %>%
-  filter (!is.na(period)) %>%
-  group_by (country, nutrient, period) %>%
-  summarise (mean_supply_req = mean (supply_req_mt_yr_50perc, na.rm = TRUE))
-
-
-demand_met_allscen <- nutr_avail_allscen_spp %>%
-  group_by (country, rcp, scenario, year, nutrient) %>%
-  summarise (amount_mt = sum (amount_mt, na.rm = TRUE)) %>%
-  ungroup() %>%
-  # break into periods, convert nutrient names
-  mutate (
-    nutrient = 
-      case_when (nutrient == "Vitamin_A" ~ "Vitamin A", 
-                 TRUE ~ nutrient),
-    period = case_when (
-    year %in% c(2020:2030) ~ "2020-2030",
-    year %in% c(2050:2060) ~ "2050-2060",
-    year %in% c(2090:2100) ~ "2090-2100"
-  )) %>%
-  filter (!is.na(period)) %>%
-  # summarise by period 
-  group_by (country, rcp, scenario, period, nutrient) %>%
-  summarise (mean_avail_mt = mean (amount_mt, na.rm = TRUE)) %>%
-  ungroup() %>%
-  # add nutrient demand data
-  left_join (nutr_demand_periods, by = c("country", "nutrient", "period")) %>%
-  mutate (demand_prop = mean_avail_mt/mean_supply_req) 
-
-
-
-plot_nutr_avail_upside_scen <- function (country_name) {
-  
-  nutr_avail_plot <- nutr_avail_allscen %>%
-    filter (country == country_name,
-            year %in% c(2040:2060)) %>%
-    group_by (rcp, scenario, nutrient) %>%
-    summarise (mean_avail = mean (amount, na.rm = TRUE)) %>%
-    ungroup() 
-  # set levels
-  nutr_avail_plot$scenario <- factor (nutr_avail_plot$scenario, levels = c("No Adaptation", "Productivity Only", "Range Shift Only", "Imperfect Productivity Only", "Imperfect Full Adaptation", "Full Adaptation"))
-  
-  ggplot (nutr_avail_plot, aes (y = mean_avail, x = scenario, fill = nutrient)) +
-    geom_bar (stat = "identity", position = "dodge") +
-    facet_wrap (~rcp) +
-    geom_vline (xintercept = 0, lty = 2) +
-    theme_bw() +
-    labs(y = "Mean availability of nutrient, average of 2040-2060, units vary", y = "") +
-    ggtitle (paste0("Nutrient availability under fisheries management scenarios at mid-century (2040-2060), ", country_name))
-  
-}
-
-plot_demand_met_scen <- function (country_name) {
-  
-}
-
-
-
-demand_met_allscen %>%
-  filter (country == "Peru", !is.na(demand_prop)) %>%
-  ggplot(aes(x=period, y=demand_prop, fill = nutrient)) +
-  facet_grid(scenario~ rcp) +
-  geom_bar(stat="identity", position = "dodge") +
-  # Labels
-  labs(x="Percent of nutrient demand\nmet from capture fisheries reforms", y="") +
-  # Theme
-  theme_bw()
-
-
-demand_met_allscen %>%
-  filter (country == "Peru", !is.na(demand_prop)) %>%
-  ggplot(aes(x=demand_prop, y=period, fill = scenario)) +
-  facet_grid(nutrient~ rcp) +
-  geom_bar(stat="identity", position = "dodge") +
-  # Labels
-  labs(x="Percent of nutrient demand\nmet from capture fisheries reforms", y="") +
-  # Theme
-  theme_bw()
-
-
-
-
-ds_nutr_diff_ear <- ds_prod_diff %>%
-  filter (metric == "catch_mt") %>%
-  left_join (spp_key, by = "species") %>%
-  # Step 3. Convert catch to edible meat
-  filter(!is.na(genus_food_name)) %>% 
-  mutate(major_group=recode(genus_food_name,
-                            "Cephalopods"="Cephalopods",
-                            "Crustaceans"="Crustaceans",
-                            "Demersal Fish"="Finfish",
-                            "Marine Fish; Other"="Finfish",
-                            "Molluscs; Other"="Molluscs",
-                            "Pelagic Fish"="Finfish"),
-         pedible=recode(major_group, 
-                        "Finfish"=0.87, 
-                        "Crustaceans"=0.36, 
-                        "Molluscs"=0.17, 
-                        "Cephalopods"=0.21), 
-         meat_mt= diff * pedible) %>%
-  # second mutate to keep diff column
-  mutate(
-         # multiply meat mt by amount of nutrient per 100 g. would be meat_mt * 1000 kg/mt * 1000 g /kg / 100g. so meat_mt * 10000
-         # Some need to be changed to match values for ear
-         Calcium = meat_mt *10000 * calcium_mg,
-         #calories_kcal = meat_mt *10000* calories_kcal,
-         Carbohydrates = meat_mt *10000* carbohydrates_g,
-         # copper in ug --- check this one, seems correct, might even want another 100x more?
-         Copper = meat_mt *10000* copper_mg * 1000, 
-         Fat = meat_mt *10000* fat_g,
-         Folate = meat_mt *10000* folate_mcg,
-         Iron = meat_mt *10000* iron_mg,
-         Magnesium = meat_mt *10000* magnesium_mg,
-         #monounsaturated_fatty_acids_g = meat_mt *10000* monounsaturated_fatty_acids_g,
-         Niacin = meat_mt *10000* niacin_mg,
-         Phosphorus = meat_mt *10000* phosphorus_mg,
-         # linolenic is di-unsaturated? linoleic is highly consumed PUFA
-         `Linoleic acid` = meat_mt *10000* polyunsaturated_fatty_acids_g,
-         Potassium = meat_mt *10000* potassium_mg / 1000,
-         Protein = meat_mt *10000* protein_g,
-         Riboflavin = meat_mt *10000* riboflavin_mg,
-         #saturated_fatty_acids_g = meat_mt *10000* saturated_fatty_acids_g,
-         Sodium = meat_mt *10000* sodium_mg / 1000,
-         Thiamin = meat_mt *10000* thiamin_mg,
-         `Vitamin A` = meat_mt *10000* vitamin_a_mcg_rae,
-         `Vitamin B6` = meat_mt *10000* vitamin_b6_mg,
-         `Vitamin C` = meat_mt *10000* vitamin_c_mg,
-         Zinc = meat_mt *10000* zinc_mg,
-         .keep = "unused") %>% 
-  pivot_longer (Calcium:Zinc,
-                names_to = "nutrient",
-                values_to = "amount") %>%
-         
-left_join (ear_avg, by = "nutrient") %>%
-  mutate (inds_per_yr = (amount / mn_value / 365)) 
-
-saveRDS(ds_nutr_diff_ear, file = "Data/ds_nutr_diff_inds_per_year.Rds")
-
-
-# amount of nutrients available per capita per day
-ds_nutr_diff_percap <- readRDS("Data/ds_nutr_diff_dcap.Rds")
-
-# number of individuals each year for whom you could achieve EARs
-ds_nutr_diff_ear <- readRDS("Data/ds_nutr_diff_inds_per_year.Rds")
-
-
-# maybe take out protein
-ds_nutr_diff_ear %>%
-  filter (country == "Sierra Leone") %>%
-  group_by (rcp, year, nutrient) %>%
-  summarise (net_inds = sum(inds_per_yr, na.rm = TRUE)) %>% 
-  ggplot () +
-  #geom_bar (aes (x = year, y = net_inds, fill = nutrient), stat = "identity") +
-    geom_area (aes (x = year, y = net_inds, fill = nutrient)) +
-  facet_wrap (~rcp,  scales = "free")
-# i think bar is easier to interpret
-
-ds_nutr_diff_ear %>%
-  filter (country == "Chile") %>%
-  group_by (rcp, year, nutrient) %>%
-  summarise (net_inds = sum(inds_per_yr, na.rm = TRUE)) %>%
-  ggplot () +
-  geom_bar (aes (x = year, y = net_inds, fill = nutrient), stat = "identity") +
-  facet_wrap (~rcp,  scales = "free")
 
