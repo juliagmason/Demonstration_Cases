@@ -17,6 +17,7 @@ catch_prop <- readRDS("Data/ds_spp_catch_proportions_2012.Rds")
 # functions for plotting
 source ("Scripts/Plot_spp_nutr_density.R")
 source ("Scripts/Plot_nutr_demand_met.R")
+source ("Scripts/Plot_n_inds_reqs_met.R")
 
 # vector of country names
 demonstration_countries <- c("Chile", "Peru", "Indonesia", "Sierra Leone")
@@ -89,3 +90,8 @@ plot_demand_met_scen("Sierra Leone", imperfect = FALSE)
 ```
 
 We can also just look at the *difference* between BAU and productivity only (MEY) or fully adaptive management, in terms of the total amount of additional nutrients available, the number of individuals whose nutritional needs could be met, or the percent nutrient demand met. 
+```{r inds_met_chil, echo=FALSE}
+plot_n_inds_met_prod (country_name = "Chile")
+
+```
+
