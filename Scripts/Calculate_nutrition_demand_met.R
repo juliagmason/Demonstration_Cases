@@ -154,3 +154,56 @@ demand_met_allscen <- nutr_avail_allscen_spp %>%
   mutate (demand_prop = mean_avail_mt/mean_supply_req) 
 
 saveRDS(demand_met_allscen, file = "Data/nutr_demand_met_allscen.Rds")
+
+
+# sanity check--what's driving huge amts of selenium for chile?
+tmp <- nutr_avail_allscen_spp %>%
+  filter (country == "Chile", nutrient == "Selenium", year == 2090, scenario == "Full Adaptation", rcp == "RCP26") %>%
+  arrange (desc (amount_mt))
+
+tmp_peru <- nutr_avail_allscen_spp %>%
+  filter (country == "Peru", nutrient == "Selenium", year == 2090, scenario == "Full Adaptation", rcp == "RCP26") %>%
+  arrange (desc (amount_mt))
+
+# mostly anchovy. catches are just massive, and much larger than in peru. peru is also more populous
+
+# try chile with anchovy removed ----
+
+chl_demand_met_noanchov <- nutr_avail_allscen_spp %>%
+  filter (country == "Chile", species != "Engraulis ringens") %>%
+  group_by (rcp, scenario, year, nutrient) %>%
+  summarise (amount_mt = sum (amount_mt, na.rm = TRUE)) %>%
+  ungroup() %>%
+  # break into periods, convert nutrient names
+  mutate (
+    nutrient = 
+      case_when (nutrient == "Vitamin_A" ~ "Vitamin A", 
+                 TRUE ~ nutrient),
+    period = case_when (
+      year %in% c(2020:2030) ~ "2020-2030",
+      year %in% c(2050:2060) ~ "2050-2060",
+      year %in% c(2090:2100) ~ "2090-2100"
+    )) %>%
+  filter (!is.na(period)) %>%
+  # summarise by period 
+  group_by (rcp, scenario, period, nutrient) %>%
+  summarise (mean_avail_mt = mean (amount_mt, na.rm = TRUE)) %>%
+  ungroup() %>%
+  # add nutrient demand data
+  left_join (filter (nutr_demand_periods, country == "Chile"), by = c( "nutrient", "period")) %>%
+  mutate (demand_prop = mean_avail_mt/mean_supply_req) %>%
+  filter (!is.na (demand_prop))
+
+chl_demand_met_noanchov $scenario <- factor (chl_demand_met_noanchov $scenario, levels = c("No Adaptation", "Productivity Only", "Range Shift Only", "Imperfect Productivity Only", "Imperfect Full Adaptation", "Full Adaptation"))
+
+chl_demand_met_noanchov $period <- factor(chl_demand_met_noanchov $period, levels = c("2090-2100", "2050-2060", "2020-2030"))
+
+# plot
+ggplot(chl_demand_met_noanchov , aes(x=demand_prop * 100, y=period, fill = scenario)) +
+  facet_grid(nutrient~ rcp) +
+  geom_bar(stat="identity", position = position_dodge2(reverse = TRUE)) +
+  # Labels
+  labs(x="Percent of nutrient demand\nmet from fisheries reforms", y="", fill = "Management\nscenario") +
+  # Theme
+  theme_bw() +
+  ggtitle ("Chile, anchovy removed")
