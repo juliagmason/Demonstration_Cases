@@ -51,6 +51,7 @@ They look at four management scenarios: No Adaptation (BAU); Productivity Only--
 
 
 ```{r plot_mgmt_scenarios, echo = FALSE, message = FALSE}
+# imperfect scenarios have big fluctuations. stick to the 4 main ones, and skip burn-in
 ds_spp %>%
   filter (!scenario %in% c("Imperfect Full Adaptation", "Imperfect Productivity Only"), year > 2025) %>%
   group_by (country, rcp, scenario, year) %>%
