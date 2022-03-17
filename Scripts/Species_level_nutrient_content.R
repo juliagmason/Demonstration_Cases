@@ -53,6 +53,30 @@ ds_spp_fish$species[which (!ds_spp_fish$species %in% fishnutr$species)]
 # Sebastes jordani ?
 
 
+# From Maire et al. 2021, use RDAs to calculate micronutrient density. Take percent of RDA met for each nutrient, capped at 100%, and then take sum for micronutrient density score. Maire et al did children between 6 mos and 5 years. 
+
+# DRIS data from Free nutrient_endowment --> data/ears/data
+dris <- readRDS("Data/dietary_reference_intake_data.Rds")
+
+# no RDA for omega 3, only AI, adequate intake. 
+ai_omega <- dris %>%
+  filter (grepl("Linolenic", nutrient), !age_range %in% c("0-6 mo",   "6-12 mo",  "1-3 yr",  " 4-8 yr")) %>%
+  summarise (unit = first(units),
+             mean_rda = mean (value, na.rm = TRUE)) %>%
+  # match nutrient names; assume linolenic is omega 3
+  mutate (nutrient = "Omega_3")
+
+rda_adult <- dris %>%
+  filter (dri_type == "Recommended Dietary Allowance (RDA)", !age_range %in% c("0-6 mo",   "6-12 mo",  "1-3 yr",  " 4-8 yr")) %>%
+  group_by (nutrient) %>%
+  summarise (unit = first(units),
+             mean_rda = mean (value, na.rm = TRUE)) %>%
+  mutate (nutrient = ifelse (nutrient == "Vitamin A", "Vitamin_A", nutrient))
+
+# add omega 3, REMEMBER THIS IS AI
+rda_adult <- rbind (rda_adult, ai_omega)
+
+
 # join species and nutrients data ----
 # just get relevant species for each country. Baseline year (2012) where catch > 0, unique species
 
@@ -90,11 +114,37 @@ ds_spp_nutr_content <- ds_spp %>%
   ) %>%
   pivot_longer (Selenium:Vitamin_A,
                 names_to = "nutrient",
-                values_to = "amount")
+                values_to = "amount") %>%
+  # join to rda data
+  left_join (rda_adult, by = "nutrient") %>%
+  mutate (perc_rda = amount/mean_rda * 100,
+          perc_rda = ifelse (perc_rda > 100, 100, perc_rda))
   
+# this is quite different from maire et al. not also very different calcium values, must be updated model from fishnutrients? does track when we look at children's needs. 
+ai_omega_child <- dris %>%
+  filter (grepl("Linolenic", nutrient), age_range %in% c("0-6 mo",   "6-12 mo",  "1-3 yr",  " 4-8 yr")) %>%
+  summarise (unit = first(units),
+             mean_rda = mean (value, na.rm = TRUE)) %>%
+  # match nutrient names; assume linolenic is omega 3
+  mutate (nutrient = "Omega_3")
 
+rda_child <- dris %>%
+  filter (dri_type == "Recommended Dietary Allowance (RDA)", age_range %in% c("0-6 mo",   "6-12 mo",  "1-3 yr",  " 4-8 yr")) %>%
+  group_by (nutrient) %>%
+  summarise (unit = first(units),
+             mean_rda = mean (value, na.rm = TRUE)) %>%
+  mutate (nutrient = ifelse (nutrient == "Vitamin A", "Vitamin_A", nutrient))
+
+# add omega 3, REMEMBER THIS IS AI
+rda_child <- rbind (rda_child, ai_omega_child)
 
 
 saveRDS(ds_spp_nutr_content, file = "Data/ds_spp_nutr_content_FishNutrientsGENuS.Rds")
 
+## What are the most nutritious species?
 
+ds_spp_nutr_content %>%
+  select (species, nutrient, perc_rda) %>%
+  group_by (species) %>%
+  summarise (micronutrient_density = sum (perc_rda)) %>%
+  arrange (desc (micronutrient_density))
