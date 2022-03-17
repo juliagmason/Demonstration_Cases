@@ -1,8 +1,135 @@
 ## Translate Indonesia aquaculture production to nutrient content
 # 20211907
+# updated 20220317
 
 library (tidyverse)
+library (measurements) # for converting units
 
+# catch data/projections ----
+# Species specific projection data from Chris Free 2020 ----
+
+ds_spp <- readRDS("Data/Free_etal_2020_country_level_outcomes_time_series_for_julia.Rds")
+
+# nutrient content for each species ----
+# this has country and catch data for reference; take this out to join to catch
+ds_spp_nutr_content_distinct <- readRDS ("Data/ds_spp_nutr_content_FishNutrientsGENuS_RDA_groups.Rds") %>%
+  select (-c(rcp, scenario, country, catch_mt)) %>%
+  distinct()
+
+# maybe want just amount, not more info?
+ds_spp_nutr_amount <- ds_spp_nutr_content_distinct %>%
+  select (species, major_group, nutrient, amount) %>%
+  distinct() %>%
+  # specify units in terms that conv_unit can use
+  mutate (dens_units = 
+            case_when (
+              nutrient %in% c("Protein", "Omega_3") ~ "g",
+              nutrient %in% c("Vitamin_A", "Selenium") ~ "ug",
+              TRUE ~ "mg"
+            ))
+
+
+# Function to calculate mt of nutrient from mt of edible meat ----
+# units: mg, ug=mcg 
+# meat_mt <- 29.88111; nutr_dens <- 35.5; nutr_dens_units <- "mg"
+# from nutrient_endowment --> shiny --> v3 --> :Page3_Fig2c_reforms_prop_demand, line 84
+
+# adding--divide by 100 in here. I think Chris did that in his head but making me doubt everything
+calc_nutr_supply_mt <- function(meat_mt, nutr_dens, nutr_dens_units){
+  
+  # Convert meat to grams
+  # "Mg" is metric tons
+  meat_g <- measurements::conv_unit(meat_mt, "Mg", "g")
+  
+  # Calculate amount of nutrient in density units. divide by 100 because density units are per 100g
+  nutrient_q <- meat_g *  nutr_dens / 100
+  
+  # Calculate amount of nutrient in metric tons
+  nutrient_mt <- measurements::conv_unit(nutrient_q, nutr_dens_units, "Mg")
+  
+  # Return
+  return(nutrient_mt)
+  
+}
+
+# need to vectorize?
+# https://stackoverflow.com/questions/44730774/how-to-use-custom-functions-in-mutate-dplyr
+calc_nutr_supply_mt_V <- Vectorize (calc_nutr_supply_mt)
+# scary, takes forever though
+
+ds_spp_sm <- sample_n(ds_spp, 100)
+
+ds_catch_nutr_content <- ds_spp_sm %>% 
+  as_tibble() %>%
+  filter (year > 2025, catch_mt > 0) %>%
+  select (rcp, scenario, country, species, year, catch_mt) %>%
+  # add nutrient data
+  left_join (ds_spp_nutr_amount, by = "species") %>%
+  # calculate edible meat.
+  mutate(pedible=recode(major_group, 
+                        "Finfish"= 0.87, 
+                        "Crustaceans"=0.36, 
+                        "Molluscs"=0.17, 
+                        "Cephalopods"=0.21), 
+         # edible meat in mt
+         meat_mt = catch_mt * pedible,
+         
+         #available nutrient in mt
+         #nutr_mt = mapply(calc_nutr_supply_mt, meat_mt, amount, dens_units)
+         nutr_mt = pmap (list (meat_mt = meat_mt, nutr_dens = amount, nutr_dens_units = dens_units), calc_nutr_supply_mt)
+  )  %>% unnest(cols = c(nutr_mt))
+
+
+# doesn't make sense to do by year bc nutr_demand is in 5 year blocks. do three periods, 2020-2030, 2050-2060, 2090-2100
+nutr_demand_periods <- nutr_demand %>%
+  mutate (period = case_when (
+    year %in% c(2020:2030) ~ "2020-2030",
+    year %in% c(2050:2060) ~ "2050-2060",
+    year %in% c(2090:2100) ~ "2090-2100"
+  )) %>%
+  filter (!is.na(period)) %>%
+  group_by (country, nutrient, period) %>%
+  summarise (mean_supply_req = mean (supply_req_mt_yr_50perc, na.rm = TRUE))
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#################################################
 # Load and clean aquaculture data ----
 # read in indonesia aquaculture production data
 indo_aq <- read.csv ("Data/Indo_aq.csv", 
