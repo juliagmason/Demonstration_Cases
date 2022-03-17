@@ -12,7 +12,11 @@ ds_spp <- readRDS("Data/Free_etal_2020_country_level_outcomes_time_series_for_ju
 # has 6 management scenarios, 4 rcps. 
 # Management scenarios: Full Adaptation, Imperfect Full Adaptation, Imperfect Productivity Only--don't know what this means. 5,10,20 year intervals? but what interval?, No Adaptation (BAU, current mortality maintained and gradually shifts to open access for transboundary stocks), Productivity Only (economically optimal fishing morality for static stocks; gradual shift to open access for transboundary), Range Shift Only. 
 
-
+# "baseline" catch data, arbitrarily picking. mean of 2012-2020 catch for a sense of catch proportions
+ds_baseline <- ds_spp %>% 
+  filter (year %in% c(2012:2020), catch_mt > 0, rcp == "RCP26", scenario == "No Adaptation") %>%
+  group_by (country, rcp, scenario, species) %>%
+  summarise (catch_mt = mean (catch_mt, na.rm = TRUE))
 
 # nutrient data ----
 # fish nutrients models, ran code from https://github.com/mamacneil/NutrientFishbase
@@ -60,28 +64,50 @@ dris <- readRDS("Data/dietary_reference_intake_data.Rds")
 
 # no RDA for omega 3, only AI, adequate intake. 
 ai_omega <- dris %>%
-  filter (grepl("Linolenic", nutrient), !age_range %in% c("0-6 mo",   "6-12 mo",  "1-3 yr",  " 4-8 yr")) %>%
+  filter (grepl("Linolenic", nutrient)) %>%
+  mutate (group = 
+            case_when (
+              age_range %in% c("6-12 mo",  "1-3 yr",  "4-8 yr") ~ "Child",
+              !age_range %in% c("0-6 mo",   "6-12 mo",  "1-3 yr",  "4-8 yr") & sex == "Females"  & stage == "None" ~ "Females", 
+              !age_range %in% c("0-6 mo",   "6-12 mo",  "1-3 yr",  "4-8 yr") & sex == "Females"  & stage == "Pregnancy" ~ "Pregnant", 
+              !age_range %in% c("0-6 mo",   "6-12 mo",  "1-3 yr",  "4-8 yr") & sex == "Females"  & stage == "Lactation" ~ "Lactating", 
+              !age_range %in% c("0-6 mo",   "6-12 mo",  "1-3 yr",  "4-8 yr") & sex == "Males" ~ "Males",
+              TRUE ~ NA_character_
+            )) %>%
+  group_by (nutrient, group) %>% 
   summarise (unit = first(units),
              mean_rda = mean (value, na.rm = TRUE)) %>%
+  filter (!is.na(group)) %>%
   # match nutrient names; assume linolenic is omega 3
   mutate (nutrient = "Omega_3")
 
-rda_adult <- dris %>%
-  filter (dri_type == "Recommended Dietary Allowance (RDA)", !age_range %in% c("0-6 mo",   "6-12 mo",  "1-3 yr",  " 4-8 yr")) %>%
-  group_by (nutrient) %>%
+rda_groups <- dris %>%
+  filter (dri_type == "Recommended Dietary Allowance (RDA)") %>%
+  mutate (group = 
+            case_when (
+              age_range %in% c("6-12 mo",  "1-3 yr",  "4-8 yr") ~ "Child",
+              !age_range %in% c("0-6 mo",   "6-12 mo",  "1-3 yr",  "4-8 yr") & sex == "Females"  & stage == "None" ~ "Females", 
+              !age_range %in% c("0-6 mo",   "6-12 mo",  "1-3 yr",  "4-8 yr") & sex == "Females"  & stage == "Pregnancy" ~ "Pregnant", 
+              !age_range %in% c("0-6 mo",   "6-12 mo",  "1-3 yr",  "4-8 yr") & sex == "Females"  & stage == "Lactation" ~ "Lactating", 
+              !age_range %in% c("0-6 mo",   "6-12 mo",  "1-3 yr",  "4-8 yr") & sex == "Males" ~ "Males",
+              TRUE ~ NA_character_
+            )) %>%
+  group_by (nutrient, group) %>% 
   summarise (unit = first(units),
              mean_rda = mean (value, na.rm = TRUE)) %>%
-  mutate (nutrient = ifelse (nutrient == "Vitamin A", "Vitamin_A", nutrient))
+  mutate (nutrient = ifelse (nutrient == "Vitamin A", "Vitamin_A", nutrient)) %>%
+  filter (!is.na(group), !is.na (mean_rda))
 
 # add omega 3, REMEMBER THIS IS AI
-rda_adult <- rbind (rda_adult, ai_omega)
+# add group column to bind with children
+rda_groups <- rbind (rda_groups, ai_omega) 
+
 
 
 # join species and nutrients data ----
-# just get relevant species for each country. Baseline year (2012) where catch > 0, unique species
+# just get relevant species for each country. Baseline year (2012-2020 mean) where catch > 0, unique species
 
-ds_spp_nutr_content <- ds_spp %>%
-  filter (year == 2012, rcp == "RCP26", scenario == "No Adaptation", catch_mt > 0) %>%
+ds_spp_nutr_content <- ds_baseline %>%
   # only select relevant columns
   select (country, species, catch_mt)  %>% 
   # join nutrient data
@@ -116,35 +142,21 @@ ds_spp_nutr_content <- ds_spp %>%
                 names_to = "nutrient",
                 values_to = "amount") %>%
   # join to rda data
-  left_join (rda_adult, by = "nutrient") %>%
+  left_join (rda_groups, by = "nutrient") %>%
+  
   mutate (perc_rda = amount/mean_rda * 100,
           perc_rda = ifelse (perc_rda > 100, 100, perc_rda))
   
-# this is quite different from maire et al. not also very different calcium values, must be updated model from fishnutrients? does track when we look at children's needs. 
-ai_omega_child <- dris %>%
-  filter (grepl("Linolenic", nutrient), age_range %in% c("0-6 mo",   "6-12 mo",  "1-3 yr",  " 4-8 yr")) %>%
-  summarise (unit = first(units),
-             mean_rda = mean (value, na.rm = TRUE)) %>%
-  # match nutrient names; assume linolenic is omega 3
-  mutate (nutrient = "Omega_3")
-
-rda_child <- dris %>%
-  filter (dri_type == "Recommended Dietary Allowance (RDA)", age_range %in% c("0-6 mo",   "6-12 mo",  "1-3 yr",  " 4-8 yr")) %>%
-  group_by (nutrient) %>%
-  summarise (unit = first(units),
-             mean_rda = mean (value, na.rm = TRUE)) %>%
-  mutate (nutrient = ifelse (nutrient == "Vitamin A", "Vitamin_A", nutrient))
-
-# add omega 3, REMEMBER THIS IS AI
-rda_child <- rbind (rda_child, ai_omega_child)
 
 
-saveRDS(ds_spp_nutr_content, file = "Data/ds_spp_nutr_content_FishNutrientsGENuS.Rds")
+
+saveRDS(ds_spp_nutr_content, file = "Data/ds_spp_nutr_content_FishNutrientsGENuS_RDA_groups.Rds")
 
 ## What are the most nutritious species?
 
 ds_spp_nutr_content %>%
   select (species, nutrient, perc_rda) %>%
+  distinct() %>%
   group_by (species) %>%
   summarise (micronutrient_density = sum (perc_rda)) %>%
   arrange (desc (micronutrient_density))
