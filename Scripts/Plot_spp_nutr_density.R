@@ -8,13 +8,10 @@ library (ggradar) # for spider plots
 library (ggrepel) # for scatter plots
 
 # compiled species-level nutrient data in Scripts --> Species_level_nutrient_content
-#ds_spp_nutr_content <- readRDS("Data/ds_spp_nutr_content_FishNutrientsGENuS.Rds")
+#use the one with RDAs calculated
+ds_spp_nutr_content <- readRDS("Data/ds_spp_nutr_content_FishNutrientsGENuS_RDA_groups.Rds")
 
 #FishNutrients data for finfish and GENuS data for nonfish. units are the database units, Calcium is mg. Iron is mg Selenium ug, Zinc mg, Vit A ug, Omega 3 g, Protein g
-
-# catch proportions, from Scripts --> Species_catch_proportions
-#catch_prop <- readRDS("Data/ds_spp_catch_proportions_2012.Rds")
-
 
 
 # What are the top five species that provide each nutrient? ----
@@ -33,26 +30,27 @@ library (ggrepel) # for scatter plots
 # spider plots for top catch for each country ----
 # code following nutrient_endowment --> shiny --> v3 --> Page3_Fig2a_fish_radar.R
 
-# This will be a spider/radar plot for the desired number of species representing the most catch by volume. The y axis represents the relative nutrient content compared to the species with the highest density of that nutrient. So 100% zinc means that species provides the most zinc of any species in that country. 50% means that species has half as much zinc as the highest zinc providing species.
+# Changing as of 3/18/22. Instead of relative nutrient yields compared to other species the country catches, y axis is the percent of RDA for children that one 100g serving of that species would provide. 
+
 plot_spp_nutr_radar <- function (country_name, n_spp) {
   
   # grab desired # of species
-  top_catch <- catch_prop %>% 
+  top_catch <- ds_spp_nutr_content %>% 
     filter (country == country_name) %>%
-    slice_max (prop_catch, n = n_spp)
+    select (species, catch_mt) %>%
+    distinct() %>%
+    slice_max (catch_mt, n = n_spp)
   
   # filter nutrient content data
   nutr_radar_plot <- ds_spp_nutr_content %>%
     # from nutricast, express in terms of proportion of maximum. so first get proportion of maximum from within country catch, and then filter the top species
-    filter (country == country_name) %>%
-    group_by (nutrient) %>%
-    mutate(amount_prop=amount/max(amount, na.rm = TRUE)) %>% 
-    ungroup() %>%
-    filter (species %in% top_catch$species) %>%
-    select (-c(country, genus_food_name, catch_mt, amount)) %>%
+    filter (country == country_name, 
+            group == "Child",
+            species %in% top_catch$species) %>%
+    select (species, nutrient, perc_rda) %>%
     pivot_wider (
       names_from = nutrient,
-      values_from = amount_prop) %>%
+      values_from = perc_rda) %>%
     # radar plot can't deal with NA and non-fish don't have selenium
     replace_na (list (Selenium = 0)) 
   
@@ -60,14 +58,15 @@ plot_spp_nutr_radar <- function (country_name, n_spp) {
   #max_value = max(nutr_radar_plot$Calcium)
   
   
-  ggradar(nutr_radar_plot,
-          grid.min = 0, grid.max = 1, 
-          group.point.size = 1.5,
+  ggradar(nutr_radar_plot[1:3,],
+          grid.min = 0, grid.max = 100, 
+          group.point.size = 2,
           group.line.width = 1,
           legend.text.size = 8,
           legend.position = "right") +
-    ggtitle (country_name)
-}
+    ggtitle (country_name) 
+
+  }
 
 #plot_spp_nutr_radar(country_name = "Sierra Leone", n_spp = 5)
 
@@ -86,18 +85,21 @@ truncate_name <- function (name){
   return (name_sm)
 }
 
-plot_spp_nutr_v_catch <- function (country_name) {
+plot_spp_nutr_v_catch <- function (vuln_group, anchovy = TRUE) {
+  # vuln_group could be e.g. "Child", "Lactating", "Pregnant
+  #micronutrient density as sum of percent RDA for children from Maire et al. 2021
   
-  country_spp <- ds_spp_nutr_content %>%
-    filter (country == country_name) %>%
-    left_join (catch_prop, by = c("country", "species"))
+  country_spp_dens <- ds_spp_nutr_content %>%
+    filter (group == vuln_group, !is.na (perc_rda)) %>%
+    group_by (country, species) %>%
+    mutate (micronutrient_density = sum(perc_rda)) %>%
+    select (country, species, catch_mt, major_group, micronutrient_density, label) %>%
+    distinct() %>%
+    ungroup()
   
-  label_spp <- country_spp %>%
-    ungroup() %>%
-    filter (country == country_name) %>%
-    group_by (nutrient) %>%
+  label_spp <- country_spp_dens %>%
+    group_by (country) %>%
     slice_max (amount, prop = 0.05) %>%
-
     mutate (name_sm = truncate_name(species))
 
   
@@ -114,3 +116,20 @@ plot_spp_nutr_v_catch <- function (country_name) {
 }
 
 #plot_spp_nutr_v_catch ("Peru")
+# plot overall micronutrient density vs. catch ----  
+catch_micronutr_density <- ds_spp_nutr_content %>%
+  filter (group == "Child", !is.na (perc_rda)) %>%
+  group_by (country, species) %>%
+  mutate (micronutrient_density = sum(perc_rda),
+          label = ifelse (micronutrient_density > 450 | catch_mt > 500000, 1, 0)) %>%
+  select (country, species, catch_mt, major_group, micronutrient_density, label) %>%
+  distinct() %>%
+  ungroup()
+
+ggplot (catch_micronutr_density, aes (x = log(catch_mt), y = micronutrient_density)) +
+  geom_point (aes(col = major_group)) +
+  geom_text (data = filter (catch_micronutr_density, label == 1), aes (label = species)) +
+  theme_bw() +
+  facet_wrap (~country, scales = "free") +
+  labs (y = "Micronutrient density", x = "log (Catch, mt)", col = "") +
+  ggtitle ("Micronutrient density vs current catch volume")
