@@ -57,14 +57,16 @@ calc_nutr_supply_mt <- function(meat_mt, nutr_dens, nutr_dens_units){
 calc_nutr_supply_mt_V <- Vectorize (calc_nutr_supply_mt)
 # scary, takes forever though
 
-ds_spp_sm <- sample_n(ds_spp, 100)
+ds_spp_sm <- sample_n(ds_spp, 1000)
 
-ds_catch_nutr_content <- ds_spp_sm %>% 
+# this takes a long time
+ds_catch_nutr_yield_mt <- ds_spp %>% 
   as_tibble() %>%
   filter (year > 2025, catch_mt > 0) %>%
   select (rcp, scenario, country, species, year, catch_mt) %>%
   # add nutrient data
   left_join (ds_spp_nutr_amount, by = "species") %>%
+  filter (!is.na (amount)) %>%
   # calculate edible meat.
   mutate(pedible=recode(major_group, 
                         "Finfish"= 0.87, 
@@ -79,27 +81,37 @@ ds_catch_nutr_content <- ds_spp_sm %>%
          nutr_mt = pmap (list (meat_mt = meat_mt, nutr_dens = amount, nutr_dens_units = dens_units), calc_nutr_supply_mt)
   )  %>% unnest(cols = c(nutr_mt))
 
+# save. use this to compare RDAs with nutricast EARs
 
-# doesn't make sense to do by year bc nutr_demand is in 5 year blocks. do three periods, 2020-2030, 2050-2060, 2090-2100
-nutr_demand_periods <- nutr_demand %>%
-  mutate (period = case_when (
-    year %in% c(2020:2030) ~ "2020-2030",
-    year %in% c(2050:2060) ~ "2050-2060",
-    year %in% c(2090:2100) ~ "2090-2100"
-  )) %>%
-  filter (!is.na(period)) %>%
-  group_by (country, nutrient, period) %>%
-  summarise (mean_supply_req = mean (supply_req_mt_yr_50perc, na.rm = TRUE))
-
-  
+saveRDS (ds_catch_nutr_yield_mt, file = "Data/ds_catch_nutr_yield_mt.Rda")
 
 
+# alternate method, convert to 100g servings. ----
+
+ds_catch_nutr_yield_servings <- ds_spp %>% 
+  as_tibble() %>%
+  filter (year > 2025, catch_mt > 0) %>%
+  select (rcp, scenario, country, species, year, catch_mt) %>%
+  # add nutrient data
+  left_join (ds_spp_nutr_amount, by = "species") %>%
+  # calculate edible meat.
+  mutate(pedible=recode(major_group, 
+                        "Finfish"= 0.87, 
+                        "Crustaceans"=0.36, 
+                        "Molluscs"=0.17, 
+                        "Cephalopods"=0.21), 
+         # edible meat in mt
+         meat_mt = catch_mt * pedible,
+         
+         # edible meat in 100g servings/day
+         meat_servings = meat_mt * 1000 * 1000 / 100 / 365,
+         
+         # nutrient content in servings/day
+         nutr_servings = meat_servings * amount )
 
 
 
-
-
-
+saveRDS (ds_catch_nutr_yield_servings, file = "Data/ds_catch_nutr_yield_servings.Rds")
 
 
 
