@@ -1,0 +1,59 @@
+---
+title: "Nutrition optimization modeling--plots for review"
+author: "JGM"
+date: "3/18/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library (tidyverse)
+
+
+# data tables
+ds_spp_nutr_content <- readRDS("Data/ds_spp_nutr_content_FishNutrientsGENuS_RDA_groups.Rds")
+#demand_met_allscen <- readRDS("Data/nutr_demand_met_allscen.Rds")
+
+
+# functions for plotting
+source ("Scripts/Plot_spp_nutr_density.R")
+# source ("Scripts/Plot_nutr_demand_met.R")
+# source ("Scripts/Plot_n_inds_reqs_met.R")
+
+
+# vector of country names
+demonstration_countries <- c("Chile", "Peru", "Indonesia", "Sierra Leone")
+```
+
+## Nutrient density of major species
+
+These cobweb plots tell us about the nutrient content of the most-caught species in each country. These are slightly different from a version I showed earlier, and I think more relevant. Now the y axis is the % recommended dietary allowance (RDA) for a child age 6mos to 8 years old from a 100g serving of that species. 100% means that eating a single serving of that species would satisfy a child's daily needs for that nutrient. 
+
+
+
+```{r spider_plots, echo = FALSE}
+
+radar_plots <- lapply (demonstration_countries, plot_spp_nutr_radar, n_spp = 5)
+#grid.arrange (radar_plots[[1]], radar_plots[[2]],radar_plots[[3]],radar_plots[[4]], ncol =1)
+
+radar_plots[[1]]
+
+```
+```{r, echo = FALSE}
+# surely a better way of doing this??
+radar_plots[[2]]
+```
+```{r, echo = FALSE}
+radar_plots[[3]]
+```
+
+Note: Acetes japonicus and P. trituberculatus are both crustaceans and thus have identical nutrient profiles from GENuS data. Last graph had a different fish, was 5th most caught with just 2012 while P. trituberculatus was 6th. Can look into further..
+```{r, echo = FALSE}
+radar_plots[[4]]
+```
+
+### How much are the most nutritious species contributing to catch?
+
+```{r catch_vs_dens}
+
+```
+
