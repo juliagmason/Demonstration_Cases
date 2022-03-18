@@ -20,6 +20,7 @@ ds_baseline <- ds_spp %>%
 
 # nutrient data ----
 # fish nutrients models, ran code from https://github.com/mamacneil/NutrientFishbase
+# this is per 100g raw, edible portion
 fishnutr <- read_csv ("Data/Species_Nutrient_Predictions.csv")
 
 # truncate to just summary predicted value. eventually will want range?
@@ -30,6 +31,7 @@ fishnutr_mu <- fishnutr %>%
 spp_key <- read.csv(file.path ("../nutrient_endowment/output/Gaines_species_nutrient_content_key.csv"), as.is=T)
 
 #truncate to the nutrients we're using for fishnutrients. have to figure out how to get omegas? for now, assume PUFAS = omega 3s
+# this is per 100g portion, but need to calculate proportion edible
 spp_key_sm <- spp_key %>% 
   select (species, major_group, genus_food_name, calcium_mg, iron_mg, polyunsaturated_fatty_acids_g, protein_g, vitamin_a_mcg_rae, zinc_mg) %>%
   # recode major_Group_ name from nutricast code
@@ -41,6 +43,7 @@ spp_key_sm <- spp_key %>%
                        "Marine Fish; Other"="Finfish",
                        "Molluscs; Other"="Molluscs",
                        "Pelagic Fish"="Finfish")
+
   )
 
 
@@ -56,7 +59,7 @@ ds_spp_fish$species[which (!ds_spp_fish$species %in% fishnutr$species)]
 # Cynoponticus coniceps
 # Sebastes jordani ?
 
-
+# Recommended dietary allowance for each nutrient ----
 # From Maire et al. 2021, use RDAs to calculate micronutrient density. Take percent of RDA met for each nutrient, capped at 100%, and then take sum for micronutrient density score. Maire et al did children between 6 mos and 5 years. 
 
 # DRIS data from Free nutrient_endowment --> data/ears/data
@@ -113,29 +116,29 @@ ds_spp_nutr_content <- ds_baseline %>%
   # join nutrient data
   left_join (spp_key_sm, by = "species") %>%
   left_join (fishnutr_mu, by = "species") %>%
-  
-  mutate (
-    # select appropriate source for finfish vs. other
+  mutate(
+    # select appropriate source for finfish vs. other. multiply by proportion edible for non fish
     Selenium =  Selenium_mu, 
-    Zinc = ifelse (major_group == "Finfish", 
+    # dumb hack to keep major_group for later 
+    Zinc = ifelse (grepl("Fish", genus_food_name), 
                     Zinc_mu,
                    zinc_mg),
-    Protein = ifelse (major_group == "Finfish",
+    Protein = ifelse (grepl("Fish", genus_food_name),
                        Protein_mu,
-                      protein_g),
+                     protein_g),
     #### NEED to figure out omega 3 situation #####
-    Omega_3 = ifelse (major_group == "Finfish",
+    Omega_3 = ifelse (grepl("Fish", genus_food_name),
                       Omega_3_mu, 
                       polyunsaturated_fatty_acids_g),
-    Calcium = ifelse (major_group == "Finfish",
+    Calcium = ifelse (grepl("Fish", genus_food_name),
                        Calcium_mu,
-                       calcium_mg),
-    Iron = ifelse (major_group == "Finfish",
+                      calcium_mg),
+    Iron = ifelse (grepl("Fish", genus_food_name),
                     Iron_mu,
-                    iron_mg),
-    Vitamin_A = ifelse (major_group == "Finfish",
+                   iron_mg),
+    Vitamin_A = ifelse (grepl("Fish", genus_food_name),
                          Vitamin_A_mu,
-                         vitamin_a_mcg_rae),
+                        vitamin_a_mcg_rae),
     .keep = "unused"
   ) %>%
   pivot_longer (Selenium:Vitamin_A,
@@ -144,19 +147,42 @@ ds_spp_nutr_content <- ds_baseline %>%
   # join to rda data
   left_join (rda_groups, by = "nutrient") %>%
   
+  # this would be the percentage of your daily requirement you could get from a 100g serving of each species. cap at 100%
   mutate (perc_rda = amount/mean_rda * 100,
-          perc_rda = ifelse (perc_rda > 100, 100, perc_rda))
+          perc_rda = ifelse (perc_rda > 100, 100, perc_rda)) %>%
+  ungroup()
   
 
 
 
 saveRDS(ds_spp_nutr_content, file = "Data/ds_spp_nutr_content_FishNutrientsGENuS_RDA_groups.Rds")
 
-## What are the most nutritious species?
+## What are the overall most nutritious species? ----
 
 ds_spp_nutr_content %>%
+  filter (group == "Child") %>%
   select (species, nutrient, perc_rda) %>%
   distinct() %>%
   group_by (species) %>%
   summarise (micronutrient_density = sum (perc_rda)) %>%
   arrange (desc (micronutrient_density))
+
+
+## Which species provide the most needed nutrients in each country? ----
+# Chile: Calcium and vitamin A. 
+# Indo: calcium and vitamin A, maybe zinc with golden
+# Malawi: calcium, maybe vitamin A
+# Peru: calcium, zinc
+#Sierra leone: calcium, viatmin A, iron, zinc
+
+# for this, doesn't matter RDA? but would want amount_mt?
+
+# two ways of looking at this. the species that are the most nutrient dense for that nutrient, and the species that are frequently caught and therefore providing a lot of that nutrient. 
+
+ds_spp_nutr_content %>%
+  select (country, species, catch_mt, nutrient, amount) %>%
+  distinct() %>%
+  group_by (country, nutrient) %>%
+  slice_max (amount, n = 5) %>%
+  arrange (country, nutrient, desc (amount)) %>% View()
+  
