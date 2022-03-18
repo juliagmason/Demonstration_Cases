@@ -2,7 +2,9 @@
 title: "Nutrition optimization modeling--plots for review"
 author: "JGM"
 date: "3/11/2022"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -19,18 +21,19 @@ source ("Scripts/Plot_spp_nutr_density.R")
 source ("Scripts/Plot_nutr_demand_met.R")
 source ("Scripts/Plot_n_inds_reqs_met.R")
 
+
 # vector of country names
 demonstration_countries <- c("Chile", "Peru", "Indonesia", "Sierra Leone")
 ```
 
-Compiled Hicks et al. 2019 FishNutrients data for finfish. Still using GENuS data for non-fish (grouped by crustaceans, molluscs, cephalopods). Catch projection data from Free et al. 
+Following conversations with the Aquatic Foods Composition Database (AFCD) authors, I decided to abandon the AFCD for now. I compiled Hicks et al. 2019 FishNutrients data for finfish, and am using GENuS data for non-fish (grouped by crustaceans, molluscs, cephalopods; this is what Nutricast uses). Catch projection data are from Free et al. 2020/Gaines et al. 2018.  
 
 
 ## Nutrient density of major species
 
 These cobweb plots tell us about the relative nutrient densities of the most-caught species in each country.
 
-I'm looking at the top 5 most caugh species by weight for each country (can add however many we want to see). The y-axis/height of the web represents the relative nutrient concentration compared to the most nutritious species for that county. So a point at 50% for Zinc mean that that species has half as much Zinc as the most Zinc-dense species in that country. Non-fish have no data for Selenium so this is shown as zero. 
+I'm looking at the top 5 most caught species by weight for each country (can add however many we want to see). The y-axis/height of the web represents the relative nutrient concentration compared to the most nutritious species for that county. So a point at 50% for Zinc mean that that species has half as much Zinc as the most Zinc-dense species in that country. Non-fish have no data for Selenium so this is shown as zero. 
 
 ```{r spider_plots, echo = FALSE}
 
@@ -68,15 +71,92 @@ The management scenarios: No Adaptation (BAU); Productivity Only--achieving an e
 Here I'm looking at three periods, taking decadal averages for a near-term (2020-2030), mid-century (2050-2060), and end-century (2090-2100) period. The columns represent climate scenarios. 
 
 The dietary intake data doesn't include protein and omega-3s. 
+
 ```{r demand_met_chile, echo = FALSE}
 plot_demand_met_scen("Chile", imperfect = TRUE)
 
 ```
+Note a very large proportion of Selenium and Iron demand can be met in all mgmt scenarios for Chile--this is largely driven by extremely high catches of anchovy and a smaller population than Peru.
 
-A simplified view for the remaining countries, cutting out the "imperfect" scenarios
+```{r demand_met_chile_noAnchovy, echo = FALSE}
+nutr_avail_allscen_spp <- readRDS("Data/nutr_avail_allscen_spp.Rds")
+nutr_demand <- readRDS(file.path ("../nutrient_endowment/output/1960_2100_nutrient_demand_by_country.Rds"))
+
+nutr_demand_periods <- nutr_demand %>%
+  mutate (period = case_when (
+    year %in% c(2020:2030) ~ "2020-2030",
+    year %in% c(2050:2060) ~ "2050-2060",
+    year %in% c(2090:2100) ~ "2090-2100"
+  )) %>%
+  filter (!is.na(period)) %>%
+  group_by (country, nutrient, period) %>%
+  summarise (mean_supply_req = mean (supply_req_mt_yr_50perc, na.rm = TRUE))
+
+demand_met_noanchov <- nutr_avail_allscen_spp %>%
+  filter (species != "Engraulis ringens") %>%
+  group_by (country, rcp, scenario, year, nutrient) %>%
+  summarise (amount_mt = sum (amount_mt, na.rm = TRUE)) %>%
+  ungroup() %>%
+  # break into periods, convert nutrient names
+  mutate (
+    nutrient = 
+      case_when (nutrient == "Vitamin_A" ~ "Vitamin A", 
+                 TRUE ~ nutrient),
+    period = case_when (
+      year %in% c(2020:2030) ~ "2020-2030",
+      year %in% c(2050:2060) ~ "2050-2060",
+      year %in% c(2090:2100) ~ "2090-2100"
+    )) %>%
+  filter (!is.na(period)) %>%
+  # summarise by period 
+  group_by (country, rcp, scenario, period, nutrient) %>%
+  summarise (mean_avail_mt = mean (amount_mt, na.rm = TRUE)) %>%
+  ungroup() %>%
+  # add nutrient demand data
+  left_join (nutr_demand_periods, by = c("country", "nutrient", "period")) %>%
+  mutate (demand_prop = mean_avail_mt/mean_supply_req) %>%
+  filter (!is.na (demand_prop))
+
+demand_met_noanchov $scenario <- factor (demand_met_noanchov $scenario, levels = c("No Adaptation", "Productivity Only", "Range Shift Only", "Imperfect Productivity Only", "Imperfect Full Adaptation", "Full Adaptation"))
+
+demand_met_noanchov $period <- factor(demand_met_noanchov $period, levels = c("2090-2100", "2050-2060", "2020-2030"))
+
+# plot
+demand_met_noanchov %>%
+  filter (country == "Chile") %>%
+ggplot(aes(x=demand_prop * 100, y=period, fill = scenario)) +
+  facet_grid(nutrient~ rcp) +
+  geom_bar(stat="identity", position = position_dodge2(reverse = TRUE)) +
+  # Labels
+  labs(x="Percent of nutrient demand\nmet from fisheries reforms", y="", fill = "Management\nscenario") +
+  # Theme
+  theme_bw() +
+  ggtitle ("Chile, anchovy removed")
+  
+
+```
+
+
+
+For subsequent countries looking at a simplifed view, cutting out the "imperfect" scenarios
+
 ```{r demand_met_peru, echo = FALSE}
 plot_demand_met_scen("Peru", imperfect = FALSE)
 
+```
+
+```{r demand_met_peru_no_anchov, echo = FALSE}
+# plot
+demand_met_noanchov %>%
+  filter (country == "Peru", !grepl("Imperfect", scenario)) %>%
+ggplot(aes(x=demand_prop * 100, y=period, fill = scenario)) +
+  facet_grid(nutrient~ rcp) +
+  geom_bar(stat="identity", position = position_dodge2(reverse = TRUE)) +
+  # Labels
+  labs(x="Percent of nutrient demand\nmet from fisheries reforms", y="", fill = "Management\nscenario") +
+  # Theme
+  theme_bw() +
+  ggtitle ("Peru, anchovy removed")
 ```
 
 ```{r demand_met_indonesia, echo = FALSE}
@@ -89,9 +169,44 @@ plot_demand_met_scen("Sierra Leone", imperfect = FALSE)
 
 ```
 
+#### Upsides--comparing the difference between BAU and reforms
+
 We can also just look at the *difference* between BAU and productivity only (MEY) or fully adaptive management, in terms of the total amount of additional nutrients available, the number of individuals whose nutritional needs could be met, or the percent nutrient demand met. 
+
+
 ```{r inds_met_chil, echo=FALSE}
 plot_n_inds_met_prod (country_name = "Chile")
 
 ```
 
+This shows the number of adults whose nutrition requirements (estimated average requirement, EAR) could be met by implementing fisheries reforms to achieve MEY (Productivity Only scenario). This is the additional number from the reforms, i.e. Productivity Only - BAU. 
+
+## Catch evenness and vulnerability
+
+I'm just starting to play around with the methods from the Robinson et al. (2022) Maximum Nutritional Yield paper. They develop an evenness ~ vulnerability framework, where if a country and/or nutrient has low evenness, you could use single species approaches to manage fisheries for optimizing nutrients. More even catches would require multispecies approaches. 
+
+For vulnerability, if the vulnerability of the suite species contributing to a nutrient is less than the overall catch vulnerability, you're likely underfishing for that nutrient, and vice versa. 
+
+Here I'm using vulnerability values from FishBase/Cheung et al. 2005.
+
+```{r evenness_vuln, echo=FALSE, warning = FALSE}
+ds_vuln_evenness_overall_nutr <- readRDS("Data/ds_vuln_evenness_overall_nutr_Robinson_Maire_density.Rds")
+ds_vuln_evenness <- readRDS("Data/ds_country_nutr_vuln_evenness_Robinson.Rds")
+
+ds_vuln_evenness_each_nutr <- readRDS("Data/ds_vuln_evenness_each_nutr_Robinson_Maire_density.Rds")
+
+ds_vuln_evenness_each_nutr %>%
+  ggplot (aes (x = catch_vuln, y = evenness)) +
+  geom_point (aes(col = country)) +
+  geom_text (aes (label = nutrient, col = country)) +
+  geom_point (data = ds_vuln_evenness, aes (x = catch_vuln, y = evenness), col = "black") +
+  geom_text (data = ds_vuln_evenness, aes (x = catch_vuln, y = evenness, label = country)) +
+  geom_vline (data = ds_vuln_evenness, aes (xintercept = catch_vuln, col = country), lty = 2, alpha = 0.5) +
+  theme_bw() +
+  labs (x = "Nutrient-weighed fishing vulnerability", y = "Nutrient catch evenness", col = "") +
+  ggtitle ("Nutrient-weighted evenness and vulnerability of catch \n sensu Robinson et al. (2022)")
+
+
+```
+
+So far we can interpret that none of the countries have very vulnerable catches (vulnerability < 50), and that Peru and Chile are much less even than Sierra Leone and Indonesia, which makes sense due to the dominance of sardines/anchovies. If I understand the methods correctly, we also see that for most of the countries, they're already overfishing for these nutrients, that is, the vulnerability of the nutrient-dense species is greater than the vulnerability of the overall catch. Indonesia could fish more for Calcium, Sierra Leone for Omega-3s, Chile for Calcium and Omega-3s, and Peru for Omega-3s. 
