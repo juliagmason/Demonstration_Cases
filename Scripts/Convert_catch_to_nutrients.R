@@ -1,23 +1,23 @@
-## Translate Indonesia aquaculture production to nutrient content
-# 20211907
+# convert free scenario data to nutrient yield
 # updated 20220317
 
 library (tidyverse)
 library (measurements) # for converting units
+
+# DO I want separate data sets for "baseline" vs. projected yield? possibly yes
 
 # catch data/projections ----
 # Species specific projection data from Chris Free 2020 ----
 
 ds_spp <- readRDS("Data/Free_etal_2020_country_level_outcomes_time_series_for_julia.Rds")
 
-# nutrient content for each species ----
-# this has country and catch data for reference; take this out to join to catch
-ds_spp_nutr_content_distinct <- readRDS ("Data/ds_spp_nutr_content_FishNutrientsGENuS_RDA_groups.Rds") %>%
-  select (-c(rcp, scenario, country, catch_mt)) %>%
-  distinct()
+# nutrient content for each species, with baseline catch ----
+
+ds_spp_nutr_content <- readRDS ("Data/ds_spp_nutr_content_FishNutrientsGENuS_RDA_groups.Rds") 
 
 # maybe want just amount, not more info?
-ds_spp_nutr_amount <- ds_spp_nutr_content_distinct %>%
+# take out country and catch baseline to join to projected catch
+ds_spp_nutr_amount <- ds_spp_nutr_content %>%
   select (species, major_group, nutrient, amount) %>%
   distinct() %>%
   # specify units in terms that conv_unit can use
@@ -52,14 +52,16 @@ calc_nutr_supply_mt <- function(meat_mt, nutr_dens, nutr_dens_units){
   
 }
 
-# need to vectorize?
-# https://stackoverflow.com/questions/44730774/how-to-use-custom-functions-in-mutate-dplyr
-calc_nutr_supply_mt_V <- Vectorize (calc_nutr_supply_mt)
-# scary, takes forever though
 
+
+# convert catch into nutrient yield in mt----
+
+# projected catch ----
+# this takes a long time, a few hours
+
+# small ds for trial code
 ds_spp_sm <- sample_n(ds_spp, 1000)
 
-# this takes a long time
 ds_catch_nutr_yield_mt <- ds_spp %>% 
   as_tibble() %>%
   filter (year > 2025, catch_mt > 0) %>%
@@ -83,8 +85,39 @@ ds_catch_nutr_yield_mt <- ds_spp %>%
 
 # save. use this to compare RDAs with nutricast EARs
 
-saveRDS (ds_catch_nutr_yield_mt, file = "Data/ds_catch_nutr_yield_mt.Rda")
+saveRDS (ds_catch_nutr_yield_mt, file = "Data/ds_catch_nutr_yield_mt.Rds")
 
+# calculate baseline nutr yield
+ds_catch_nutr_yield_mt_baseline <- ds_spp_nutr_content %>%
+  select (country, species, catch_mt, major_group, nutrient, amount) %>%
+  distinct() %>%
+  mutate(pedible=recode(major_group, 
+                        "Finfish"= 0.87, 
+                        "Crustaceans"=0.36, 
+                        "Molluscs"=0.17, 
+                        "Cephalopods"=0.21), 
+         # edible meat in mt
+         meat_mt = catch_mt * pedible,
+         
+         # servings in native units per day
+         # meat in metric tons/yr *1000 kg/ton * 1000g/kg * 1 serving /100 g * 1 yr/365 days
+        meat_servings = meat_mt * 1000 * 1000 / 100 / 365,
+        nutr_servings = meat_servings * amount,
+
+         
+         # need different units for function to translate to mt
+         dens_units = 
+           case_when (
+             nutrient %in% c("Protein", "Omega_3") ~ "g",
+             nutrient %in% c("Vitamin_A", "Selenium") ~ "ug",
+             TRUE ~ "mg"
+           ),
+         
+         #available nutrient in mt
+         nutr_mt = pmap (list (meat_mt = meat_mt, nutr_dens = amount, nutr_dens_units = dens_units), calc_nutr_supply_mt)
+  )  %>% unnest(cols = c(nutr_mt))
+
+saveRDS(ds_catch_nutr_yield_mt_baseline, file = "Data/ds_catch_nutr_yield_baseline.Rds")
 
 # alternate method, convert to 100g servings. ----
 
@@ -104,6 +137,7 @@ ds_catch_nutr_yield_servings <- ds_spp %>%
          meat_mt = catch_mt * pedible,
          
          # edible meat in 100g servings/day
+         # meat in metric tons/yr *1000 kg/ton * 1000g/kg * 1 serving /100 g * 1 yr/365 days
          meat_servings = meat_mt * 1000 * 1000 / 100 / 365,
          
          # nutrient content in servings/day
@@ -116,17 +150,48 @@ saveRDS (ds_catch_nutr_yield_servings, file = "Data/ds_catch_nutr_yield_servings
 
 
 
+# Plot ----
+
+# yield of nutrients in mt under different scenarios
+
+# can I eventually do this so I'm not summarizing by species and can label the proportion from anchovy?
+
+ds_catch_nutr_yield_mt <- readRDS ("Data/ds_catch_nutr_yield_mt.Rds")
+
+s <- ds_catch_nutr_yield_mt %>%
+  filter (country == "Sierra Leone") %>%
+  mutate (period = case_when (
+    year %in% c(2020:2030) ~ "2020-2030",
+    year %in% c(2050:2060) ~ "2050-2060",
+    year %in% c(2090:2100) ~ "2090-2100"
+  )) %>%
+  filter (!is.na (period)) %>%
+  # first calculate mean across periods, species-specific?
+  group_by (rcp, scenario, period, nutrient, species) %>%
+  summarize (nutr_yield = mean (nutr_mt, na.rm = TRUE))
+
+# set levels
+s$scenario <- factor (s$scenario, levels = c("No Adaptation", "Productivity Only", "Range Shift Only", "Imperfect Productivity Only", "Imperfect Full Adaptation", "Full Adaptation"))
+
+s$period <- factor(s$period, levels = c("2090-2100", "2050-2060", "2020-2030"))
+  
+
+ggplot (s, aes (x = nutrient, y = nutr_yield, fill = scenario)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_wrap (period ~ rcp) +
+  theme_bw() 
 
 
 
 
 
-
-
-
-
-
-
+ggplot(s, aes(x=period, y = nutr_yield, fill = scenario)) +
+  facet_grid(nutrient ~ rcp, scales = "free") +
+  geom_bar(stat="identity", position = position_dodge2(reverse = TRUE)) +
+  # Labels
+  labs(x="Yield, mt", y="", fill = "Management\nscenario") +
+  # Theme
+  theme_bw() 
 
 
 
@@ -142,6 +207,8 @@ saveRDS (ds_catch_nutr_yield_servings, file = "Data/ds_catch_nutr_yield_servings
 
 
 #################################################
+## Translate Indonesia aquaculture production to nutrient content
+# 20211907
 # Load and clean aquaculture data ----
 # read in indonesia aquaculture production data
 indo_aq <- read.csv ("Data/Indo_aq.csv", 
