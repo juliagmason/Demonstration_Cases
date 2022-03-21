@@ -113,7 +113,7 @@ ds_catch_nutr_yield_mt_baseline <- ds_spp_nutr_content %>%
              TRUE ~ "mg"
            ),
          
-         #available nutrient in mt
+         #available nutrient in mt per year
          nutr_mt = pmap (list (meat_mt = meat_mt, nutr_dens = amount, nutr_dens_units = dens_units), calc_nutr_supply_mt)
   )  %>% unnest(cols = c(nutr_mt))
 
@@ -151,6 +151,58 @@ saveRDS (ds_catch_nutr_yield_servings, file = "Data/ds_catch_nutr_yield_servings
 
 
 # Plot ----
+
+# baseline
+ds_catch_nutr_yield_mt_baseline %>%
+  filter (country == country_name) %>%
+  ggplot (aes (x = nutrient, y = nutr_mt, fill = major_group)) +
+  facet_wrap (country~ dens_units, ncol = 3, scales = "free") +
+  geom_bar (stat = "identity") +
+  theme_bw() +
+  labs (y = "Yield, mt", fil = "") +
+  ggtitle ("Current nutrient yields under BAU")
+
+# write as function
+plot_yield_BAU <- function (country_name){
+  
+  g <- ds_catch_nutr_yield_mt_baseline %>%
+    filter (country == country_name) %>%
+    ggplot (aes (x = nutrient, y = nutr_mt, fill = major_group)) +
+    facet_wrap (~ dens_units, ncol = 3, scales = "free") +
+    geom_bar (stat = "identity") +
+    theme_bw() +
+    labs (y = "", x = "", fill = "") +
+    guides (fill = "none") +
+    ggtitle (country_name) +
+    theme(plot.title = element_text(hjust = 0.5))
+  
+  return (g)
+  
+}
+
+# https://stackoverflow.com/questions/62652308/combine-multiple-facet-strips-across-columns-in-ggplot2-facet-wrap
+ls_yield <- lapply (demonstration_countries, plot_yield_BAU)
+chain <- paste0('ls_yield[[',1:length(ls_yield),']]',collapse = '+')
+
+Plot <- eval(parse(text = chain))+plot_layout(nrow = 4)+
+  plot_annotation(title = 'A nice plot')&theme(plot.title = element_text(hjust=0.5))
+#Display
+Plot
+
+# meh
+
+devtools::install_github("teunbrand/ggh4x@v0.1")
+devtools::install_github("teunbrand/ggh4x")
+library (ggh4x)
+
+ds_catch_nutr_yield_mt_baseline %>%
+  ggplot (aes (x = nutrient, y = nutr_mt, fill = major_group)) +
+  facet_nested_wrap (country~ dens_units, ncol = 3, scales = "free") +
+  geom_bar (stat = "identity") +
+  theme_bw() +
+  labs (y = "Yield, mt", fil = "") +
+  ggtitle ("Current nutrient yields under BAU")
+
 
 # yield of nutrients in mt under different scenarios
 
