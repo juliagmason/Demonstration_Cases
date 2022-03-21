@@ -105,7 +105,7 @@ rda_groups <- dris %>%
 # add group column to bind with children
 rda_groups <- rbind (rda_groups, ai_omega) 
 
-
+saveRDS(rda_groups, file = "Data/RDAs_5groups.Rds")
 
 # join species and nutrients data ----
 # just get relevant species for each country. Baseline year (2012-2020 mean) where catch > 0, unique species
@@ -169,6 +169,8 @@ ds_spp_nutr_content %>%
 
 
 ## Which species provide the most needed nutrients in each country? ----
+ds_spp_nutr_content <- readRDS("Data/ds_spp_nutr_content_FishNutrientsGENuS_RDA_groups.Rds")
+
 # Chile: Calcium and vitamin A. 
 # Indo: calcium and vitamin A, maybe zinc with golden
 # Malawi: calcium, maybe vitamin A
@@ -179,10 +181,13 @@ ds_spp_nutr_content %>%
 
 # two ways of looking at this. the species that are the most nutrient dense for that nutrient, and the species that are frequently caught and therefore providing a lot of that nutrient. 
 
+# later could bring in which species will show the most gains under management reforms; which are the most climate vulnerable/fishing vulnerable from Maire et al
+
 ds_spp_nutr_content %>%
   select (country, species, catch_mt, nutrient, amount) %>%
   distinct() %>%
   group_by (country, nutrient) %>%
   slice_max (amount, n = 5) %>%
   arrange (country, nutrient, desc (amount)) %>% View()
-  
+
+
