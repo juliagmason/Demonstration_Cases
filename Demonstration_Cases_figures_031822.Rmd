@@ -2,15 +2,28 @@
 title: "Nutrition optimization modeling--plots for review"
 author: "JGM"
 date: "3/18/2022"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
 library (tidyverse)
+#devtools::install_github("teunbrand/ggh4x")
+library (ggh4x)
 
 
 # data tables
+
+# nutrient content of each species with rda met
 ds_spp_nutr_content <- readRDS("Data/ds_spp_nutr_content_FishNutrientsGENuS_RDA_groups.Rds")
+
+# nutrient yield of baseline catch (2012-2020, BAU) in mt and servings
+ds_catch_nutr_yield_mt_baseline <- readRDS("Data/ds_catch_nutr_yield_baseline.Rds")
+
+# rdas met, baseline catch (2012-2020, BAU). at species level
+ds_rdas_met_baseline <- readRDS("Data/ds_baseline_RDAs_met.Rds")
+
 #demand_met_allscen <- readRDS("Data/nutr_demand_met_allscen.Rds")
 
 
@@ -47,13 +60,131 @@ radar_plots[[3]]
 ```
 
 Note: Acetes japonicus and P. trituberculatus are both crustaceans and thus have identical nutrient profiles from GENuS data. Last graph had a different fish, was 5th most caught with just 2012 while P. trituberculatus was 6th. Can look into further..
+
 ```{r, echo = FALSE}
 radar_plots[[4]]
 ```
 
 ### How much are the most nutritious species contributing to catch?
 
-```{r catch_vs_dens}
+```{r catch_vs_density, echo = FALSE}
+
+catch_micronutr_density <- ds_spp_nutr_content %>%
+  filter (group == "Child", !is.na (perc_rda)) %>%
+  group_by (country, species) %>%
+  mutate (micronutrient_density = sum(perc_rda),
+          label = ifelse (micronutrient_density > 450 | catch_mt > 500000, 1, 0)) %>%
+  select (country, species, catch_mt, major_group, micronutrient_density, label) %>%
+  distinct() %>%
+  ungroup()
+
+ggplot (catch_micronutr_density, aes (x = log(catch_mt), y = micronutrient_density)) +
+  geom_point (aes(col = major_group)) +
+  geom_text (data = filter (catch_micronutr_density, label == 1), aes (label = species)) +
+  theme_bw() +
+  facet_wrap (~country, scales = "free") +
+  labs (y = "Micronutrient density", x = "log (Catch, mt)", col = "") +
+  ggtitle ("Micronutrient density vs current catch volume")
+
+```
+
+### What is the current nutrient yield under BAU?
+
+
+Note different scales in y axes, but the values are all in metric tons. I'm separating the nutrients out into the relevant units for human health so they're more visible--protein and omega 3s are measured in grams per serving; CA, Iron, and Zinc in mg; Selenium and Vitamin A in ug. 
+
+
+```{r nutr_yield_BAU, echo = FALSE, warning = FALSE, fig.width=10,fig.height=14}
+
+# https://stackoverflow.com/questions/62652308/combine-multiple-facet-strips-across-columns-in-ggplot2-facet-wrap
+
+ds_catch_nutr_yield_mt_baseline %>%
+  ggplot (aes (x = nutrient, y = nutr_mt, fill = major_group)) +
+  facet_nested_wrap (country~ dens_units, ncol = 3, scales = "free") +
+  geom_bar (stat = "identity") +
+  theme_bw() +
+  labs (y = "Yield, mt", fill = "", x = "") +
+  ggtitle ("Current nutrient yields under BAU")
+
+
+```
+
+We can display this instead as the proportion of the population's RDAs (recommended dietary allowances) could be met each day with current catch. Here the total population RDA is accounts for age and sex: I took mean RDA values for children (age 6 mo to 8 years), men, and women, multiplied them by the population numbers for those groups, and took the sum of those three values.
+
+
+
+```{r rdas_met_total, echo = FALSE}
+
+rdas_pop_level <- ds_rdas_met_baseline %>%
+  filter (!is.na (nutr_servings)) %>%
+  group_by (country, nutrient, species) %>%
+  mutate (tot_pop = sum(population),
+             tot_rda_needs = sum(rda_needs),
+             tot_nutr_servings = first (nutr_servings),
+             tot_rda_met = nutr_servings / tot_rda_needs) %>%
+  # get rid of groups, otherwise triple counting
+  select (country, species, major_group, nutrient, tot_rda_met) %>%
+  distinct() 
+
+rdas_pop_level %>%
+  ggplot (aes (y = tot_rda_met, x = nutrient, fill = major_group)) +
+  geom_bar (stat = "identity") +
+  facet_wrap (~country, nrow = 4, scales = "free") +
+  theme_bw() +
+  labs (x = "", fill = "", y = "") +
+  facet_wrap (~country, scales = "free") +
+  labs (y = "Proportion of population RDAs met") +
+  ggtitle ("Proportion of population RDAs met by current catch, BAU") +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9))
+
+```
+
+
+For Peru and Chile, this is mostly anchovy: 
+
+```{r rdas_met_noanchov, echo = FALSE}
+
+rdas_pop_level %>%
+  mutate(
+          anchovy = ifelse (species == "Engraulis ringens", "Anchovy", "Other")
+          ) %>%
+ ggplot (aes (y = tot_rda_met, x = nutrient, fill = anchovy)) +
+  geom_bar (stat = "identity") +
+  facet_wrap (~country, nrow = 4, scales = "free") +
+  theme_bw() +
+  facet_wrap (~country, scales = "free") +
+  labs (y = "Proportion of population RDAs met", fill = "". x = "") +
+  ggtitle ("Proportion of population RDAs met by current catch, BAU")+
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9))
+
+
+rdas_pop_level %>%
+  filter (species != "Engraulis ringens") %>% 
+ ggplot (aes (y = tot_rda_met, x = nutrient, fill = major_group)) +
+  geom_bar (stat = "identity") +
+  facet_wrap (~country, nrow = 4, scales = "free") +
+  theme_bw() +
+  labs (x = "", fill = "", y = "") +
+  facet_wrap (~country, scales = "free") +
+  labs (y = "Proportion of population RDAs met") +
+  ggtitle ("Proportion of population RDAs met by current catch, BAU \nAnchovy removed")+
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9))
+
+```
+
+We can also break out the population into vulnerable groups--what it would look like if we fed all the seafood to children, for examples. Unfortunately don't have population breakdowns for pregnant and lactating women. These proportions are larger because it represents what would happen if ALL the current catch were provided to these groups; e.g. only children were eating fish. 
+
+```{r rdas_by_pop_group, echo = FALSE}
+
+ds_rdas_met_baseline %>%
+  filter (!is.na(rda_met), species != "Engraulis ringens") %>%
+  ggplot (aes (y = rda_met, x = nutrient, fill = group)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_wrap (~country, nrow = 4, scales = "free") +
+  #geom_text (aes (label = round(rda_met, 1), y = rda_met* 1.05), position = position_dodge(width = 1)) +
+  theme_bw() +
+  labs (x = "", fill = "", y = "Proportion of population group RDAs met") +
+  ggtitle ("RDAs met for each population group, Anchovy removed")
 
 ```
 
