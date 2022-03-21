@@ -58,17 +58,20 @@ plot_spp_nutr_radar <- function (country_name, n_spp) {
   #max_value = max(nutr_radar_plot$Calcium)
   
   
-  ggradar(nutr_radar_plot[1:3,],
+  ggradar(nutr_radar_plot,
           grid.min = 0, grid.max = 100, 
           group.point.size = 2,
           group.line.width = 1,
           legend.text.size = 8,
+          axis.label.size = 4,
+          grid.label.size = 4,
           legend.position = "right") +
-    ggtitle (country_name) 
+    ggtitle (country_name) +
+    theme (plot.title = element_text (size = 14))
 
   }
 
-#plot_spp_nutr_radar(country_name = "Sierra Leone", n_spp = 5)
+#plot_spp_nutr_radar(country_name = "Sierra Leone", n_spp = 10)
 
 
 
