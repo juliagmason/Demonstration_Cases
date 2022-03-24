@@ -9,11 +9,16 @@ output:
 
 ```{r setup, include=FALSE}
 library (tidyverse)
+
+# for nested facet_wrap for plotting
 #devtools::install_github("teunbrand/ggh4x")
 library (ggh4x)
 
 
 # data tables
+
+# Micronutrient deficiencies
+mic_def <- read_csv ("Data/mic_def_compare_beal_golden.csv")
 
 # nutrient content of each species with rda met
 ds_spp_nutr_content <- readRDS("Data/ds_spp_nutr_content_FishNutrientsGENuS_RDA_groups.Rds")
@@ -24,6 +29,9 @@ ds_catch_nutr_yield_mt_baseline <- readRDS("Data/ds_catch_nutr_yield_baseline.Rd
 # rdas met, baseline catch (2012-2020, BAU). at species level
 ds_rdas_met_baseline <- readRDS("Data/ds_baseline_RDAs_met.Rds")
 
+# rdas met, future proections. at species level
+ds_rdas_met_projected <- readRDS ("Data/ds_projected_RDAs_met.Rds")
+
 #demand_met_allscen <- readRDS("Data/nutr_demand_met_allscen.Rds")
 
 
@@ -33,9 +41,88 @@ source ("Scripts/Plot_spp_nutr_density.R")
 # source ("Scripts/Plot_n_inds_reqs_met.R")
 
 
+# plot RDAs met under management scenarios
+plot_rdas_met_scen <- function (country_name, imperfect = TRUE, anchovy = TRUE) {
+  
+  
+  
+  # Do we want the imperfect scenarios shown?
+  if (imperfect == TRUE) {
+    country_rdas_met <- ds_rdas_met_projected %>%
+      filter (country == country_name) %>%
+      group_by (rcp, scenario, period, nutrient, species) %>%
+  mutate (tot_pop = sum(population),
+          tot_rda_needs = sum(rda_needs),
+          tot_nutr_servings = first (nutr_servings),
+          tot_rda_met = nutr_servings / tot_rda_needs) %>%
+  # get rid of groups, otherwise triple counting
+  select (country, rcp, scenario, period, species, nutrient, tot_rda_met) %>%
+  distinct() 
+    
+    country_rdas_met$scenario <- factor (country_rdas_met$scenario, levels = c("No Adaptation", "Productivity Only", "Range Shift Only", "Imperfect Productivity Only", "Imperfect Full Adaptation", "Full Adaptation"))
+  
+    
+  } else {
+    country_rdas_met <- ds_rdas_met_projected %>%
+      filter (country == country_name,
+              !grepl("Imperfect", scenario)) %>%
+      group_by (rcp, scenario, period, nutrient, species) %>%
+  mutate (tot_pop = sum(population),
+          tot_rda_needs = sum(rda_needs),
+          tot_nutr_servings = first (nutr_servings),
+          tot_rda_met = nutr_servings / tot_rda_needs) %>%
+  # get rid of groups, otherwise triple counting
+  select (country, rcp, scenario, period, species, nutrient, tot_rda_met) %>%
+  distinct() 
+    
+    country_rdas_met$scenario <- factor (country_rdas_met$scenario, levels = c("No Adaptation", "Productivity Only", "Range Shift Only", "Full Adaptation"))
+  }
+  
+  # include anchovy?
+  if (anchovy != TRUE) {
+    country_rdas_met <- country_rdas_met %>%
+      filter (species != "Engraulis ringens")
+    
+    title = paste0("Percent of population RDAs met under future management scenarios, ", country_name, ",\nanchovy removed")
+  } else {
+    
+    title = paste0("Percent of population RDAs met under future management scenarios, ", country_name)
+    
+  }
+  
+  
+  # set period levels
+  country_rdas_met$period <- factor(country_rdas_met$period, levels = c("2025-2035","2050-2060", "2090-2100"))
+  
+  # plot
+  country_rdas_met %>%
+  ggplot (aes (y = tot_rda_met * 100, x = period, fill = scenario)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_grid (nutrient ~ rcp, scales = "free") +
+  theme_bw() +
+  labs(y="Percent of RDAs met from fisheries reforms", x="", fill = "Management\nscenario") +
+  ggtitle (title)
+  
+  
+}
+
+
 # vector of country names
 demonstration_countries <- c("Chile", "Peru", "Indonesia", "Sierra Leone")
 ```
+
+## Micronutrient deficiencies in case study countries
+
+Nutricast used nutrient supply from the GENuS database, Estimated Average Requirements (EARs), which represent the nutrients needed to meet the needs of half the population, and sex/age specific estimated population size/growth to calculate micronutrient deficiencies. They used an optimization function to expand the EARs to instead reach 95% of the nutritional needs of the population, but it seems that this calculation calls for much higher values than the Recommended Dietary Allowance (RDA) values, which are supposed to meet the needs of 97-98% of the population. I have access to this code so can get age/sex specific deficiency values. 
+
+Beal et al. (2017) calculate a Prevalence of Inadequate Micronutrient Intake Index (PIMII) using I believe the same method as above (nutricast probably modeled after them), based on EAR cutpoints, but gets different values than Nutricast. They also provide estimates accounting for fortification in diets. These data are from 2011 and do not include selenium or Omega 3s. Hicks and co (Maire, Robinson) use these values, which are available as overall index and by individual nutrients from Beal's supplemental data. I therefore only have population-level values, not age/sex specific. 
+
+Chris Golden's AFCD/Blue Foods Assessment paper used the proprietary Global Nutrient Database (based on FAO Supply and Utilization Accounts) for national nutrient availability, and GENuS for intake/consumption. They used a habitual intake statistical program to calculate consumption of Omega 3s and vitamin B12, which are not in GENuS. They used SEVs (summary exposure values) as a risk-weighted prevalence of inadequate micronutrient intake. I'm not sure yet what the benefit is of this method over the others. 
+
+With the Nutricast and Beal data, I have deficiencies for Calcium, Vitamin A, Zinc, and Iron (these are also what Hicks et al looked at). For all our countries, calcium has the highest prevalence of deficiency, followed by Vitamin A for every country but Peru (Zinc, then Vitamin A). However, since there are only four nutrients to look at, and because these data don't necessarily reflect what we've found in our country-specific research (e.g. concerns about anemia in Peru and iron and zinc deficiencies in Chile), we might as well look at all of them.
+
+See "Micronutrient deficiences" table in google doc for prevalence of inadequate intake values from these two sources. 
+
 
 ## Nutrient density of major species
 
@@ -111,7 +198,7 @@ ds_catch_nutr_yield_mt_baseline %>%
 
 ```
 
-We can display this instead as the proportion of the population's RDAs (recommended dietary allowances) could be met each day with current catch. Here the total population RDA is accounts for age and sex: I took mean RDA values for children (age 6 mo to 8 years), men, and women, multiplied them by the population numbers for those groups, and took the sum of those three values.
+We can display this instead as the proportion of the population's RDAs (recommended dietary allowances) could be met each day with current catch. The total population RDA accounts for age and sex: I took mean RDA values for children (age 6 mo to 8 years), men, and women, multiplied them by the population numbers for those groups, and took the sum of those three values.
 
 
 
@@ -155,7 +242,7 @@ rdas_pop_level %>%
   facet_wrap (~country, nrow = 4, scales = "free") +
   theme_bw() +
   facet_wrap (~country, scales = "free") +
-  labs (y = "Proportion of population RDAs met", fill = "". x = "") +
+  labs (y = "Proportion of population RDAs met", fill = "", x = "") +
   ggtitle ("Proportion of population RDAs met by current catch, BAU")+
   theme (axis.text.x = element_text (angle = 60, hjust = 0.9))
 
@@ -174,7 +261,7 @@ rdas_pop_level %>%
 
 ```
 
-We can also break out the population into vulnerable groups--what it would look like if we fed all the seafood to children, for examples. Unfortunately don't have population breakdowns for pregnant and lactating women. These proportions are larger because it represents what would happen if ALL the current catch were provided to these groups; e.g. only children were eating fish. 
+We can also break out the population into groups--what it would look like if we fed all the seafood to children, for example. Unfortunately don't have population breakdowns for pregnant and lactating women, but we could look at the elderly. These proportions are larger because it represents what would happen if ALL the current catch were provided to these groups; e.g. only children were eating fish. 
 
 ```{r rdas_by_pop_group, echo = FALSE}
 
@@ -190,3 +277,36 @@ ds_rdas_met_baseline %>%
 
 ```
 
+## What is the nutritional upside of different management scenarios?
+
+In the previous set of figures, I showed percent of nutrient demand met under the various scenarios using the Nutricast method. Here instead I'm using RDAs. We get somewhat bigger numbers because the RDA values are smaller than the Nutricast optimization methodm but not a huge difference. 
+
+```{r SL_future_rdas, echo = FALSE}
+
+plot_rdas_met_scen("Sierra Leone")
+
+```
+
+```{r In_future_rdas, echo = FALSE}
+
+plot_rdas_met_scen("Indonesia", imperfect = FALSE)
+
+```
+
+```{r chile_future_rdas, echo = FALSE}
+
+plot_rdas_met_scen("Chile", imperfect = FALSE)
+
+```
+
+```{r chile_future_rdas_noanchov, echo = FALSE}
+
+plot_rdas_met_scen("Chile", imperfect = FALSE, anchovy = FALSE)
+
+```
+
+```{r Peru_future_rdas, echo = FALSE}
+
+plot_rdas_met_scen("Peru", imperfect = FALSE, anchovy = FALSE)
+
+```
