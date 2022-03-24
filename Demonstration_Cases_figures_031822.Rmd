@@ -69,18 +69,20 @@ radar_plots[[4]]
 
 ```{r catch_vs_density, echo = FALSE}
 
+# truncate name function in plot_spp_nutr_density.R
 catch_micronutr_density <- ds_spp_nutr_content %>%
   filter (group == "Child", !is.na (perc_rda)) %>%
   group_by (country, species) %>%
   mutate (micronutrient_density = sum(perc_rda),
-          label = ifelse (micronutrient_density > 450 | catch_mt > 500000, 1, 0)) %>%
-  select (country, species, catch_mt, major_group, micronutrient_density, label) %>%
+          label = ifelse (micronutrient_density > 450 | catch_mt > 500000, 1, 0), 
+          name_sm = truncate_name(species)) %>%
+  select (country, species, catch_mt, major_group, micronutrient_density, label, name_sm) %>%
   distinct() %>%
   ungroup()
 
 ggplot (catch_micronutr_density, aes (x = log(catch_mt), y = micronutrient_density)) +
   geom_point (aes(col = major_group)) +
-  geom_text (data = filter (catch_micronutr_density, label == 1), aes (label = species)) +
+  geom_text (data = filter (catch_micronutr_density, label == 1), aes (label = name_sm)) +
   theme_bw() +
   facet_wrap (~country, scales = "free") +
   labs (y = "Micronutrient density", x = "log (Catch, mt)", col = "") +

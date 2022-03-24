@@ -14,9 +14,9 @@ rda_groups <- readRDS("Data/RDAs_5groups.Rds")
 # baseline catch data in servings ----
 ds_catch_nutr_yield_baseline <- readRDS("Data/ds_catch_nutr_yield_baseline.Rds")
 
-# projected catch data with nutrients in servings ----
+# projected nutritrient yield under management scenarios ----
 # from Free data. Convert_catch_to_nutrients.R
-catch_nutr_servings <- readRDS("Data/ds_catch_nutr_yield_servings.Rds")
+ds_catch_nutr_yield_projected <- readRDS("Data/ds_catch_nutr_yield_projected.Rds")
 
 # population data ----
 
@@ -47,6 +47,38 @@ pop_current <- pop %>%
                 names_to = "group", 
                 values_to = "population") %>%
   rename (country = Location)
+
+
+# future population in decadal time periods ----
+
+pop_future <- pop %>%
+  filter (Location %in% c("Sierra Leone", "Indonesia", "Peru", "Chile", "Malawi"), Time %in% c(2025:2035, 2050:2060, 2090:2100)) %>%
+  mutate (group = 
+            case_when (
+              AgeGrp %in% c("0-4", "5-9") ~ "Child",
+              !AgeGrp %in% c("0-4", "5-9") ~ "Adult")
+  ) %>%
+  group_by (Location, Time) %>%
+  summarize (Pop_Males =  1000 * sum (PopMale[group == "Adult"]),
+             Pop_Females = 1000 * sum(PopFemale[group == "Adult"]),
+             Pop_Child = 1000 * sum(PopTotal[group == "Child"])) %>%
+  ungroup() %>%
+  mutate (
+    period = case_when (
+      Time %in% c(2025:2035) ~ "2025-2035",
+      Time %in% c(2050:2060) ~ "2050-2060",
+      Time %in% c(2090:2100) ~ "2090-2100"
+    )) %>%
+  group_by (Location, period) %>%
+  summarise (Pop_Males = mean (Pop_Males),
+             Pop_Females = mean (Pop_Females),
+             Pop_Child = mean (Pop_Child)) %>%
+  pivot_longer (cols = starts_with("Pop"),
+                names_prefix = "Pop_", 
+                names_to = "group", 
+                values_to = "population") %>%
+  rename (country = Location)
+
   
 
 # convert current catch to rdas met ----
@@ -76,10 +108,38 @@ rdas_met_current_catch_spp <- ds_catch_nutr_yield_baseline %>%
 
 saveRDS(rdas_met_current_catch_spp, file = "Data/ds_baseline_RDAs_met.Rds")
 
+# convert future catch to rdas met----
+ds_sm <-  sample_n(ds_catch_nutr_yield_projected, 5000)
+
+rdas_met_projected_spp <- ds_catch_nutr_yield_projected %>%
+  # summarize by period
+  select (-c(catch_mt, amount, dens_units, pedible, meat_mt, nutr_mt, meat_servings)) %>%
+  mutate (
+    period = case_when (
+      year %in% c(2025:2035) ~ "2025-2035",
+      year %in% c(2050:2060) ~ "2050-2060",
+      year %in% c(2090:2100) ~ "2090-2100"
+    )) %>%
+  filter (!is.na (period)) %>%
+  group_by (country, rcp, scenario, period, nutrient, species) %>%
+    summarise (nutr_servings = mean (nutr_servings, na.rm = TRUE)) %>%
+  
+  left_join (rda_groups, by = "nutrient") %>%
+  left_join (pop_future, by = c("country", "group", "period")) %>%
+  filter (!is.na(population)) %>%
+  mutate (yield_per_cap = nutr_servings / population,
+          rda_needs = mean_rda * population,
+          # proportion of population rda met for each group
+          rda_met = nutr_servings/rda_needs)
+
+saveRDS (rdas_met_projected_spp, file = "Data/ds_projected_RDAs_met.Rds")
+
+
 
 # plot ----  
 # https://thomasadventure.blog/posts/labels-ggplot2-bar-chart/
-library (ggcharts)
+library (ggcharts) 
+# to label proportion on stacked bar charts
 
 rdas_met_current_catch %>%
   filter (!is.na(rda_met)) %>%
@@ -89,6 +149,7 @@ rdas_met_current_catch %>%
   geom_text (aes (label = round(rda_met, 1), y = rda_met + 0.5), position = position_dodge(width = 1)) +
   theme_bw() +
   labs (x = "", fill = "", y = "")
+
 
 rdas_met_current_catch_spp %>%
   filter (!is.na(rda_met), species != "Engraulis ringens") %>%
@@ -120,6 +181,7 @@ rdas_met_current_catch_spp %>%
   labs (y = "Proportion of population RDAs met") +
   ggtitle ("Proportion of population RDAs met by current catch, BAU")
 
+
 rdas_met_current_catch_spp %>%
   filter (!is.na (nutr_servings)) %>%
   group_by (country, nutrient, species) %>%
@@ -134,6 +196,38 @@ rdas_met_current_catch_spp %>%
   theme_bw() +
   labs (x = "", fill = "", y = "") +
   facet_wrap (~country, scales = "free")
+
+# plot for overall population, future
+t <- rdas_met_projected_spp %>%
+  group_by (country, rcp, scenario, period, nutrient, species) %>%
+  mutate (tot_pop = sum(population),
+          tot_rda_needs = sum(rda_needs),
+          tot_nutr_servings = first (nutr_servings),
+          tot_rda_met = nutr_servings / tot_rda_needs) %>%
+  # get rid of groups, otherwise triple counting
+  select (country, rcp, scenario, period, species, nutrient, tot_rda_met) %>%
+  distinct() 
+
+# t %>% 
+#   filter (country == "Chile") %>%
+#   ggplot (aes (x = tot_rda_met, y = period, fill = scenario)) +
+#   geom_bar (stat = "identity", position = "dodge") +
+#   facet_grid (nutrient ~ rcp, scales = "free") +
+#   theme_bw() +
+#   labs(x="Percent of RDAs met from fisheries reforms", y="", fill = "Management\nscenario") +
+#   ggtitle ("Proportion of population RDAs met under future management scenarios")
+
+
+# flip so free scales has an effect
+t %>% 
+  filter (country == "Chile", species != "Engraulis ringens") %>%
+  ggplot (aes (y = tot_rda_met, x = period, fill = scenario)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_grid (nutrient ~ rcp, scales = "free") +
+  theme_bw() +
+  labs(y="Percent of RDAs met from fisheries reforms", x="", fill = "Management\nscenario") +
+  ggtitle ("Proportion of population RDAs met under future management scenarios")
+
 
 # sanity check, why such big amounts?? ----
 
