@@ -87,7 +87,22 @@ ds_catch_nutr_yield_mt <- ds_spp %>%
 
 saveRDS (ds_catch_nutr_yield_mt, file = "Data/ds_catch_nutr_yield_mt.Rds")
 
-# calculate baseline nutr yield
+# should have done these as one dataset. combine here; fix code later
+ds_catch_nutr_yield_servings <- readRDS("Data/ds_catch_nutr_yield_servings.Rds")
+ds_catch_nutr_yield_mt <- readRDS("Data/ds_catch_nutr_yield_mt.Rds")
+
+#remove NA from servings to match mt?
+ds_servings_sm <- ds_catch_nutr_yield_servings %>%
+  filter (!is.na (amount)) %>%
+  select (rcp, scenario, country, species, year, nutrient, meat_servings, nutr_servings)
+# should be able to just cbind, but left_join just in case?
+
+ds_catch_nutr_yield_projected <- ds_catch_nutr_yield_mt %>%
+  left_join (ds_servings_sm, by = c ("rcp", "scenario", "country", "species", "year", "nutrient"))
+
+saveRDS (ds_catch_nutr_yield_projected, file = "Data/ds_catch_nutr_yield_projected.Rds")
+
+# calculate baseline nutr yield ----
 ds_catch_nutr_yield_mt_baseline <- ds_spp_nutr_content %>%
   select (country, species, catch_mt, major_group, nutrient, amount) %>%
   distinct() %>%
@@ -204,13 +219,12 @@ ds_catch_nutr_yield_mt_baseline %>%
   ggtitle ("Current nutrient yields under BAU")
 
 
-# yield of nutrients in mt under different scenarios
+# yield of nutrients in mt under different scenarios ----
 
-# can I eventually do this so I'm not summarizing by species and can label the proportion from anchovy?
 
-ds_catch_nutr_yield_mt <- readRDS ("Data/ds_catch_nutr_yield_mt.Rds")
+ds_catch_nutr_yield <- readRDS ("Data/ds_catch_nutr_yield_projected.Rds")
 
-s <- ds_catch_nutr_yield_mt %>%
+s <- ds_catch_nutr_yield %>%
   filter (country == "Sierra Leone") %>%
   mutate (period = case_when (
     year %in% c(2020:2030) ~ "2020-2030",
@@ -220,33 +234,23 @@ s <- ds_catch_nutr_yield_mt %>%
   filter (!is.na (period)) %>%
   # first calculate mean across periods, species-specific?
   group_by (rcp, scenario, period, nutrient, species) %>%
-  summarize (nutr_yield = mean (nutr_mt, na.rm = TRUE))
+  mutate (nutr_yield_mt = mean (nutr_mt, na.rm = TRUE), 
+             nutr_yield_servings = mean (nutr_servings, na.rm = TRUE))
 
 # set levels
 s$scenario <- factor (s$scenario, levels = c("No Adaptation", "Productivity Only", "Range Shift Only", "Imperfect Productivity Only", "Imperfect Full Adaptation", "Full Adaptation"))
 
 s$period <- factor(s$period, levels = c("2090-2100", "2050-2060", "2020-2030"))
-  
 
-ggplot (s, aes (x = nutrient, y = nutr_yield, fill = scenario)) +
+s %>%
+  ggplot (aes (x = nutrient, y = nutr_mt, fill = scenario)) +
+  facet_grid (period~ dens_units, scales = "free") +
   geom_bar (stat = "identity", position = "dodge") +
-  facet_wrap (period ~ rcp) +
-  theme_bw() 
-
-
-
-
-
-ggplot(s, aes(x=period, y = nutr_yield, fill = scenario)) +
-  facet_grid(nutrient ~ rcp, scales = "free") +
-  geom_bar(stat="identity", position = position_dodge2(reverse = TRUE)) +
+  theme_bw() +
   # Labels
   labs(x="Yield, mt", y="", fill = "Management\nscenario") +
-  # Theme
-  theme_bw() 
-
-
-
+  ggtitle ("Projected nutrient yields under management scenarios")
+  
 
 
 
