@@ -62,7 +62,7 @@ calc_nutr_supply_mt <- function(meat_mt, nutr_dens, nutr_dens_units){
 # small ds for trial code
 ds_spp_sm <- sample_n(ds_spp, 1000)
 
-ds_catch_nutr_yield_mt <- ds_spp %>% 
+ds_catch_nutr_yield_projected <- ds_spp %>% 
   as_tibble() %>%
   filter (year > 2025, catch_mt > 0) %>%
   select (rcp, scenario, country, species, year, catch_mt) %>%
@@ -78,29 +78,23 @@ ds_catch_nutr_yield_mt <- ds_spp %>%
          # edible meat in mt
          meat_mt = catch_mt * pedible,
          
+         
          #available nutrient in mt
          #nutr_mt = mapply(calc_nutr_supply_mt, meat_mt, amount, dens_units)
-         nutr_mt = pmap (list (meat_mt = meat_mt, nutr_dens = amount, nutr_dens_units = dens_units), calc_nutr_supply_mt)
-  )  %>% unnest(cols = c(nutr_mt))
+         nutr_mt = pmap (list (meat_mt = meat_mt, nutr_dens = amount, nutr_dens_units = dens_units), calc_nutr_supply_mt),
+         
+         # edible meat in 100g servings/day
+         # meat in metric tons/yr *1000 kg/ton * 1000g/kg * 1 serving /100 g * 1 yr/365 days
+         meat_servings = meat_mt * 1000 * 1000 / 100 / 365,
+         
+         # nutrient content in servings/day
+         nutr_servings = meat_servings * amount) %>% 
+  unnest(cols = c(nutr_mt))
 
 # save. use this to compare RDAs with nutricast EARs
 
-saveRDS (ds_catch_nutr_yield_mt, file = "Data/ds_catch_nutr_yield_mt.Rds")
-
-# should have done these as one dataset. combine here; fix code later
-ds_catch_nutr_yield_servings <- readRDS("Data/ds_catch_nutr_yield_servings.Rds")
-ds_catch_nutr_yield_mt <- readRDS("Data/ds_catch_nutr_yield_mt.Rds")
-
-#remove NA from servings to match mt?
-ds_servings_sm <- ds_catch_nutr_yield_servings %>%
-  filter (!is.na (amount)) %>%
-  select (rcp, scenario, country, species, year, nutrient, meat_servings, nutr_servings)
-# should be able to just cbind, but left_join just in case?
-
-ds_catch_nutr_yield_projected <- ds_catch_nutr_yield_mt %>%
-  left_join (ds_servings_sm, by = c ("rcp", "scenario", "country", "species", "year", "nutrient"))
-
 saveRDS (ds_catch_nutr_yield_projected, file = "Data/ds_catch_nutr_yield_projected.Rds")
+
 
 # calculate baseline nutr yield ----
 ds_catch_nutr_yield_mt_baseline <- ds_spp_nutr_content %>%
@@ -134,33 +128,6 @@ ds_catch_nutr_yield_mt_baseline <- ds_spp_nutr_content %>%
 
 saveRDS(ds_catch_nutr_yield_mt_baseline, file = "Data/ds_catch_nutr_yield_baseline.Rds")
 
-# alternate method, convert to 100g servings. ----
-
-ds_catch_nutr_yield_servings <- ds_spp %>% 
-  as_tibble() %>%
-  filter (year > 2025, catch_mt > 0) %>%
-  select (rcp, scenario, country, species, year, catch_mt) %>%
-  # add nutrient data
-  left_join (ds_spp_nutr_amount, by = "species") %>%
-  # calculate edible meat.
-  mutate(pedible=recode(major_group, 
-                        "Finfish"= 0.87, 
-                        "Crustaceans"=0.36, 
-                        "Molluscs"=0.17, 
-                        "Cephalopods"=0.21), 
-         # edible meat in mt
-         meat_mt = catch_mt * pedible,
-         
-         # edible meat in 100g servings/day
-         # meat in metric tons/yr *1000 kg/ton * 1000g/kg * 1 serving /100 g * 1 yr/365 days
-         meat_servings = meat_mt * 1000 * 1000 / 100 / 365,
-         
-         # nutrient content in servings/day
-         nutr_servings = meat_servings * amount )
-
-
-
-saveRDS (ds_catch_nutr_yield_servings, file = "Data/ds_catch_nutr_yield_servings.Rds")
 
 
 
