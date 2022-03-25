@@ -12,16 +12,18 @@ ds_spp <- readRDS("Data/Free_etal_2020_country_level_outcomes_time_series_for_ju
 
 # https://stackoverflow.com/questions/24576515/relative-frequencies-proportions-with-dplyr
 catch_props <- ds_spp %>% 
-  filter (year == 2012, rcp == "RCP26", scenario == "No Adaptation", catch_mt > 0) %>%
+  filter (year %in% c (2012:2020), rcp == "RCP26", scenario == "No Adaptation", catch_mt > 0) %>%
   group_by (country, species) %>%
-  summarize (tot_cat = sum(catch_mt)) %>%
-  mutate (prop_catch = tot_cat / sum(tot_cat),
+  summarize (mean_cat = mean (catch_mt, na.rm = TRUE)) %>%
+  mutate (prop_catch = mean_cat / sum(mean_cat),
           n_spp = n(),
-          rank_catch = dense_rank (desc (tot_cat)))
+          rank_catch = dense_rank (desc (mean_cat)))
 
-saveRDS (catch_props, file = "Data/ds_spp_catch_proportions_2012.Rds")
+saveRDS (catch_props, file = "Data/ds_spp_catch_proportions_baseline.Rds")
 
 
+# this one was with just 2012
+catch_props_orig <- readRDS("Data/ds_spp_catch_proportions_2012.Rds")
 # quick explore of missing nutrients data
 catch_props %>%
   filter (species %in% c("Sebastes levis", "Cynoponticus coniceps","Sebastes jordani"))
