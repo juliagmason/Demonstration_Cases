@@ -1,0 +1,454 @@
+---
+title: "SSF nutrient contribution explore"
+author: "JGM"
+date: "4/1/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library (tidyverse)
+library (RColorBrewer)
+
+
+# datasets ----
+# Sau data 
+sau_ds <- readRDS("Data/SAU_countries_dirhumcons_2000_2015.Rds")
+
+# sau species nutrient data
+sau_spp_nutr <- readRDS("Data/SAU_spp_nutrient_data.Rds") 
+
+# sau catch data with nutrients
+sau_nutr <- readRDS("Data/SAU_nutr.Rds")%>%
+  ungroup() %>%
+  filter (year < 2016)
+
+# rdas
+rda_groups <- readRDS("Data/RDAs_5groups.Rds")
+
+# population data ----
+
+# downloaded from https://population.un.org/wpp/Download/Standard/CSV/ on 3/17/2022
+# Population by 5-year age groups.
+# PopMale: Male population in the age group (thousands)
+# PopFemale: Female population in the age group (thousands)
+# PopTotal: Total population in the age group (thousands)
+
+pop <- read_csv("Data/WPP2019_PopulationByAgeSex_Medium.csv")
+
+# separate into broad adult male/female and child categories to  match RDAs
+pop_2020 <- pop %>%
+  filter (Location %in% c("Sierra Leone", "Indonesia", "Peru", "Chile", "Malawi"), Time ==2020) %>%
+  mutate (group = 
+            case_when (
+              AgeGrp %in% c("0-4", "5-9") ~ "Child",
+              !AgeGrp %in% c("0-4", "5-9") ~ "Adult")
+  ) %>%
+  group_by (Location) %>%
+  summarize (Pop_Males =  1000 * sum (PopMale[group == "Adult"]),
+             Pop_Females = 1000 * sum(PopFemale[group == "Adult"]),
+             Pop_Child = 1000 * sum(PopTotal[group == "Child"])) %>%
+  # also have total population that would eat fish--sum of males, females, and children maybe do this later?
+  #Pop_Total = sum (Pop_Males, Pop_Females, Pop_Child)) %>%
+  pivot_longer (cols = starts_with("Pop"),
+                names_prefix = "Pop_", 
+                names_to = "group", 
+                values_to = "population") %>%
+  rename (country = Location)
+
+# climate vulnerability and fishing vulnerability data
+# can prob get clim vuln from fishbase, steal from maire for now
+maire_vuln <- read_csv ("../NutrientGlobalFisheries_Maire/data/species_data.csv") %>%
+  select (species, Fishing_V, Climate_V.index) %>%
+  rename (fishing_vuln = Fishing_V, climate_vuln = Climate_V.index)
+
+
+
+# functions ----
+# Function to calculate mt of nutrient from mt of edible meat ----
+# units: mg, ug=mcg 
+# meat_mt <- 29.88111; nutr_dens <- 35.5; nutr_dens_units <- "mg"
+# from nutrient_endowment --> shiny --> v3 --> :Page3_Fig2c_reforms_prop_demand, line 84
+
+# adding--divide by 100 in here. I think Chris did that in his head but making me doubt everything
+calc_nutr_supply_mt <- function(meat_mt, nutr_dens, nutr_dens_units){
+  
+  # Convert meat to grams
+  # "Mg" is metric tons
+  meat_g <- measurements::conv_unit(meat_mt, "Mg", "g")
+  
+  # Calculate amount of nutrient in density units. divide by 100 because density units are per 100g
+  nutrient_q <- meat_g *  nutr_dens / 100
+  
+  # Calculate amount of nutrient in metric tons
+  nutrient_mt <- measurements::conv_unit(nutrient_q, nutr_dens_units, "Mg")
+  
+  # Return
+  return(nutrient_mt)
+  
+}
+```
+
+I downloaded Sea Around Us data for our focal countries. I consolidated the three Indonesia regions (central, Indian ocean, east), and only used mainland Chile, not Easter Island. 
+
+I only used "landings", not "discards." I am only looking at fish for "direct human consumption", not fishmeal/fish oil. The industrial fishing sector may include foreign catch. This is fairly small, but we could look at the nutrition loss to foreign catch. 
+
+I'm looking at recent data, from 2001-2015. In the most recent years, 2016-2018, they haven't split out fishmeal and oil for any country. 
+
+## Can we draw a clear line between industrial and artisanal species?
+```{r sector_spp}
+sector_spp <- sau_ds %>%
+  ungroup() %>%
+  rename (species = scientific_name) %>%
+  #filter (country =="Chile") %>%
+  group_by (country, species) %>%
+  # define as ssf when > 75% of catch is in SSF 
+  mutate (spp_sector = case_when (
+    sum (tonnes_tot[fishing_sector == "Industrial"])/sum (tonnes_tot) > 0.75 ~ "Industrial",
+    sum (tonnes_tot[fishing_sector == "Artisanal"])/sum (tonnes_tot) > 0.75 ~ "SSF",
+    TRUE ~ "Mixed")
+    ) %>%
+  select (country, species, spp_sector) %>%
+  distinct()
+
+#table (chl_sector_spp$spp_sector)
+sector_spp %>%
+  group_by (country, spp_sector) %>%
+  summarise (n_spp = n())
+
+saveRDS(sector_spp, file = "Data/SAU_spp_by_sector_75cutoff.Rds")
+
+t90 <- sau_ds %>%
+  ungroup() %>%
+  rename (species = scientific_name) %>%
+  #filter (country =="Chile") %>%
+  group_by (country, species) %>%
+  # define as ssf when > 75% of catch is in SSF 
+  mutate (spp_sector = case_when (
+    sum (tonnes_tot[fishing_sector == "Industrial"])/sum (tonnes_tot) > 0.9 ~ "Industrial",
+    sum (tonnes_tot[fishing_sector == "Artisanal"])/sum (tonnes_tot) > 0.9 ~ "SSF",
+    TRUE ~ "Mixed")
+    ) %>%
+  select (country, species, spp_sector) %>%
+  distinct()
+
+table (t90$spp_sector)
+
+t90 %>%
+  group_by (country, spp_sector) %>%
+  summarise (n_spp = n())
+
+```
+With a 75% cutoff
+Chile: 30 industrial, 85 ssf, 4 mixed. 
+Indo: 114 indus, 47 mixed, 16 SSF
+Peru: 35 industrial, 38 ssf, 6 mixed
+SL: 142 industrial, 15 mixed, 45 ssf
+
+With a 90% cutoff:
+Chile- 29 industrial, 82 SSF, 8 mixed
+Indo- 96 industrial, 69 mixed, 12 SSF --> not as good
+Peru - 32 industrial, 31 SSF, 16 mixed
+SL: 142 industrial, 21 mixed, 39 SSF
+
+maybe use 75
+
+
+## Overall micronutrient density of species by sector
+
+We define overall micronutrient density of a species from Maire et al. (2021): the micronutrient density for a specific nutrient would be the percentage of a child's recommended dietary allowance of that nutrient in a 100g serving of that species, e.g. if a 100g serving of cod provides 50% of the Iron RDA for children, its iron density is 50. The overall micronutrient density is the sum for all nutrients we're examining--calcium, vitamin A, selenium, iron, zinc, and omega 3s. The maximum value is 600 and the minimum value is zero. 
+
+```{r micro_dens}
+### plot distribution of micronutrient density by sector
+spp_micronutr_density <- spp_nutr %>%
+  filter (group == "Child", nutrient != "Protein") %>%
+  distinct() %>%
+  group_by (species) %>% 
+  summarise (micronutrient_density = sum (perc_rda, na.rm = TRUE))
+
+sau_ds %>%
+  rename (species = scientific_name) %>%
+  left_join (spp_micronutr_density, by = "species") %>%
+  ggplot () +
+  geom_density (aes (x = micronutrient_density, col = fishing_sector), alpha = 0.5) +
+  facet_wrap (~country) +
+  theme_bw() +
+  ggtitle ("Distribution of micronutrient density of species caught by each fishing sector")
+
+
+# can I make a density graph or a line graph where the x axis is micronutrient density and the y axis is tonnes caught and the fill is sector.
+
+# https://stackoverflow.com/questions/20342494/density-of-each-group-of-weighted-geom-density-sum-to-one
+sau_ds %>%
+  rename (species = scientific_name) %>%
+  left_join (spp_micronutr_density, by = "species") %>%
+  group_by (fishing_sector) %>%
+  mutate (tonnes_sector = sum(tonnes_tot)) %>%
+  ggplot () +
+  geom_density (aes (x = micronutrient_density,  col = fishing_sector, group = fishing_sector, weight = tonnes_tot/tonnes_sector), alpha = 0.5) +
+  facet_wrap (~country) +
+  theme_bw() +
+  ggtitle ("Distribution of micronutrient density of species caught by each fishing sector, weighted by catch")
+```
+
+
+compare micronutrient density, climate vulnerability, fishing vulnerability
+
+```{r vulnerability_micro_dens}
+
+spp_profiles_vuln <- spp_micronutr_density %>%
+left_join (maire_vuln, by = "species")
+
+ggplot (spp_profiles_vuln) +
+  geom_point (aes (x = fishing_vuln, y = micronutrient_density, col = climate_vuln)) +
+  theme_bw() +
+  scale_color_distiller(palette = "RdYlGn")
+
+```
+
+relate this to ssf vs. artisanal?
+with 75% cutoff, 30 industrial species, 4 mixed, 85 SSF. 
+```{r chl_spp_vuln_profile_sector}
+
+
+
+spp_profiles_vuln %>%
+  left_join (t, by = "species") %>%
+  filter (!is.na (spp_sector)) %>%
+  ggplot () +
+  geom_point (aes (x = fishing_vuln, y = micronutrient_density, col = climate_vuln, shape = spp_sector)) +
+  theme_bw() +
+  scale_color_distiller(palette = "RdYlGn") +
+  ggtitle ("Chile species")
+
+
+          
+spp_profiles_vuln %>%
+  left_join (t, by = "species") %>%
+  filter (!is.na (spp_sector)) %>%
+  ggplot () +
+  geom_boxplot (aes (x = spp_sector, y = micronutrient_density)) +
+  theme_bw() +
+  ggtitle ("Chile species")
+
+spp_profiles_vuln %>%
+  left_join (t, by = "species") %>%
+  filter (!is.na (spp_sector)) %>%
+  ggplot () +
+  geom_boxplot (aes (x = spp_sector, y = climate_vuln)) +
+  theme_bw() +
+  ggtitle ("Chile species")
+
+spp_profiles_vuln %>%
+  left_join (t, by = "species") %>%
+  filter (!is.na (spp_sector)) %>%
+  ggplot () +
+  geom_boxplot (aes (x = spp_sector, y = fishing_vuln)) +
+  theme_bw() +
+  ggtitle ("Chile species")
+```
+what about 90% as cutoff?
+29 industrial, 8 mixed, 82 ssf. may as well do 90. 
+```{r chl_spp_vuln_profile_sector_90cutoff}
+
+
+
+# quick check since anchovy does a big jump to industrial in 2015. 
+sau_ds %>%
+  filter (scientific_name %in% t90$species[which (t90$spp_sector == "Mixed")]) %>%
+  ggplot (aes (x = year, y = tonnes_tot, fill = fishing_sector)) +
+  geom_bar(stat = "identity") + 
+  theme_bw() +
+  facet_wrap (~scientific_name)
+```
+d gigas is pretty evenly mixed. anchovy for dhc is almost all artisanal, than does a big jump to industrial in 2014. 
+``` {r plot_chile_sector_attributes}
+spp_profiles_vuln %>%
+  left_join (t90, by = "species") %>%
+  filter (!is.na (spp_sector)) %>%
+  ggplot () +
+  geom_point (aes (x = fishing_vuln, y = micronutrient_density, col = climate_vuln, shape = spp_sector)) +
+  theme_bw() +
+  scale_color_distiller(palette = "RdYlGn") +
+  ggtitle ("Chile species")
+
+
+#           
+spp_profiles_vuln %>%
+  left_join (t90, by = "species") %>%
+  filter (!is.na (spp_sector)) %>%
+  ggplot () +
+  geom_boxplot (aes (x = spp_sector, y = micronutrient_density)) +
+  theme_bw() +
+  ggtitle ("Micronutrient density of species by sector, Chile")
+
+spp_profiles_vuln %>%
+  left_join (t90, by = "species") %>%
+  filter (!is.na (spp_sector)) %>%
+  ggplot () +
+  geom_boxplot (aes (x = spp_sector, y = climate_vuln)) +
+  theme_bw() +
+  ggtitle ("Climate vulnerability of species by sector, Chile")
+
+spp_profiles_vuln %>%
+  left_join (t90, by = "species") %>%
+  filter (!is.na (spp_sector)) %>%
+  ggplot () +
+  geom_boxplot (aes (x = spp_sector, y = fishing_vuln)) +
+  theme_bw() +
+  ggtitle ("Fishing vulnerability of species by sector, Chile")
+```
+Mixed are most nutritious. SSF has slightly higher mean than industrial but bigger spread. SSF more climate vulnerable, industrial most fishing vulnerable. 
+
+```{r most_nutritious_chile}
+
+spp_profiles_vuln %>%
+  left_join (t90, by = "species") %>%
+  filter (!is.na (spp_sector)) %>%
+  slice_max (micronutrient_density, prop = 0.25) %>%
+  ggplot () +
+  geom_boxplot (aes (x = spp_sector, y = climate_vuln)) +
+  theme_bw() +
+  ggtitle ("Climate vulnerability of most nutritious species by sector, Chile")
+
+spp_profiles_vuln %>%
+  left_join (t90, by = "species") %>%
+  filter (!is.na (spp_sector)) %>%
+  slice_max (micronutrient_density, prop = 0.25) %>%
+  ggplot () +
+  geom_boxplot (aes (x = spp_sector, y = fishing_vuln)) +
+  theme_bw() +
+  ggtitle ("Fishing vulnerability of most nutritiousspecies by sector, Chile")
+
+```
+
+
+what about the climate/fishing vulnerability of the most nutritious spp--similar patterns but more extreme. 
+
+## break this out by individual nutrients
+```{r chl_spp_sector_by_nutrient}
+
+t90 %>%
+  left_join (spp_nutr, by = "species") %>%
+  filter (group == "Child", !nutrient %in% c("Protein")) %>%
+  ggplot () +
+  geom_boxplot (aes (x = spp_sector, y = perc_rda)) +
+  facet_wrap (~nutrient) +
+  theme_bw()
+  
+
+```
+anchovy is in mixed, that might be driving omega 3s? slightly higher vit A for ssf?
+
+
+
+### Current SAU nutrient yield and contribution to population needs
+
+not based on species, just break out SAU sectors. Use the 2020 population estimate, but take average catch 2000-2015
+```{r catch_nutr_contribution}
+
+
+# just want population level rda for now 
+pop_rda_needs <- pop_2020 %>%
+  left_join (rda_groups, by = "group") %>%
+  mutate (rda_needs = mean_rda * population) %>%
+  group_by (country, nutrient) %>%
+  summarise (
+    tot_rda_needs = sum (rda_needs, na.rm = TRUE))
+
+# take average nutrient servings by nutrient and sector
+
+sau_chl_test <- sau_nutr %>%
+  filter (country == "Chile", group == "Child", species %in% c("Merluccius gayi gayi", "Engraulis ringens")) %>%
+  select (year, species, fishing_sector, tonnes_tot, nutrient, amount, group, perc_rda, meat_mt, nutr_mt, meat_servings, nutr_servings)
+
+z <- sau_chl_test %>% 
+group_by (species, fishing_sector, nutrient) %>%
+  summarise (mean_tonnes = mean (tonnes_tot, na.rm = TRUE),
+          mean_servings = mean (nutr_servings, na.rm = TRUE))
+
+z2 <- sau_chl_test %>% 
+group_by (fishing_sector, nutrient) %>%
+  summarise (mean_tonnes = mean (tonnes_tot, na.rm = TRUE),
+          mean_servings = mean (nutr_servings, na.rm = TRUE))
+
+z_rda <- z %>%
+ left_join (filter(pop_rda_needs, country == "Chile"), by = c("nutrient")) %>%
+  mutate (#yield_per_cap = nutr_servings / population,
+          
+          # proportion of population rda met for each group
+          rda_met = mean_servings/tot_rda_needs)
+
+z2_rda <- z2 %>%
+left_join (filter(pop_rda_needs, country == "Chile"), by = c("nutrient")) %>%
+  mutate (#yield_per_cap = nutr_servings / population,
+          
+          # proportion of population rda met for each group
+          rda_met = mean_servings/tot_rda_needs)
+# this is much smaller, this is the mean of all the species instead of the sum. should use the z approach. 
+
+ggplot (z1_rda, aes (y = rda_met, x = nutrient, fill = fishing_sector)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_wrap (~country, nrow = 4, scales = "free") +
+  theme_bw() +
+  labs (x = "", fill = "", y = "") +
+  facet_wrap (~country, scales = "free") +
+  labs (y = "Proportion of population RDAs met") +
+  ggtitle ("Proportion of population RDAs met by current catch\nSAU data, average catch 2000-2015") +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9))
+
+# check if reasonable
+ggplot (sau_chl_test, aes (x = year, y = tonnes_tot, col = species)) + geom_point() + geom_line() + theme_bw() + facet_wrap (~fishing_sector)
+
+rdas_pop_level_sau <- sau_nutr %>%
+  group_by (country, fishing_sector, species, nutrient) %>%
+  mutate (mean_tonnes = mean (tonnes_tot, na.rm = TRUE),
+          mean_servings = mean (nutr_servings, na.rm = TRUE)) %>%
+  select (country, species, major_group, fishing_sector, nutrient, mean_servings) %>%
+  distinct() %>%
+ left_join (pop_rda_needs, by = c("country", "nutrient")) %>%
+  mutate (#yield_per_cap = nutr_servings / population,
+          
+          # proportion of population rda met for each group
+          rda_met = mean_servings/tot_rda_needs)
+ 
+
+rdas_pop_level_sau %>%
+  filter (country %in% c("Chile", "Peru"), 
+          fishing_sector %in% c ("Artisanal", "Industrial")) %>%
+  ggplot (aes (y = rda_met, x = nutrient, fill = fishing_sector)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_wrap (~country, nrow = 4, scales = "free") +
+  theme_bw() +
+  labs (x = "", fill = "", y = "") +
+  facet_wrap (~country, scales = "free") +
+  labs (y = "Proportion of population RDAs met") +
+  ggtitle ("Proportion of population RDAs met by current catch\nSAU data, average catch 2000-2015") +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9))
+
+
+
+
+
+```
+
+
+
+there's a weird thing in the Peru data where from 2016-2018 there's a huge jump in industrial-caught anchovy going to direct human consumption. all industrial catch in those years is direct human consumption, whereas usually it's mostly fishmeal. 
+
+
+chile data still weird, huge jump in ahcnovy in 2014 2015 too
+
+```{r peru_industrial_anchovy}
+
+sau_ds %>%
+  filter (country == "Peru") %>%
+  mutate (anchov = ifelse (scientific_name == "Engraulis ringens", "Anchovy", "Other")) %>%
+  ggplot (aes (x = year, y = tonnes_tot, fill = anchov)) +
+  geom_bar (stat = "identity") +
+  facet_wrap (~fishing_sector, scales = "free")
+
+```
+
+
