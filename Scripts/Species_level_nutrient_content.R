@@ -157,37 +157,3 @@ ds_spp_nutr_content <- ds_baseline %>%
 
 saveRDS(ds_spp_nutr_content, file = "Data/ds_spp_nutr_content_FishNutrientsGENuS_RDA_groups.Rds")
 
-## What are the overall most nutritious species? ----
-
-ds_spp_nutr_content %>%
-  filter (group == "Child") %>%
-  select (species, nutrient, perc_rda) %>%
-  distinct() %>%
-  group_by (species) %>%
-  summarise (micronutrient_density = sum (perc_rda)) %>%
-  arrange (desc (micronutrient_density))
-
-
-## Which species provide the most needed nutrients in each country? ----
-ds_spp_nutr_content <- readRDS("Data/ds_spp_nutr_content_FishNutrientsGENuS_RDA_groups.Rds")
-
-# Chile: Calcium and vitamin A. 
-# Indo: calcium and vitamin A, maybe zinc with golden
-# Malawi: calcium, maybe vitamin A
-# Peru: calcium, zinc
-#Sierra leone: calcium, viatmin A, iron, zinc
-
-# for this, doesn't matter RDA? but would want amount_mt?
-
-# two ways of looking at this. the species that are the most nutrient dense for that nutrient, and the species that are frequently caught and therefore providing a lot of that nutrient. 
-
-# later could bring in which species will show the most gains under management reforms; which are the most climate vulnerable/fishing vulnerable from Maire et al
-
-ds_spp_nutr_content %>%
-  select (country, species, catch_mt, nutrient, amount) %>%
-  distinct() %>%
-  group_by (country, nutrient) %>%
-  slice_max (amount, n = 5) %>%
-  arrange (country, nutrient, desc (amount)) %>% View()
-
-
