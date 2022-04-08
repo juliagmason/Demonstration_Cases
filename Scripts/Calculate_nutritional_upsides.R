@@ -4,6 +4,58 @@
 
 library (tidyverse)
 
+# updated 3/25/22 to use rda data
+# projected nutrient yield in mt (per year) and servings (native units per day)
+ds_catch_nutr_yield_projected <- readRDS ("Data/ds_catch_nutr_yield_projected.Rds")
+
+# RDAs data ----
+# made in Species_level_nutrient_content
+rda_groups <- readRDS("Data/RDAs_5groups.Rds")
+
+# population data----
+# made in calculate_RDAs_met
+pop_future <- readRDS("Data/country_pop_projections.Rds")
+
+# calculate population level rda needs
+rda_needs <- rda_groups %>%
+  left_join (pop_future, by = "group") %>%
+  filter (!is.na (population)) %>%
+  mutate (rda_needs_group = mean_rda * population) %>%
+  group_by (country, period, nutrient) %>%
+  summarize (rda_needs = sum(rda_needs_group)) 
+
+# calculate difference in mt and servings between MEY/adaptive management and BAU for periods of interest. translate into projected RDAs met
+nutr_upside <- ds_catch_nutr_yield_projected %>%
+  filter (scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation")) %>%
+  mutate (
+    period = case_when (
+      year %in% c(2025:2035) ~ "2025-2035",
+      year %in% c(2050:2060) ~ "2050-2060",
+      year %in% c(2090:2100) ~ "2090-2100"
+    )) %>%
+  filter (!is.na (period)) %>%
+  group_by (country, rcp, scenario, period, nutrient, species) %>%
+  summarise (nutr_mt = mean (nutr_mt, na.rm = TRUE),
+             nutr_servings = mean (nutr_servings, na.rm = TRUE)) %>%
+  ungroup() %>%
+  group_by (country, rcp, period, nutrient, species) %>%
+  summarize (mey_diff_mt = nutr_mt[scenario == "Productivity Only"] - nutr_mt[scenario == "No Adaptation"],
+             adapt_diff_mt = nutr_mt[scenario == "Full Adaptation"] - nutr_mt[scenario == "No Adaptation"],
+             mey_diff_servings = nutr_servings[scenario == "Productivity Only"] - nutr_servings[scenario == "No Adaptation"],
+             adapt_diff_servings = nutr_servings[scenario == "Full Adaptation"] - nutr_servings[scenario == "No Adaptation"]) %>%
+  # also show rdas met fpr children
+  left_join (rda_needs, by = c("country", "period", "nutrient")) %>%
+  left_join (filter (rda_groups, group == "Child"), by = "nutrient") %>%
+  mutate (mey_diff_rdas_prop = mey_diff_servings / rda_needs,
+          mey_diff_child_rda = mey_diff_servings / mean_rda,
+          adapt_diff_rdas_prop = adapt_diff_servings / rda_needs,
+          adapt_diff_child_rda = adapt_diff_servings / mean_rda)
+
+saveRDS(nutr_upside, file = "Data/ds_nutr_upside.Rds")
+
+
+#############################################################
+#nutricast method demand required
 # intake requirement data
 
 # convert to # individuals nutrition needs met
@@ -60,7 +112,7 @@ plot_n_inds_met_prod <- function (country_name) {
     facet_wrap (~rcp, scales = "free") +
       theme_bw() +
       ggtitle (paste0(country_name, ", Upside with Productivity Only reforms (MEY)")) +
-      labs (x = "Number of additional adults' nutrition requirements met", y = "")
+      labs (x = "Number of additional adults' nutrition requirements met", y = "", fill = "Nutrient")
 
   
 }
@@ -84,8 +136,8 @@ plot_n_inds_met_adapt <- function (country_name) {
 
 
 
-plot_n_inds_met_prod (country_name = "Chile")
-plot_n_inds_met_adapt (country_name = "Sierra Leone")
+# plot_n_inds_met_prod (country_name = "Chile")
+# plot_n_inds_met_adapt (country_name = "Sierra Leone")
 
 
 
