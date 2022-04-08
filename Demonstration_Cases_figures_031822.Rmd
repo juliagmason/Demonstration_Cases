@@ -24,7 +24,7 @@ mic_def <- read_csv ("Data/mic_def_compare_beal_golden.csv")
 ds_spp_nutr_content <- readRDS("Data/ds_spp_nutr_content_FishNutrientsGENuS_RDA_groups.Rds")
 
 # nutrient yield of baseline catch (2012-2020, BAU) in mt and servings
-ds_catch_nutr_yield_mt_baseline <- readRDS("Data/ds_catch_nutr_yield_baseline.Rds")
+ds_catch_nutr_yield_baseline <- readRDS("Data/ds_catch_nutr_yield_baseline.Rds")
 
 # rdas met, baseline catch (2012-2020, BAU). at species level
 ds_rdas_met_baseline <- readRDS("Data/ds_baseline_RDAs_met.Rds")
@@ -83,10 +83,10 @@ plot_rdas_met_scen <- function (country_name, imperfect = TRUE, anchovy = TRUE) 
     country_rdas_met <- country_rdas_met %>%
       filter (species != "Engraulis ringens")
     
-    title = paste0("Percent of population RDAs met under future management scenarios, ", country_name, ",\nanchovy removed")
+    title = paste0("Percent of population RDAs met under future management scenarios,\n ", country_name, ", anchovy removed")
   } else {
     
-    title = paste0("Percent of population RDAs met under future management scenarios, ", country_name)
+    title = paste0("Percent of population RDAs met under future management scenarios,\n", country_name)
     
   }
   
@@ -100,6 +100,7 @@ plot_rdas_met_scen <- function (country_name, imperfect = TRUE, anchovy = TRUE) 
   geom_bar (stat = "identity", position = "dodge") +
   facet_grid (nutrient ~ rcp, scales = "free") +
   theme_bw() +
+  theme (axis.text = element_text(angle = 0.6)) +
   labs(y="Percent of RDAs met from fisheries reforms", x="", fill = "Management\nscenario") +
   ggtitle (title)
   
@@ -113,18 +114,17 @@ demonstration_countries <- c("Chile", "Peru", "Indonesia", "Sierra Leone")
 
 ## Micronutrient deficiencies in case study countries
 
-Nutricast used nutrient supply from the GENuS database, Estimated Average Requirements (EARs), which represent the nutrients needed to meet the needs of half the population, and sex/age specific estimated population size/growth to calculate micronutrient deficiencies. They used an optimization function to expand the EARs to instead reach 95% of the nutritional needs of the population, but it seems that this calculation calls for much higher values than the Recommended Dietary Allowance (RDA) values, which are supposed to meet the needs of 97-98% of the population. I have access to this code so can get age/sex specific deficiency values. 
+See "Micronutrient deficiencies" table in google doc for prevalence of inadequate intake values from two sources, Nutricast and Beal et al., (2017). I have deficiencies for Calcium, Vitamin A, Zinc, and Iron (these are also what Hicks et al looked at). For all our countries, calcium has the highest prevalence of deficiency, followed by Vitamin A for every country but Peru (Zinc, then Vitamin A). However, since there are only four nutrients to look at, and because these data don't necessarily reflect what we've found in our country-specific research (e.g. concerns about anemia in Peru and iron and zinc deficiencies in Chile), *we might as well look at all of them.* In fact, I'm not sure that it's worth leaving out Selenium and Omega-3s either, which probably also represent deficiencies but just have fewer intake or deficiency studies. 
 
-Beal et al. (2017) calculate a Prevalence of Inadequate Micronutrient Intake Index (PIMII) using I believe the same method as above (nutricast probably modeled after them), based on EAR cutpoints, but gets different values than Nutricast. They also provide estimates accounting for fortification in diets. These data are from 2011 and do not include selenium or Omega 3s. Hicks and co (Maire, Robinson) use these values, which are available as overall index and by individual nutrients from Beal's supplemental data. I therefore only have population-level values, not age/sex specific. 
+Nutricast used nutrient supply from the GENuS database, Estimated Average Requirements (EARs), which represent the nutrients needed to meet the needs of half the population, and sex/age specific estimated population size  to calculate micronutrient deficiencies. They used an optimization function to expand the EARs to reach 95% of the nutritional needs of the population. I have access to this code so can get age/sex specific deficiency values. However, this calculation calls for much higher values than the Recommended Dietary Allowance (RDA) values, which are supposed to meet the needs of 97-98% of the population (Hicks etc. use the RDA values, which I think are the same as the RNI values that Illuminating Hidden Harvest uses).
 
-Chris Golden's AFCD/Blue Foods Assessment paper used the proprietary Global Nutrient Database (based on FAO Supply and Utilization Accounts) for national nutrient availability, and GENuS for intake/consumption. They used a habitual intake statistical program to calculate consumption of Omega 3s and vitamin B12, which are not in GENuS. They used SEVs (summary exposure values) as a risk-weighted prevalence of inadequate micronutrient intake. I'm not sure yet what the benefit is of this method over the others. 
-
-With the Nutricast and Beal data, I have deficiencies for Calcium, Vitamin A, Zinc, and Iron (these are also what Hicks et al looked at). For all our countries, calcium has the highest prevalence of deficiency, followed by Vitamin A for every country but Peru (Zinc, then Vitamin A). However, since there are only four nutrients to look at, and because these data don't necessarily reflect what we've found in our country-specific research (e.g. concerns about anemia in Peru and iron and zinc deficiencies in Chile), we might as well look at all of them.
-
-See "Micronutrient deficiences" table in google doc for prevalence of inadequate intake values from these two sources. 
+Beal et al. (2017) calculate a Prevalence of Inadequate Micronutrient Intake Index (PIMII) using I believe the same method as above (nutricast probably modeled after them), based on EAR cutpoints, but gets different values than Nutricast. They also provide estimates accounting for fortification in diets. These data are from 2011 and do not include selenium or Omega 3s. Hicks and associated authors/papers (Maire, Robinson) use these values, which are available as overall index and by individual nutrients from Beal's supplemental data. I therefore only have population-level values, not age/sex specific. 
 
 
-## Nutrient density of major species
+For further reference, Chris Golden's AFCD/Blue Foods Assessment paper used the proprietary Global Nutrient Database (based on FAO Supply and Utilization Accounts) for national nutrient availability, and GENuS for intake/consumption. They used a habitual intake statistical program (SPADE) to calculate consumption of Omega 3s and vitamin B12, which are not in GENuS. They used SEVs (summary exposure values) as a risk-weighted prevalence of inadequate micronutrient intake. I'm not sure yet what the benefit is of this method over the others. 
+
+
+## Nutrient density of major species by catch volume
 
 These cobweb plots tell us about the nutrient content of the most-caught species in each country. These are slightly different from a version I showed earlier, and I think more relevant. Now the y axis is the % recommended dietary allowance (RDA) for a child age 6mos to 8 years old from a 100g serving of that species. 100% means that eating a single serving of that species would satisfy a child's daily needs for that nutrient. 
 
@@ -187,7 +187,7 @@ Note different scales in y axes, but the values are all in metric tons. I'm sepa
 
 # https://stackoverflow.com/questions/62652308/combine-multiple-facet-strips-across-columns-in-ggplot2-facet-wrap
 
-ds_catch_nutr_yield_mt_baseline %>%
+ds_catch_nutr_yield_baseline %>%
   ggplot (aes (x = nutrient, y = nutr_mt, fill = major_group)) +
   facet_nested_wrap (country~ dens_units, ncol = 3, scales = "free") +
   geom_bar (stat = "identity") +
@@ -279,33 +279,33 @@ ds_rdas_met_baseline %>%
 
 ## What is the nutritional upside of different management scenarios?
 
-In the previous set of figures, I showed percent of nutrient demand met under the various scenarios using the Nutricast method. Here instead I'm using RDAs. We get somewhat bigger numbers because the RDA values are smaller than the Nutricast optimization methodm but not a huge difference. 
+In the previous set of figures, I showed percent of nutrient demand met under the various scenarios using the Nutricast method. Here instead I'm using RDAs. We get somewhat bigger numbers because the RDA values are smaller than the Nutricast optimization method, but not a huge difference. 
 
-```{r SL_future_rdas, echo = FALSE}
+```{r SL_future_rdas, echo = FALSE, fig.height=12}
 
 plot_rdas_met_scen("Sierra Leone")
 
 ```
 
-```{r In_future_rdas, echo = FALSE}
+```{r In_future_rdas, echo = FALSE, fig.height=12}
 
 plot_rdas_met_scen("Indonesia", imperfect = FALSE)
 
 ```
 
-```{r chile_future_rdas, echo = FALSE}
+```{r chile_future_rdas, echo = FALSE, fig.height=12}
 
 plot_rdas_met_scen("Chile", imperfect = FALSE)
 
 ```
 
-```{r chile_future_rdas_noanchov, echo = FALSE}
+```{r chile_future_rdas_noanchov, echo = FALSE, fig.height=12}
 
 plot_rdas_met_scen("Chile", imperfect = FALSE, anchovy = FALSE)
 
 ```
 
-```{r Peru_future_rdas, echo = FALSE}
+```{r Peru_future_rdas, echo = FALSE, fig.height=12}
 
 plot_rdas_met_scen("Peru", imperfect = FALSE, anchovy = FALSE)
 
