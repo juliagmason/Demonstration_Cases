@@ -79,7 +79,7 @@ pop_future <- pop %>%
                 values_to = "population") %>%
   rename (country = Location)
 
-  
+saveRDS(pop_future, file = "Data/country_pop_projections.Rds")
 
 # convert current catch to rdas met ----
  
