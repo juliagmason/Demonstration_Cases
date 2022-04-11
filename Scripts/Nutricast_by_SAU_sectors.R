@@ -119,7 +119,24 @@ rdas_met_proj_sector %>%
   theme (axis.text.x = element_text (angle = 60, hjust = 0.9)) +
   labs(y="Percent of RDAs met", x="", fill = "Management\nscenario") +
   ggtitle ("Proportion of Chile's population RDAs met under future management scenarios \n Species caught in SSF")
+
+rdas_met_proj_sector %>%
+  filter (spp_sector == "Industrial", country == "Chile", !grepl("Imperfect", scenario)) %>%
+  group_by (rcp, scenario, period, nutrient) %>%
+  summarise (sum_rda = sum (tot_rda_met)) %>%
+  ggplot (aes (y = sum_rda, x = period, fill = scenario)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_grid (nutrient ~ rcp, scales = "free") +
+  theme_bw() +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9)) +
+  labs(y="Percent of RDAs met", x="", fill = "Management\nscenario") +
+  ggtitle ("Proportion of Chile's population RDAs met under future management scenarios \n Species caught in Industrial fisheries")
   
+
+
+
+############################
+# this is sorting out grouping 
 
 ssf_rdas <- rdas_met_proj_sector %>%
   filter (spp_sector == "SSF") %>%
