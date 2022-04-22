@@ -33,6 +33,11 @@ afcd1 %>% filter (country %in% "FAO Biodiv 3") %>% select (sciname) %>% distinct
 afcd1 %>% filter (country %in% "Not provided in unformatted AFCD") %>% View() # a ton of stuff, 6500 entries, all different nutrients
 select (sciname) %>% distinct() %>% pull (sciname)
 
+# do they have "Loxechinus albus", chilean sea urchin
+"Loxechinus albus" %in% afcd1$sciname
+afcd1 %>% filter (sciname == "Loxechinus albus") %>% View()
+# yes, but fatty acid and protein only
+
 
 # do they have the species from the country-level data
 
