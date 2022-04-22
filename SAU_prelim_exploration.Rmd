@@ -44,7 +44,7 @@ chile mainland only
 
 ```{r chile_ds}
 sau_chl <- SAU %>%
-   filter (year > 2000, 
+   filter (between (year, 2000, 2015), 
           tonnes > 0, grepl ("Chile", area_name))
 
 unique (sau_chl$fishing_entity) # lots of different ones
@@ -139,11 +139,76 @@ sau_chl %>%
 
 pretty strong distinction where there are a ton of species just in artisanal, 68, (76 > 99%) then a few 80s, 2 60s, one low 50 (Sprattus fuegensis). Prionace glauca 35% ssf, M gayi gayi 22%, Heterocarpus reedi 11%, then the rest 1-0%. 
 
+
+#### major species caught in artisanal vs industrial sectors
+```{r}
+sum_artisanal <- sum (sau_chl$tonnes[which(sau_chl$fishing_sector == "Artisanal")])
+sum_ind <- sum (sau_chl$tonnes[which(sau_chl$fishing_sector == "Industrial")])
+
+
+chl_ssf_props <- sau_chl %>%
+  filter (fishing_sector == "Artisanal") %>%
+  group_by (scientific_name) %>%
+  summarise (prop = round(sum(tonnes)/sum_artisanal * 100, 2),
+             functional_group = first (functional_group)) %>%
+  arrange (desc(prop))
+
+chl_ind_props <- sau_chl %>%
+  filter (fishing_sector == "Industrial") %>%
+  group_by (scientific_name) %>%
+  summarise (prop = round(sum(tonnes)/sum_ind * 100, 2),
+            functional_group = first (functional_group)) %>%
+  arrange (desc(prop))
+```
+
+#### which species do we lose from nutrition data
+```{r}
+chl_ind_props$scientific_name[which (!chl_ind_props$scientific_name %in% fishnutr_mu$species)]
+
+chl_ssf_props %>% filter (!scientific_name %in% fishnutr_mu$species) %>% select (scientific_name, functional_group)
+```
+Industrial species--all families or inverts or unidentified. Could we replace "clupeidae" with sardinops sagax or other sardine? Strangomera bentincki, Sprattus fuegensis. S. sagax is definitely the most nutritious. Chose S. bentincki, medium? not in data already? S. bentincki is bigger than clup in ssf, not in industrial. 
+
+```{r}
+fishnutr_mu %>% filter (species %in% c("Sardinops sagax", "Sprattus fuegensis", "Strangomera bentincki"))
+
+spp_micronutr_density %>% filter (species %in% c("Sardinops sagax", "Sprattus fuegensis", "Strangomera bentincki"))
+```
+
+
+Not missing any fish. all invertebrates and things not identified to species name. clup is the biggest priority to figure out
+
+So, the problem is not the nutrition data. the problem is the Free data.
+
+#### check join to free data
+```{r  chl_free_check}
+
+# projected nutritrient yield under management scenarios ----
+# from Free data. Convert_catch_to_nutrients.R
+ds_catch_nutr_yield_projected <- readRDS("Data/ds_catch_nutr_yield_projected.Rds")
+
+ds_spp_names <- ds_catch_nutr_yield_projected %>% select (species) %>% distinct()
+
+
+chl_ssf_props %>% filter (!scientific_name %in% ds_spp_names$species) %>% View()
+chl_ssf_props %>% filter (!scientific_name %in% ds_spp_names$species) %>% summarise (n = sum(prop))
+chl_ind_props %>% filter (!scientific_name %in% free_chl$species) %>% View()
+chl_ind_props %>% filter (!scientific_name %in% free_chl$species) %>% summarise (n = sum(prop))
+```
+chl SSF: 64 species. marine unidentified 11% S. bentincki (clup) 3%,l. albus 8%, clup, brama australis 3%, dory gahi 3%, m. gayi gayi 1%. total 44.7%
+ind mostly clup and m gayi gayi, 18%
+
+Brama australis--> Brama brama? Atlantic pomfret. different resilience and temperature...
+Merluccius gayi---M. australis?
+
+Loxechinus albus is in the fishcast webtool though...as is Strangomera bentincki. L. albus in original ds_spp, not S. bentincki?
+Lose urchin because no GENuS data for echinoderms. Don't have all the nutrients in AFCD yet. 
+
 # Peru
 
 ```{r peru_ds}
 sau_peru <- SAU %>%
-   filter (year > 2000, 
+   filter (between (year, 2000, 2015), 
           tonnes > 0, 
           area_name == "Peru", 
           fishing_sector %in% c ("Industrial", "Artisanal"))
@@ -203,6 +268,45 @@ group_by (scientific_name) %>%
 ```
 not quite as stark as chile but a steady decline to 75% artisanal, then unidentified marine fish 52%, batoidea 47%, 	
 Paralabrax humeralis 38%, Xiphias gladius 31%, Merluccius gayi peruanus 17% Scomber japonicus 13%, the rest under 10
+
+#### species lost in free data
+```{r}
+sum_artisanal <- sum (sau_peru$tonnes[which(sau_peru$fishing_sector == "Artisanal")])
+sum_ind <- sum (sau_peru$tonnes[which(sau_peru$fishing_sector == "Industrial")])
+
+
+peru_ssf_props <- sau_peru %>%
+  filter (fishing_sector == "Artisanal") %>%
+  group_by (scientific_name) %>%
+  summarise (prop = round(sum(tonnes)/sum_artisanal * 100, 2),
+             functional_group = first (functional_group)) %>%
+  arrange (desc(prop))
+
+peru_ind_props <- sau_peru %>%
+  filter (fishing_sector == "Industrial") %>%
+  group_by (scientific_name) %>%
+  summarise (prop = round(sum(tonnes)/sum_ind * 100, 2),
+            functional_group = first (functional_group)) %>%
+  arrange (desc(prop))
+```
+
+which are missing from free data
+```{r}
+peru_ssf_props %>% filter (!scientific_name %in% ds_spp_names$species) %>% View()
+peru_ssf_props %>% filter (!scientific_name %in% ds_spp_names$species) %>% summarise (n = sum(prop))
+peru_ind_props %>% filter (!scientific_name %in% ds_spp_names$species) %>% View()
+peru_ind_props %>% filter (!scientific_name %in% ds_spp_names$species) %>% summarise (n = sum(prop))
+
+
+```
+
+Argopecten purpuratus 3%, makes sense, sea urchin. But Sarda chiliensis!!? 2%. m gayi peruanus. 18%, mostly unidentified
+industrial, only 3.6%. 2% is clup
+
+
+Sarda chiliensis do have nutrient info. In fishcast. So is M. gayi
+have Sarda orientalis, and sarda (atlantic)
+
 
 
 # sierra leone
