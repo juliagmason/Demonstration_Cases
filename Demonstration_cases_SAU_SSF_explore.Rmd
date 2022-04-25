@@ -59,35 +59,11 @@ pop_2020 <- pop %>%
 
 # climate vulnerability and fishing vulnerability data
 # can prob get clim vuln from fishbase, steal from maire for now
-# maire_vuln <- read_csv ("../NutrientGlobalFisheries_Maire/data/species_data.csv") %>%
-#   select (species, Fishing_V, Climate_V.index) %>%
-#   rename (fishing_vuln = Fishing_V, climate_vuln = Climate_V.index)
+maire_vuln <- read_csv ("Data/maire_species_data.csv") %>%
+  select (species, Fishing_V, Climate_V.index) %>%
+  rename (fishing_vuln = Fishing_V, climate_vuln = Climate_V.index)
 # 
 
-
-# functions ----
-# Function to calculate mt of nutrient from mt of edible meat ----
-# units: mg, ug=mcg 
-# meat_mt <- 29.88111; nutr_dens <- 35.5; nutr_dens_units <- "mg"
-# from nutrient_endowment --> shiny --> v3 --> :Page3_Fig2c_reforms_prop_demand, line 84
-
-# adding--divide by 100 in here. I think Chris did that in his head but making me doubt everything
-calc_nutr_supply_mt <- function(meat_mt, nutr_dens, nutr_dens_units){
-  
-  # Convert meat to grams
-  # "Mg" is metric tons
-  meat_g <- measurements::conv_unit(meat_mt, "Mg", "g")
-  
-  # Calculate amount of nutrient in density units. divide by 100 because density units are per 100g
-  nutrient_q <- meat_g *  nutr_dens / 100
-  
-  # Calculate amount of nutrient in metric tons
-  nutrient_mt <- measurements::conv_unit(nutrient_q, nutr_dens_units, "Mg")
-  
-  # Return
-  return(nutrient_mt)
-  
-}
 ```
 
 I downloaded Sea Around Us data for our focal countries. I consolidated the three Indonesia regions (central, Indian ocean, east), and only used mainland Chile, not Easter Island. 
@@ -161,7 +137,7 @@ We define overall micronutrient density of a species from Maire et al. (2021): t
 
 ```{r micro_dens}
 ### plot distribution of micronutrient density by sector
-spp_micronutr_density <- spp_nutr %>%
+spp_micronutr_density <- sau_spp_nutr %>%
   filter (group == "Child", nutrient != "Protein") %>%
   distinct() %>%
   group_by (species) %>% 
@@ -214,7 +190,7 @@ with 75% cutoff, 30 industrial species, 4 mixed, 85 SSF.
 
 
 spp_profiles_vuln %>%
-  left_join (t, by = "species") %>%
+  left_join (sector_spp, by = "species") %>%
   filter (!is.na (spp_sector)) %>%
   ggplot () +
   geom_point (aes (x = fishing_vuln, y = micronutrient_density, col = climate_vuln, shape = spp_sector)) +
@@ -225,15 +201,15 @@ spp_profiles_vuln %>%
 
           
 spp_profiles_vuln %>%
-  left_join (t, by = "species") %>%
-  filter (!is.na (spp_sector)) %>%
+  left_join (sector_spp, by = "species") %>%
+  filter (!is.na (spp_sector), country == "Chile") %>%
   ggplot () +
   geom_boxplot (aes (x = spp_sector, y = micronutrient_density)) +
   theme_bw() +
   ggtitle ("Chile species")
 
 spp_profiles_vuln %>%
-  left_join (t, by = "species") %>%
+  left_join (sector_spp, by = "species", country == "Chile") %>%
   filter (!is.na (spp_sector)) %>%
   ggplot () +
   geom_boxplot (aes (x = spp_sector, y = climate_vuln)) +
@@ -241,12 +217,45 @@ spp_profiles_vuln %>%
   ggtitle ("Chile species")
 
 spp_profiles_vuln %>%
-  left_join (t, by = "species") %>%
+  left_join (sector_spp, by = "species", country == "Chile") %>%
   filter (!is.na (spp_sector)) %>%
   ggplot () +
   geom_boxplot (aes (x = spp_sector, y = fishing_vuln)) +
   theme_bw() +
   ggtitle ("Chile species")
+
+
+# all four countries
+spp_profiles_vuln %>%
+  left_join (sector_spp, by = "species") %>%
+  filter (!is.na (spp_sector)) %>%
+  ggplot () +
+  geom_boxplot (aes (x = spp_sector, y = micronutrient_density)) +
+  theme_bw() +
+  facet_wrap (~country) +
+  labs (x = "") +
+  ggtitle ("Micronutrient density of species caught in each sector")
+
+
+ spp_profiles_vuln %>%
+  left_join (sector_spp, by = "species") %>%
+  filter (!is.na (spp_sector)) %>%
+  ggplot () +
+  geom_boxplot (aes (x = spp_sector, y = climate_vuln)) +
+  theme_bw() +
+  facet_wrap (~country) +
+  labs (x = "") +
+  ggtitle ("Climate vulnerability of species caught in each sector")
+ 
+  spp_profiles_vuln %>%
+  left_join (sector_spp, by = "species") %>%
+  filter (!is.na (spp_sector)) %>%
+  ggplot () +
+  geom_boxplot (aes (x = spp_sector, y = fishing_vuln)) +
+  theme_bw() +
+  facet_wrap (~country) +
+  labs (x = "") +
+  ggtitle ("Fishing vulnerability of species caught in each sector")
 ```
 what about 90% as cutoff?
 29 industrial, 8 mixed, 82 ssf. may as well do 90. 
@@ -277,7 +286,7 @@ spp_profiles_vuln %>%
 #           
 spp_profiles_vuln %>%
   left_join (t90, by = "species") %>%
-  filter (!is.na (spp_sector)) %>%
+  filter (!is.na (spp_sector), country == "Chile") %>%
   ggplot () +
   geom_boxplot (aes (x = spp_sector, y = micronutrient_density)) +
   theme_bw() +
@@ -285,7 +294,7 @@ spp_profiles_vuln %>%
 
 spp_profiles_vuln %>%
   left_join (t90, by = "species") %>%
-  filter (!is.na (spp_sector)) %>%
+  filter (!is.na (spp_sector), country == "Chile") %>%
   ggplot () +
   geom_boxplot (aes (x = spp_sector, y = climate_vuln)) +
   theme_bw() +
@@ -293,7 +302,7 @@ spp_profiles_vuln %>%
 
 spp_profiles_vuln %>%
   left_join (t90, by = "species") %>%
-  filter (!is.na (spp_sector)) %>%
+  filter (!is.na (spp_sector), country == "Chile") %>%
   ggplot () +
   geom_boxplot (aes (x = spp_sector, y = fishing_vuln)) +
   theme_bw() +
