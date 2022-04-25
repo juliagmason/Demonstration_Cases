@@ -289,16 +289,86 @@ rdas_pop_level_sau_enduse %>%
   ggtitle ("Proportion of population RDAs met by current catch\nSAU data, average catch 2000-2015") +
   theme (axis.text.x = element_text (angle = 60, hjust = 0.9))
 
+# all four countries by end use type and sector
+png (filename = "Figures/SAU_DHC_RDAs_met_enduse_sector.png", width = 6.5, height = 8, units = "in", res = 360)
+rdas_pop_level_sau_enduse %>%
+  filter (fishing_sector %in% c("Industrial", "Artisanal"), end_use_type != "Other") %>%
+  ggplot (aes (y = rda_met, x = nutrient, fill = end_use_type)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  theme_bw() +
+  labs (x = "", fill = "", y = "") +
+  facet_grid (country~ fishing_sector, scales = "free") +
+  labs (y = "Proportion of population RDAs met", fill = "End use") +
+  ggtitle ("Proportion of population RDAs met by current catch\nSAU data, average catch 2000-2015") +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9, size = 10),
+         axis.text.y = element_text (size = 8),
+         legend.text = element_text (size = 8),
+         plot.title = element_text (size = 10),
+         strip.text = element_text (size = 8))
+dev.off()
+
 # all four countries by end use type
+png (filename = "Figures/SAU_DHC_RDAs_met_enduse.png", width = 6.5, height = 4, units = "in", res = 360)
 rdas_pop_level_sau_enduse %>% 
   ggplot (aes (y = rda_met, x = nutrient, fill = end_use_type)) +
   geom_bar (stat = "identity", position = "dodge") +
   facet_wrap (~country, nrow = 4, scales = "free") +
   theme_bw() +
   labs (x = "", fill = "", y = "") +
-  facet_wrap (~country, scales = "free") +
+  facet_wrap (~country, scales = "free_y") +
   labs (y = "Proportion of population RDAs met", fill = "End use") +
+  ggtitle ("Proportion of population RDAs met by current catch\nSAU data, average catch 2000-2015") +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9, size = 8),
+         axis.text.y = element_text (size = 8),
+         legend.text = element_text (size = 8),
+         plot.title = element_text (size = 10),
+         strip.text = element_text (size = 8))
+dev.off()
+
+rdas_pop_level_sau_enduse %>% 
+  filter (fishing_sector != "Recreational", end_use_type == "Direct human consumption") %>%
+  ggplot (aes (y = rda_met, x = nutrient, fill = fishing_sector)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_wrap (~country, nrow = 4, scales = "free") +
+  theme_bw() +
+  labs (x = "", fill = "", y = "") +
+  facet_wrap (~country, scales = "free") +
+  labs (y = "Proportion of population RDAs met", fill = "Sector") +
   ggtitle ("Proportion of population RDAs met by current catch\nSAU data, average catch 2000-2015") +
   theme (axis.text.x = element_text (angle = 60, hjust = 0.9))
 
+
+# all four countries SSF by end use type
+
+rdas_pop_level_sau_enduse %>% 
+  filter (fishing_sector == "Artisanal") %>%
+  ggplot (aes (y = rda_met, x = nutrient, fill = end_use_type)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_wrap (~country, nrow = 4, scales = "free") +
+  theme_bw() +
+  labs (x = "", fill = "", y = "") +
+  facet_wrap (~country, scales = "free") +
+  labs (y = "Proportion of population RDAs met", fill = "Sector") +
+  ggtitle ("Proportion of population RDAs met by current catch\nSAU data, average catch 2000-2015") +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9))
+
+# all four countries industrial vs artisanal, DHC only
+png (filename = "Figures/SAU_DHC_RDAs_met_sector.png", width = 6.5, height = 4, units = "in", res = 360)
+rdas_pop_level_sau_enduse %>% 
+  filter (end_use_type == "Direct human consumption", fishing_sector %in% c("Industrial", "Artisanal")) %>%
+  ggplot (aes (y = rda_met, x = nutrient, fill = fishing_sector)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_wrap (~country, nrow = 4, scales = "free") +
+  theme_bw() +
+  labs (x = "", fill = "", y = "") +
+  facet_wrap (~country, scales = "free_y") +
+  labs (y = "Proportion of population RDAs met", fill = "Sector") +
+  ggtitle ("Proportion of population RDAs met by current catch\nSAU data, average catch 2000-2015 \nCatch for direct human consumption only") +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9, size = 8),
+         axis.text.y = element_text (size = 8),
+         legend.text = element_text (size = 8),
+         plot.title = element_text (size = 10),
+         strip.text = element_text (size = 8))
+
+dev.off()
 
