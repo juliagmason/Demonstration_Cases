@@ -212,6 +212,7 @@ calc_nutr_supply_mt <- function(meat_mt, nutr_dens, nutr_dens_units){
 
 
 sau_ds_nutr  <- sau_ds %>%
+  filter (scientific_name %in% c("Anchoa nasus", "Hipploglossina macrops"))
   rename (species = scientific_name) %>%
   # # make major_food_name column to join
   # mutate (major_group = 
