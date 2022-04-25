@@ -59,10 +59,10 @@ pop_2020 <- pop %>%
 
 # climate vulnerability and fishing vulnerability data
 # can prob get clim vuln from fishbase, steal from maire for now
-maire_vuln <- read_csv ("../NutrientGlobalFisheries_Maire/data/species_data.csv") %>%
-  select (species, Fishing_V, Climate_V.index) %>%
-  rename (fishing_vuln = Fishing_V, climate_vuln = Climate_V.index)
-
+# maire_vuln <- read_csv ("../NutrientGlobalFisheries_Maire/data/species_data.csv") %>%
+#   select (species, Fishing_V, Climate_V.index) %>%
+#   rename (fishing_vuln = Fishing_V, climate_vuln = Climate_V.index)
+# 
 
 
 # functions ----
