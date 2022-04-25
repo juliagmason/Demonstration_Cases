@@ -307,6 +307,46 @@ industrial, only 3.6%. 2% is clup
 Sarda chiliensis do have nutrient info. In fishcast. So is M. gayi
 have Sarda orientalis, and sarda (atlantic)
 
+# quick check for sierra leone and indonesia ssf props
+```{r}
+
+sau_indo <-  SAU %>%
+   filter (between (year, 2000, 2015), 
+          tonnes > 0, 
+          grepl("Indo", area_name), 
+          fishing_sector %in% c ("Industrial", "Artisanal"))
+
+sum_artisanal_indo <- sum (sau_indo$tonnes[which(sau_indo$fishing_sector == "Artisanal")])
+
+indo_ssf_props <- sau_indo %>%
+  filter (fishing_sector == "Artisanal") %>%
+  group_by (scientific_name) %>%
+  summarise (prop = round(sum(tonnes)/sum_artisanal_indo * 100, 2),
+             functional_group = first (functional_group)) %>%
+  arrange (desc(prop))
+
+indo_ssf_props %>% filter (!scientific_name %in% ds_spp_names$species) %>% summarise (n = sum(prop))
+
+
+sau_sl <-  SAU %>%
+   filter (between (year, 2000, 2015), 
+          tonnes > 0, 
+          grepl("Sierra", area_name), 
+          fishing_sector %in% c ("Industrial", "Artisanal"))
+
+sum_artisanal_sl <- sum (sau_sl$tonnes[which(sau_sl$fishing_sector == "Artisanal")])
+
+sl_ssf_props <- sau_sl %>%
+  filter (fishing_sector == "Artisanal") %>%
+  group_by (scientific_name) %>%
+  summarise (prop = round(sum(tonnes)/sum_artisanal_sl * 100, 2),
+             functional_group = first (functional_group)) %>%
+  arrange (desc(prop))
+
+sl_ssf_props %>% filter (!scientific_name %in% ds_spp_names$species) %>% summarise (n = sum(prop))
+```
+
+
 
 
 # sierra leone
@@ -340,6 +380,17 @@ almost all DHC, more artisanal than industrial!
 indo also 2016-2018 fishmeal
 
 ```{r}
+
+
+SAU %>%
+  filter (year > 2000, 
+          tonnes > 0, 
+          grepl ("Indonesia", area_name), 
+          fishing_sector %in% c ("Industrial", "Artisanal")) %>%
+  ggplot (aes (x = year, y = tonnes, fill = end_use_type)) +
+  geom_bar(stat = "identity") +
+  facet_wrap (~fishing_sector) +
+  theme_bw()
 
 ```
 
