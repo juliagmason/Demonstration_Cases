@@ -140,6 +140,31 @@ sau_chl %>%
 pretty strong distinction where there are a ton of species just in artisanal, 68, (76 > 99%) then a few 80s, 2 60s, one low 50 (Sprattus fuegensis). Prionace glauca 35% ssf, M gayi gayi 22%, Heterocarpus reedi 11%, then the rest 1-0%. 
 
 
+Is there a clear breakdown of species used for different end uses?
+** copied from SAU_nutrients_by_end_use, should clean
+```{r}
+# are there clear distinctions btw species of different end uses? ----
+end_use_spp <- sau_sm %>%
+  #filter (country =="Chile") %>%
+  group_by (country, species) %>%
+  # define as ssf when > 75% of catch is in SSF 
+  mutate (spp_enduse = case_when (
+    sum (tonnes_tot[end_use_type == "Direct human consumption"])/sum (tonnes_tot) > 0.75 ~ "DHC",
+    sum (tonnes_tot[end_use_type == "Fishmeal and fish oil"])/sum (tonnes_tot) > 0.75 ~ "FMFO",
+    sum (tonnes_tot[end_use_type == "Discards"])/sum (tonnes_tot) >0.75 ~ "Discards",
+    sum (tonnes_tot[end_use_type == "Other"])/sum (tonnes_tot) > 0.75 ~ "Other",
+    TRUE ~ "Mixed")
+  ) %>%
+  select (country, species, spp_enduse) %>%
+  distinct()
+
+# with 90% cutoff, 18 discards 6 fm, 73 mixed, 498 dhc. 75%, 24 discards 9 fmfo, 32 mixed, 530 dhc. use 75% for now
+
+table(end_use_spp$spp_enduse)
+```
+
+
+
 #### major species caught in artisanal vs industrial sectors
 ```{r}
 sum_artisanal <- sum (sau_chl$tonnes[which(sau_chl$fishing_sector == "Artisanal")])
