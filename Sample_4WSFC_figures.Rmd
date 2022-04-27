@@ -1,0 +1,279 @@
+---
+title: "Sample figures for 4WSFC abstract"
+author: "JGM"
+date: "4/27/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+
+library (tidyverse)
+
+# DATA ----
+
+# SAU baseline nutrient content by sector and enduse
+sau_enduse_nutr_contribution <- readRDS("Data/SAU_nutr_content_sector_enduse.Rds")
+
+# SAU baseline population RDAs met
+sau_enduse_rdas <- readRDS("Data/SAU_popRDAs_sector_enduse.Rds")
+
+# SAU baseline individuals fed
+sau_inds_fed <- readRDS("Data/SAU_inds_fed_sector_enduse.Rds")
+
+
+# nutricast ----
+# by sector
+proj_RDA_met_sector <- readRDS("Data/Nutricast_by_SAU_sector.Rds")
+
+# inds fed by sector
+proj_inds_fed_sector <- readRDS("Data/Nutricast_by_SAU_sector_inds_fed.Rds")
+
+# overall upside, not connected to SAU
+nutricast_upside <- readRDS("Data/ds_nutr_upside.Rds")
+
+
+
+```
+
+I've joined Sea Around Us (SAU) landings data to nutrient data to examine the nutrient content of different fisheries sectors (small scale vs. industrial). We can also use the SAU data to see how fish are being used--discarded, fishmeal/fish oil (FMFO), or direct human consumption (DHC). 
+
+
+### Nutrient contribution of different fishery sectors
+
+Just looking at domestic catch used for direct human consumption, we can examine the contribution of SSF vs industrial fisheries in meeting each country's population-level nutrition needs
+```{r rdas_by_sector}
+
+sau_enduse_rdas %>%
+  filter (data_layer == "Reconstructed domestic catch", 
+          end_use_type == "Direct human consumption",
+          fishing_sector %in% c ("Artisanal", "Industrial")) %>%
+  ggplot (aes (y = rda_met, x = nutrient, fill = fishing_sector)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_wrap (~country, nrow = 4, scales = "free") +
+  theme_bw() +
+  labs (x = "", fill = "", y = "") +
+  facet_wrap (~country, scales = "free_y") +
+  labs (y = "Proportion of population RDAs met") +
+  ggtitle ("Proportion of population RDAs met by current catch\nSAU data, average catch 2000-2015, domestic/DHC only") +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9))
+
+```
+
+I think that the very small numbers for Indonesia are because of the large population size. Instead, we can look at any of these figures with the number of individuals fed instead of proportion of the population. 
+
+```{r inds_fed_by_sector}
+sau_inds_fed %>%
+  filter (group == "Child",
+          data_layer == "Reconstructed domestic catch", 
+          end_use_type == "Direct human consumption",
+          fishing_sector %in% c ("Artisanal", "Industrial")) %>%
+  ggplot (aes (y = inds_fed/1000, x = nutrient, fill = fishing_sector)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_wrap (~country, nrow = 4, scales = "free") +
+  theme_bw() +
+  labs (x = "", fill = "", y = "") +
+  facet_wrap (~country, scales = "free_y") +
+  labs (y = "Children fed (thousands)") +
+  ggtitle ("Children's daily nutrition needs met by current catch\nSAU data, average catch 2000-2015, domestic/DHC only") +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9))
+```
+
+
+
+We can also see how nutrients are distributed across different end uses. 
+
+```{r rdas_by_end_use}
+
+sau_enduse_rdas %>%
+  mutate (end_use_type = ifelse(
+    data_layer == "Inferred foreign catch", "Foreign catch", end_use_type)
+  ) %>%
+  ggplot (aes (y = rda_met, x = nutrient, fill = end_use_type)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_wrap (~country, nrow = 4, scales = "free") +
+  theme_bw() +
+  labs (x = "", fill = "", y = "") +
+  facet_wrap (~country, scales = "free_y") +
+  labs (y = "Proportion of population RDAs met", fill = "End use") +
+  ggtitle ("Proportion of population RDAs met by current catch\nSAU data, average catch 2000-2015") +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9, size = 8),
+         axis.text.y = element_text (size = 8),
+         legend.text = element_text (size = 8),
+         plot.title = element_text (size = 10),
+         strip.text = element_text (size = 8))
+
+```
+
+Note that "foreign catch" may be for DHC or fishmeal. This also does not account for exports. 
+
+
+The same graph as above, broken out by fishery sector. Bars are different widths because not all end uses are represented, e.g. Sierra Leone's artisanal fisheries catch is only used for direct human consumption. 
+
+```{r rdas_end_use_sector}
+
+sau_enduse_rdas %>%
+  mutate (end_use_type = ifelse(
+    data_layer == "Inferred foreign catch", "Foreign catch", end_use_type)
+  ) %>%
+  filter (fishing_sector %in% c("Industrial", "Artisanal"), end_use_type != "Other") %>%
+  ggplot (aes (y = rda_met, x = nutrient, fill = end_use_type)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  theme_bw() +
+  labs (x = "", fill = "", y = "") +
+  facet_grid (country~ fishing_sector, scales = "free") +
+  labs (y = "Proportion of population RDAs met", fill = "End use") +
+  ggtitle ("Proportion of population RDAs met by current catch\nSAU data, average catch 2000-2015") +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9, size = 8),
+         axis.text.y = element_text (size = 8),
+         legend.text = element_text (size = 8),
+         plot.title = element_text (size = 10),
+         strip.text = element_text (size = 8))
+
+```
+
+### Nutricast future projection data by sector
+
+Using the ratio of SSF to Industrial catch by volume over the 2000-2015 SAU baseline period, we can then split the Nutricast projection data into SSF vs. industrial. 
+
+```{r nutricast_ssf}
+
+proj_RDA_met_sector %>%
+  filter (!grepl("Imperfect", scenario), !grepl ("Range", scenario), rcp == "RCP60") %>%
+  group_by (country, scenario, period, nutrient) %>%
+  summarise (sum_rda = sum (tot_rda_met_ssf)) %>%
+  ggplot (aes (y = sum_rda, x = period, fill = scenario)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_grid (country ~ nutrient, scales = "free") +
+  theme_bw() +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9, size = 8),
+         axis.text.y = element_text (size = 8),
+         legend.text = element_text (size = 8),
+         plot.title = element_text (size = 10),
+         strip.text = element_text (size = 8)) +
+  
+  labs(y="Proportion RDAs met", x="", fill = "Management\nscenario") +
+  ggtitle ("Proportion of RDAs met by SSF under future management scenarios \n RCP 6.0")
+
+```
+
+```{r nutricast_ind}
+
+proj_RDA_met_sector %>%
+  filter (!grepl("Imperfect", scenario), !grepl ("Range", scenario), rcp == "RCP60") %>%
+  group_by (country, scenario, period, nutrient) %>%
+  summarise (sum_rda = sum (tot_rda_met_ind)) %>%
+  ggplot (aes (y = sum_rda, x = period, fill = scenario)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_grid (country ~ nutrient, scales = "free") +
+  theme_bw() +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9)) +
+  labs(y="Proportion RDAs met", x="", fill = "Management\nscenario") +
+  ggtitle ("Proportion of RDAs met by industrial fisheries under future management scenarios \n RCP 6.0")
+
+```
+
+We do lose a lot of species in translation. Some of this we might be able to recover, but best to look at overall trends instead of the absolute y axis numbers. 
+
+
+#### Nutrient "upside" of management scenarios
+
+Since these graphs are hard to parse, here's the *difference* between the scenarios and BAU, that is, the nutrient "upside" of the Productivity Only/achieving MEY scenario or the Full Adaptation scenario vs. "No Adapatation"/BAU. These are in number of children instead of proportion of the population to make it easier to interpret. 
+
+```{r nutricast_upside_ssf}
+
+proj_inds_fed_sector %>%
+  filter (!grepl("Imperfect", scenario), !grepl ("Range", scenario), rcp == "RCP60", group == "Child") %>%
+  group_by (country, period, species, nutrient) %>%
+  summarize (MEY = inds_fed_ssf[scenario == "Productivity Only"] - inds_fed_ssf[scenario == "No Adaptation"],
+             Adaptation = inds_fed_ssf[scenario == "Full Adaptation"] - inds_fed_ssf[scenario == "No Adaptation"]) %>%
+  pivot_longer (cols = c(MEY, Adaptation),
+                names_to = "scenario", 
+                values_to = "diff") %>%
+  # getting weird placements when don't summarize
+  group_by (country, period, nutrient, scenario) %>%
+  summarise (tot_inds = sum (diff)) %>%
+  
+  ggplot (aes (y = tot_inds/1000, x = period, fill = scenario)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_grid (country ~ nutrient, scales = "free") +
+  theme_bw() +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9, size = 8),
+         axis.text.y = element_text (size = 8),
+         legend.text = element_text (size = 8),
+         plot.title = element_text (size = 10),
+         strip.text = element_text (size = 8)) +
+  geom_hline (yintercept = 0, lty = 2) +
+  
+  labs(y="Children fed (thousands)", x="", fill = "Management\nscenario") +
+  ggtitle ("Difference in # children's daily nutrient needs met by SSF under future management scenarios \n RCP 6.0")
+
+```
+
+
+```{r nutricast_upside_industrial}
+
+proj_inds_fed_sector %>%
+  filter (!grepl("Imperfect", scenario), !grepl ("Range", scenario), rcp == "RCP60", group == "Child") %>%
+  group_by (country, period, species, nutrient) %>%
+  summarize (MEY = inds_fed_industrial[scenario == "Productivity Only"] - inds_fed_industrial[scenario == "No Adaptation"],
+             Adaptation = inds_fed_industrial[scenario == "Full Adaptation"] - inds_fed_industrial[scenario == "No Adaptation"]) %>%
+  pivot_longer (cols = c(MEY, Adaptation),
+                names_to = "scenario", 
+                values_to = "diff") %>%
+  # getting weird placements when don't summarize
+  group_by (country, period, nutrient, scenario) %>%
+  summarise (tot_inds = sum (diff)) %>%
+  
+  ggplot (aes (y = tot_inds/1000, x = period, fill = scenario)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_grid (country ~ nutrient, scales = "free") +
+  theme_bw() +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9, size = 8),
+         axis.text.y = element_text (size = 8),
+         legend.text = element_text (size = 8),
+         plot.title = element_text (size = 10),
+         strip.text = element_text (size = 8)) +
+  geom_hline (yintercept = 0, lty = 2) +
+  
+  labs(y="Children fed (thousands)", x="", fill = "Management\nscenario") +
+  ggtitle ("Difference in # children's daily nutrient needs met by Industrial under future management scenarios \n RCP 6.0")
+
+```
+
+Compare to overall nutricast "upside"
+
+```{r nutricast_upside}
+# translate to children fed
+ nutricast_upside %>%
+  filter (rcp == "RCP60") %>%
+  mutate (MEY = mey_diff_servings / mean_rda,
+          Adaptation = adapt_diff_servings / mean_rda) %>%
+  pivot_longer (cols = c(MEY, Adaptation),
+                names_to = "scenario", 
+                values_to = "diff") %>%
+  # getting weird placements when don't summarize
+  group_by (country, period, nutrient, scenario) %>%
+  summarise (tot_inds = sum (diff)) %>%
+    
+  ggplot (aes (y = tot_inds/1000, x = period, fill = scenario)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_grid (country ~ nutrient, scales = "free") +
+  theme_bw() +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9, size = 8),
+         axis.text.y = element_text (size = 8),
+         legend.text = element_text (size = 8),
+         plot.title = element_text (size = 10),
+         strip.text = element_text (size = 8)) +
+  geom_hline (yintercept = 0, lty = 2) +
+  
+  labs(y="Children fed (thousands)", x="", fill = "Management\nscenario") +
+  ggtitle ("Difference in # children's daily nutrient needs met under future management scenarios \n All Nutricast data, RCP 6.0")
+
+
+```
+
