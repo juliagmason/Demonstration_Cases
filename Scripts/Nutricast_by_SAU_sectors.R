@@ -5,37 +5,7 @@
 library (tidyverse)
 
 # projected nutritrient yield under management scenarios ----
-# from Free data. Convert_catch_to_nutrients.R
-ds_catch_nutr_yield_projected <- readRDS("Data/ds_catch_nutr_yield_projected.Rds")
-
-# species by sector 
-# from demonstration cases_sau_ssf_explore
-# classified as ssf if >75% of catch from 2000-2015 was in artisanal. all dhc
-sector_spp <- readRDS("Data/SAU_spp_by_sector_75cutoff.Rds")
-
-nutr_yield_proj_sector <- ds_catch_nutr_yield_projected %>%
-  left_join (sector_spp, by = c ("country", "species")) %>%
-  filter (!is.na (spp_sector))
-
-nutr_yield_proj_sector %>%
-  group_by (country, spp_sector) %>%
-  summarise (n_spp = length (unique (species)))
-
-# do lose a lot of species; should check. 
-
-# how much of the yield are we losing?
-ds_catch_nutr_yield_projected %>%
-  filter (scenario == "No Adaptation", rcp == "RCP26", year == 2050) %>%
-  left_join (sector_spp, by = c ("country", "species")) %>%
-  group_by (spp_sector, country) %>%
-  summarise (tonnes = sum (catch_mt, na.rm = TRUE))
-# chile a lot is mixed, that must be anchovy. NAs are maybe comparable to industrial scale in most cases. so maybe a quarter or a third, but not the vast majority. 
-
-# projected population data ----
-# 3 periods
-pop_future <- readRDS("Data/country_pop_projections.Rds")
-
-# projected nutrient yield ---
+# in terms of RDAs met
 ds_projected_RDAS_met <- readRDS("Data/ds_projected_RDAs_met.Rds")
 
 #summarise by whole population
@@ -49,17 +19,86 @@ ds_pop_proj_RDAS_met <- ds_projected_RDAS_met %>%
   distinct()
 
 
-rdas_met_proj_sector <- ds_pop_proj_RDAS_met %>%
-  left_join (sector_spp, by = c ("country", "species")) %>%
-  filter (!is.na (spp_sector))
+# SAU direct human consumption data with nutrients ----
+# this is 2000-2015, direct human consumption only
+sau_dhc_nutr <- readRDS("Data/SAU_nutr.Rds")
 
-rdas_met_proj_sector %>% 
-  group_by (country, spp_sector) %>%
-  summarise (n_spp = length (unique (species)))
+# for sau spp, calculate proportion by volume for each country caught in SSF
+# I want three columns, country, species, ssf proportion. 
+# do both ssf and industrial just in case
+sau_sector_prop <- sau_dhc_nutr %>%
+  group_by (country, species) %>%
+  summarise (prop_ssf = sum (tonnes_tot[fishing_sector == "Artisanal"]) / sum (tonnes_tot),
+             prop_ind = sum (tonnes_tot[fishing_sector == "Industrial"]) / sum (tonnes_tot))
+
+
+# subset projected nutrient yield by ssf ----
+proj_RDA_met_sector <- ds_pop_proj_RDAS_met %>%
+  left_join (sau_sector_prop, by = c ("country", "species")) %>%
+  filter (!is.na (prop_ssf)) %>%
+  mutate (tot_rda_met_ssf = tot_rda_met * prop_ssf,
+          tot_rda_met_ind = tot_rda_met * prop_ind)
+
 
 # set levels
-rdas_met_proj_sector$scenario <- factor (rdas_met_proj_sector$scenario, levels = c ("No Adaptation", "Imperfect Productivity Only", "Productivity Only", "Range Shift Only", "Imperfect Full Adaptation","Full Adaptation" ))
+proj_RDA_met_sector$scenario <- factor (proj_RDA_met_sector$scenario, levels = c ("No Adaptation", "Imperfect Productivity Only", "Productivity Only", "Range Shift Only", "Imperfect Full Adaptation","Full Adaptation" ))
 
+
+
+# plot all countries
+png (filename = "Figures/SSF_nutricast_rcp60.png", width = 6.5, height = 6, units = "in", res = 360)
+proj_RDA_met_sector %>%
+  filter (!grepl("Imperfect", scenario), !grepl ("Range", scenario), rcp == "RCP60") %>%
+  group_by (country, scenario, period, nutrient) %>%
+  summarise (sum_rda = sum (tot_rda_met_ssf)) %>%
+  ggplot (aes (y = sum_rda, x = period, fill = scenario)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_grid (country ~ nutrient, scales = "free") +
+  theme_bw() +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9, size = 8),
+         axis.text.y = element_text (size = 8),
+         legend.text = element_text (size = 8),
+         plot.title = element_text (size = 10),
+         strip.text = element_text (size = 8)) +
+  
+  labs(y="Proportion RDAs met", x="", fill = "Management\nscenario") +
+  ggtitle ("Proportion of RDAs met by SSF under future management scenarios \n RCP 6.0")
+dev.off()
+
+proj_RDA_met_sector %>%
+  filter (!grepl("Imperfect", scenario), !grepl ("Range", scenario), rcp == "RCP60") %>%
+  group_by (country, scenario, period, nutrient) %>%
+  summarise (sum_rda = sum (tot_rda_met_ind)) %>%
+  ggplot (aes (y = sum_rda, x = period, fill = scenario)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_grid (country ~ nutrient, scales = "free") +
+  theme_bw() +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9)) +
+  labs(y="Proportion RDAs met", x="", fill = "Management\nscenario") +
+  ggtitle ("Proportion of RDAs met by industrial fisheries under future management scenarios \n RCP 6.0")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#########################################################################################
 # sanity check, what kind of values are we working with overall
 y <- ds_projected_RDAS_met %>%
   filter (scenario == "Full Adaptation", rcp == "RCP26", period == "2025-2035") %>%
@@ -137,37 +176,6 @@ rdas_met_proj_sector %>%
   
 
 
-# plot all countries
-png (filename = "Figures/SSF_nutricast_rcp60.png", width = 6.5, height = 6, units = "in", res = 360)
-rdas_met_proj_sector %>%
-  filter (spp_sector == "SSF",!grepl("Imperfect", scenario), !grepl ("Range", scenario), rcp == "RCP60") %>%
-  group_by (country, scenario, period, nutrient) %>%
-  summarise (sum_rda = sum (tot_rda_met)) %>%
-  ggplot (aes (y = sum_rda, x = period, fill = scenario)) +
-  geom_bar (stat = "identity", position = "dodge") +
-  facet_grid (country ~ nutrient, scales = "free") +
-  theme_bw() +
-  theme (axis.text.x = element_text (angle = 60, hjust = 0.9, size = 8),
-         axis.text.y = element_text (size = 8),
-         legend.text = element_text (size = 8),
-         plot.title = element_text (size = 10),
-         strip.text = element_text (size = 8)) +
-
-  labs(y="Proportion RDAs met", x="", fill = "Management\nscenario") +
-  ggtitle ("Proportion of RDAs met under future management scenarios \n RCP 6.0, Species caught in SSF")
-dev.off()
-
-rdas_met_proj_sector %>%
-  filter (spp_sector == "Industrial",!grepl("Imperfect", scenario), !grepl ("Range", scenario), rcp == "RCP60") %>%
-  group_by (country, scenario, period, nutrient) %>%
-  summarise (sum_rda = sum (tot_rda_met)) %>%
-  ggplot (aes (y = sum_rda, x = period, fill = scenario)) +
-  geom_bar (stat = "identity", position = "dodge") +
-  facet_grid (country ~ nutrient, scales = "free") +
-  theme_bw() +
-  theme (axis.text.x = element_text (angle = 60, hjust = 0.9)) +
-  labs(y="Proportion RDAs met", x="", fill = "Management\nscenario") +
-  ggtitle ("Proportion of RDAs met under future management scenarios \n RCP 6.0, Species caught in Industrial fisheries")
 
 
 
