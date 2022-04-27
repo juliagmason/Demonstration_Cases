@@ -5,7 +5,7 @@
 library (tidyverse)
 
 # projected nutritrient yield under management scenarios ----
-# in terms of RDAs met
+# in terms of RDAs met. From Scripts --> Calculate_RDAs_met.R
 ds_projected_RDAS_met <- readRDS("Data/ds_projected_RDAs_met.Rds")
 
 #summarise by whole population
@@ -43,6 +43,7 @@ proj_RDA_met_sector <- ds_pop_proj_RDAS_met %>%
 # set levels
 proj_RDA_met_sector$scenario <- factor (proj_RDA_met_sector$scenario, levels = c ("No Adaptation", "Imperfect Productivity Only", "Productivity Only", "Range Shift Only", "Imperfect Full Adaptation","Full Adaptation" ))
 
+saveRDS (proj_RDA_met_sector, file = "Data/Nutricast_by_SAU_sector.Rds")
 
 
 # plot all countries
@@ -79,23 +80,99 @@ proj_RDA_met_sector %>%
 
 
 
+# Show by number of children fed instead of proportion of population ----
+
+
+# from Free data. Convert_catch_to_nutrients.R
+# nutrient yield
+ds_catch_nutr_yield_projected <- readRDS("Data/ds_catch_nutr_yield_projected.Rds")
+
+# RDAs data 
+# made in Species_level_nutrient_content
+rda_groups <- readRDS("Data/RDAs_5groups.Rds")
 
 
 
+proj_inds_fed_sector <- ds_catch_nutr_yield_projected %>%
+  # summarize by period
+  select (-c(catch_mt, amount, dens_units, pedible, meat_mt, nutr_mt, meat_servings)) %>%
+  mutate (
+    period = case_when (
+      year %in% c(2025:2035) ~ "2025-2035",
+      year %in% c(2050:2060) ~ "2050-2060",
+      year %in% c(2090:2100) ~ "2090-2100"
+    )) %>%
+  filter (!is.na (period)) %>%
+  group_by (country, rcp, scenario, period, nutrient, species) %>%
+  summarise (nutr_servings = mean (nutr_servings, na.rm = TRUE)) %>%
+  ungroup() %>%
+  # join to sector proportion data
+  left_join (sau_sector_prop, by = c ("country", "species")) %>%
+  # filter species that don't join
+  filter (!is.na (prop_ssf)) %>%
+  # join to rda data
+  left_join (rda_groups, by = "nutrient") %>%
+  # calculate inds fed
+  mutate (inds_fed_ssf = nutr_servings * prop_ssf / mean_rda,
+          inds_fed_industrial = nutr_servings * prop_ind / mean_rda)
 
 
+# set levels
+proj_inds_fed_sector$scenario <- factor (proj_inds_fed_sector$scenario, levels = c ("No Adaptation", "Imperfect Productivity Only", "Productivity Only", "Range Shift Only", "Imperfect Full Adaptation","Full Adaptation" ))
+
+saveRDS(proj_inds_fed_sector, file = "Data/Nutricast_by_SAU_sector_inds_fed.Rds")
 
 
+# plot all countries
+png (filename = "Figures/SSF_nutricast_rcp60_children_fed.png", width = 6.5, height = 6, units = "in", res = 360)
+proj_inds_fed_sector %>%
+  filter (!grepl("Imperfect", scenario), !grepl ("Range", scenario), rcp == "RCP60", group == "Child") %>%
+  group_by (country, scenario, period, nutrient) %>%
+  summarise (sum_fed = sum (inds_fed_ssf)) %>%
+  ggplot (aes (y = sum_fed/1000, x = period, fill = scenario)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_grid (country ~ nutrient, scales = "free") +
+  theme_bw() +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9, size = 8),
+         axis.text.y = element_text (size = 8),
+         legend.text = element_text (size = 8),
+         plot.title = element_text (size = 10),
+         strip.text = element_text (size = 8)) +
+  
+  labs(y="Children fed (thousands)", x="", fill = "Management\nscenario") +
+  ggtitle ("Number of children's daily nutrient needs met by SSF under future management scenarios \n RCP 6.0")
+dev.off()
 
 
-
-
-
-
-
-
-
-
+## plot upside; difference in scenarios
+png (filename = "Figures/SSF_nutricast_upside_rcp60_children_fed.png", width = 6.5, height = 6, units = "in", res = 360)
+proj_inds_fed_sector %>%
+  filter (!grepl("Imperfect", scenario), !grepl ("Range", scenario), rcp == "RCP60", group == "Child") %>%
+  group_by (country, period, species, nutrient) %>%
+  summarize (MEY = inds_fed_ssf[scenario == "Productivity Only"] - inds_fed_ssf[scenario == "No Adaptation"],
+             Adaptation = inds_fed_ssf[scenario == "Full Adaptation"] - inds_fed_ssf[scenario == "No Adaptation"]) %>%
+  pivot_longer (cols = c(MEY, Adaptation),
+                names_to = "scenario", 
+                values_to = "diff") %>%
+  # getting weird placements when don't summarize
+  group_by (country, period, nutrient, scenario) %>%
+  summarise (tot_inds = sum (diff)) %>%
+  
+  ggplot (aes (y = tot_inds/1000, x = period, fill = scenario)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_grid (country ~ nutrient, scales = "free") +
+  theme_bw() +
+  theme (axis.text.x = element_text (angle = 60, hjust = 0.9, size = 8),
+         axis.text.y = element_text (size = 8),
+         legend.text = element_text (size = 8),
+         plot.title = element_text (size = 10),
+         strip.text = element_text (size = 8)) +
+  geom_hline (yintercept = 0, lty = 2) +
+  
+  labs(y="Children fed (thousands)", x="", fill = "Management\nscenario") +
+  ggtitle ("Difference in # children's daily nutrient needs met by SSF under future management scenarios \n RCP 6.0")
+               
+dev.off()
 
 
 #########################################################################################
