@@ -35,25 +35,6 @@ sau_sm <- sau %>%
   rename (species = scientific_name) %>% 
   ungroup()
 
-# are there clear distinctions btw species of different end uses? ----
-end_use_spp <- sau_sm %>%
-  #filter (country =="Chile") %>%
-  group_by (country, species) %>%
-  # define as ssf when > 75% of catch is in SSF 
-  mutate (spp_enduse = case_when (
-    sum (tonnes_tot[end_use_type == "Direct human consumption"])/sum (tonnes_tot) > 0.75 ~ "DHC",
-    sum (tonnes_tot[end_use_type == "Fishmeal and fish oil"])/sum (tonnes_tot) > 0.75 ~ "FMFO",
-    sum (tonnes_tot[end_use_type == "Discards"])/sum (tonnes_tot) >0.75 ~ "Discards",
-    sum (tonnes_tot[end_use_type == "Other"])/sum (tonnes_tot) > 0.75 ~ "Other",
-    TRUE ~ "Mixed")
-  ) %>%
-  select (country, species, spp_enduse) %>%
-  distinct()
-
-# with 90% cutoff, 18 discards 6 fm, 73 mixed, 498 dhc. 75%, 24 discards 9 fmfo, 32 mixed, 530 dhc. use 75% for now
-
-table(end_use_spp$spp_enduse)
-
 # nutrient data ----
 fishnutr <- read_csv("Data/Species_Nutrient_Predictions.csv")
 
@@ -79,14 +60,179 @@ spp_key <- read.csv(file.path ("Data/Gaines_species_nutrient_content_key.csv"), 
   distinct()
 
 
-# rda data
+# rda data ----
 rda_groups <- readRDS("Data/RDAs_5groups.Rds")
+
+# population data----
+pop_2020 <- read_csv("Data/WPP2019_PopulationByAgeSex_Medium.csv") %>%
+  filter (Location %in% c("Sierra Leone", "Indonesia", "Peru", "Chile", "Malawi"), Time ==2020) %>%
+  mutate (group = 
+            case_when (
+              AgeGrp %in% c("0-4", "5-9") ~ "Child",
+              !AgeGrp %in% c("0-4", "5-9") ~ "Adult")
+  ) %>%
+  group_by (Location) %>%
+  summarize (Pop_Males =  1000 * sum (PopMale[group == "Adult"]),
+             Pop_Females = 1000 * sum(PopFemale[group == "Adult"]),
+             Pop_Child = 1000 * sum(PopTotal[group == "Child"])) %>%
+  # also have total population that would eat fish--sum of males, females, and children maybe do this later?
+  #Pop_Total = sum (Pop_Males, Pop_Females, Pop_Child)) %>%
+  pivot_longer (cols = starts_with("Pop"),
+                names_prefix = "Pop_", 
+                names_to = "group", 
+                values_to = "population") %>%
+  rename (country = Location)
+
+
+pop_rda_needs <- pop_2020 %>%
+  left_join (rda_groups, by = "group") %>%
+  mutate (rda_needs = mean_rda * population) %>%
+  group_by (country, nutrient) %>%
+  summarise (
+    tot_rda_needs = sum (rda_needs, na.rm = TRUE))
+
+
+
+#Function to calculate mt of nutrient from mt of edible meat ----
+# units: mg, ug=mcg 
+# meat_mt <- 29.88111; nutr_dens <- 35.5; nutr_dens_units <- "mg"
+# from nutrient_endowment --> shiny --> v3 --> :Page3_Fig2c_reforms_prop_demand, line 84
+
+# adding--divide by 100 in here. I think Chris did that in his head but making me doubt everything
+calc_nutr_supply_mt <- function(meat_mt, nutr_dens, nutr_dens_units){
+  
+  # Convert meat to grams
+  # "Mg" is metric tons
+  meat_g <- measurements::conv_unit(meat_mt, "Mg", "g")
+  
+  # Calculate amount of nutrient in density units. divide by 100 because density units are per 100g
+  nutrient_q <- meat_g *  nutr_dens / 100
+  
+  # Calculate amount of nutrient in metric tons
+  nutrient_mt <- measurements::conv_unit(nutrient_q, nutr_dens_units, "Mg")
+  
+  # Return
+  return(nutrient_mt)
+  
+}
+
+
+
 
 
 
 
 ###########################################
 # join species and nutrient data
+
+sau_sm_test <- sample_n(sau_sm, 1000)
+
+# convert catch to nutrients ----
+# baseline SAU by sector and end use 
+sau_enduse_nutr_contribution  <- sau_sm %>%
+  # make genus_food_name column to join
+  mutate (genus_food_name = 
+            case_when (functional_group == "Cephalopods" ~ "Cephalopods",
+                       commercial_group == "Crustaceans" ~ "Crustaceans",
+                       commercial_group == "Molluscs" ~ "Molluscs; Other",
+                       grepl ("pelagic", functional_group) ~ "Pelagic Fish",
+                       # plural demersals to avoid "other demersal invertebrates
+                       grepl ("demersals", functional_group) ~ "Demersal Fish")
+          # still a lot of random fish to figure out
+  ) %>%
+  left_join (spp_key, by = "genus_food_name") %>%
+  left_join (fishnutr_mu, by = "species") %>%
+  mutate (
+    # select appropriate source for finfish vs. other. 
+    Selenium =  Selenium_mu, 
+    # dumb hack to keep major_group for later bc discarding unused
+    Zinc = ifelse (!is.na (Zinc_mu), Zinc_mu,
+                   zinc_mg),
+    
+    Protein = ifelse (!is.na (Protein_mu), Protein_mu,
+                      protein_g),
+    #### NEED to figure out omega 3 situation #####
+    Omega_3 = ifelse (!is.na (Omega_3_mu),
+                      Omega_3_mu, 
+                      polyunsaturated_fatty_acids_g),
+    Calcium = ifelse (!is.na (Calcium_mu),
+                      Calcium_mu,
+                      calcium_mg),
+    Iron = ifelse (!is.na (Iron_mu),
+                   Iron_mu,
+                   iron_mg),
+    Vitamin_A = ifelse (!is.na (Vitamin_A_mu),
+                        Vitamin_A_mu,
+                        vitamin_a_mcg_rae),
+    .keep = "unused"
+  ) %>%
+  pivot_longer (Selenium:Vitamin_A,
+                names_to = "nutrient",
+                values_to = "amount") %>%
+  mutate(pedible=recode(major_group, 
+                        "Finfish"= 0.87, 
+                        "Crustaceans"=0.36, 
+                        "Molluscs"=0.17, 
+                        "Cephalopods"=0.21), 
+         
+         # units
+         dens_units = 
+           case_when (
+             nutrient %in% c("Protein", "Omega_3") ~ "g",
+             nutrient %in% c("Vitamin_A", "Selenium") ~ "ug",
+             TRUE ~ "mg"
+           ),
+         # edible meat in mt
+         meat_mt = tonnes_tot * pedible,
+         
+         
+         #available nutrient in mt
+         #nutr_mt = mapply(calc_nutr_supply_mt, meat_mt, amount, dens_units)
+         nutr_mt = pmap (list (meat_mt = meat_mt, nutr_dens = amount, nutr_dens_units = dens_units), calc_nutr_supply_mt),
+         
+         # edible meat in 100g servings/day
+         # meat in metric tons/yr *1000 kg/ton * 1000g/kg * 1 serving /100 g * 1 yr/365 days
+         meat_servings = meat_mt * 1000 * 1000 / 100 / 365,
+         
+         # nutrient content in servings/day
+         nutr_servings = meat_servings * amount) %>% 
+  unnest(cols = c(nutr_mt))
+
+saveRDS (sau_enduse_nutr_contribution, file = "Data/SAU_nutr_content_sector_enduse.Rds")
+
+sau_nutr <- readRDS("Data/SAU_nutr.Rds")
+
+# population level rdas met ----
+rdas_pop_level_sau_enduse <- sau_enduse_nutr_contribution %>%
+  group_by (country, data_layer, fishing_sector, end_use_type, species, nutrient) %>%
+  mutate (mean_tonnes = mean (tonnes_tot, na.rm = TRUE),
+          mean_servings = mean (nutr_servings, na.rm = TRUE)) %>%
+  select (country, species, major_group, data_layer, fishing_sector, end_use_type, nutrient, mean_servings) %>%
+  distinct() %>%
+  left_join (pop_rda_needs, by = c("country", "nutrient")) %>%
+  mutate (#yield_per_cap = nutr_servings / population,
+    
+    # proportion of population rda met for each group
+    rda_met = mean_servings/tot_rda_needs)
+
+saveRDS (rdas_pop_level_sau_enduse, file = "Data/SAU_popRDAs_sector_enduse.Rds")
+
+# individuals fed
+inds_fed_sau_enduse <- sau_enduse_nutr_contribution %>%
+  group_by (country, data_layer, fishing_sector, end_use_type, species, nutrient) %>%
+  mutate (mean_tonnes = mean (tonnes_tot, na.rm = TRUE),
+          mean_servings = mean (nutr_servings, na.rm = TRUE)) %>%
+  select (country, species, major_group, data_layer, fishing_sector, end_use_type, nutrient, mean_servings) %>%
+  distinct() %>%
+  left_join (rda_groups, by = "nutrient") %>%
+  mutate (inds_fed = mean_servings / mean_rda)
+
+saveRDS(inds_fed_sau_enduse, file = "Data/SAU_inds_fed_sector_enduse.Rds")
+  
+#######################################################################################
+
+
+
 sau_spp_nutr_alluse <- sau_sm %>%
   select (species, functional_group, commercial_group) %>%
   distinct() %>%
@@ -160,58 +306,8 @@ end_use_spp %>%
 
 
 #####################################################
-# compare nutrient contribution of end use species ----
-pop_2020 <- read_csv("Data/WPP2019_PopulationByAgeSex_Medium.csv") %>%
-  filter (Location %in% c("Sierra Leone", "Indonesia", "Peru", "Chile", "Malawi"), Time ==2020) %>%
-  mutate (group = 
-            case_when (
-              AgeGrp %in% c("0-4", "5-9") ~ "Child",
-              !AgeGrp %in% c("0-4", "5-9") ~ "Adult")
-  ) %>%
-  group_by (Location) %>%
-  summarize (Pop_Males =  1000 * sum (PopMale[group == "Adult"]),
-             Pop_Females = 1000 * sum(PopFemale[group == "Adult"]),
-             Pop_Child = 1000 * sum(PopTotal[group == "Child"])) %>%
-  # also have total population that would eat fish--sum of males, females, and children maybe do this later?
-  #Pop_Total = sum (Pop_Males, Pop_Females, Pop_Child)) %>%
-  pivot_longer (cols = starts_with("Pop"),
-                names_prefix = "Pop_", 
-                names_to = "group", 
-                values_to = "population") %>%
-  rename (country = Location)
 
 
-pop_rda_needs <- pop_2020 %>%
-  left_join (rda_groups, by = "group") %>%
-  mutate (rda_needs = mean_rda * population) %>%
-  group_by (country, nutrient) %>%
-  summarise (
-    tot_rda_needs = sum (rda_needs, na.rm = TRUE))
-
-# join catch and nutrient data ----
-
-#Function to calculate mt of nutrient from mt of edible meat ----
-  # units: mg, ug=mcg 
-  # meat_mt <- 29.88111; nutr_dens <- 35.5; nutr_dens_units <- "mg"
-  # from nutrient_endowment --> shiny --> v3 --> :Page3_Fig2c_reforms_prop_demand, line 84
-  
-  # adding--divide by 100 in here. I think Chris did that in his head but making me doubt everything
-  calc_nutr_supply_mt <- function(meat_mt, nutr_dens, nutr_dens_units){
-    
-    # Convert meat to grams
-    # "Mg" is metric tons
-    meat_g <- measurements::conv_unit(meat_mt, "Mg", "g")
-    
-    # Calculate amount of nutrient in density units. divide by 100 because density units are per 100g
-    nutrient_q <- meat_g *  nutr_dens / 100
-    
-    # Calculate amount of nutrient in metric tons
-    nutrient_mt <- measurements::conv_unit(nutrient_q, nutr_dens_units, "Mg")
-    
-    # Return
-    return(nutrient_mt)
-    
-  }
 
 sau_sm_nutr <- sau_spp_nutr_alluse %>%
   select (species, major_group, nutrient, amount, unit) %>% 
@@ -372,3 +468,4 @@ rdas_pop_level_sau_enduse %>%
 
 dev.off()
 
+# this looks different from new figure in 4WSFC, e.g. peru industrial selenium. don't think this version properly excludes foreign catch but that's not the full story
