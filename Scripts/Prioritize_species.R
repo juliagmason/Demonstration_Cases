@@ -45,31 +45,33 @@ nutr_upside %>%
 # maybe make a scatterplot where y axis is micronutrient density and x axis is % change by midcentury. size could be initial catch_mt
 # can use ds_Spp_nutr for catch_mt and micronutrient density. need to make a % change upside ds
 
-ds_spp <- readRDS("Data/Free_etal_2020_country_level_outcomes_time_series_for_julia.Rds")
+# ds_spp <- readRDS("Data/Free_etal_2020_country_level_outcomes_time_series_for_julia.Rds")
+# 
+# ds_sm <- sample_n(ds_spp, 1000)
+# ds_sm2 <- ds_spp %>% 
+#   filter (country == "Indonesia", rcp == "RCP60", scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), species %in% c ("Trachurus murphyi", "Engraulis ringens", "Brama australis", "Engraulis japonicus"))
+# 
+# 
+# spp_mt_upside <- ds_spp %>%
+#   mutate (
+#     period = case_when (
+#       year %in% c(2025:2035) ~ "2025-2035",
+#       year %in% c(2050:2060) ~ "2050-2060",
+#       year %in% c(2090:2100) ~ "2090-2100"
+#     )) %>%
+#   filter (!is.na (period), scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), !is.na(catch_mt)) %>%
+#   group_by (country, rcp, period, species) %>%
+#   # double checked this method and seems sound
+#   summarise ( mey_diff_mt = mean(catch_mt[scenario == "Productivity Only"]) - mean(catch_mt[scenario == "No Adaptation"]),
+#             adapt_diff_mt = mean(catch_mt[scenario == "Full Adaptation"]) - mean(catch_mt[scenario == "No Adaptation"]))
+# 
+# 
+# upside_nonzero <- spp_mt_upside %>%
+#   filter (abs(mey_diff_mt) > 0 | abs(adapt_diff_mt) > 0)
+# 
+# saveRDS(upside_nonzero, file = "Data/nutricast_catch_upside.Rds")
 
-ds_sm <- sample_n(ds_spp, 1000)
-ds_sm2 <- ds_spp %>% 
-  filter (country == "Indonesia", rcp == "RCP60", scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), species %in% c ("Trachurus murphyi", "Engraulis ringens", "Brama australis", "Engraulis japonicus"))
-
-
-spp_mt_upside <- ds_spp %>%
-  mutate (
-    period = case_when (
-      year %in% c(2025:2035) ~ "2025-2035",
-      year %in% c(2050:2060) ~ "2050-2060",
-      year %in% c(2090:2100) ~ "2090-2100"
-    )) %>%
-  filter (!is.na (period), scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), !is.na(catch_mt)) %>%
-  group_by (country, rcp, period, species) %>%
-  # double checked this method and seems sound
-  summarise ( mey_diff_mt = mean(catch_mt[scenario == "Productivity Only"]) - mean(catch_mt[scenario == "No Adaptation"]),
-            adapt_diff_mt = mean(catch_mt[scenario == "Full Adaptation"]) - mean(catch_mt[scenario == "No Adaptation"]))
-
-
-upside_nonzero <- spp_mt_upside %>%
-  filter (abs(mey_diff_mt) > 0 | abs(adapt_diff_mt) > 0)
-
-saveRDS(upside_nonzero, file = "Data/nutricast_catch_upside.Rds")
+upside_nonzero <- readRDS("Data/nutricast_catch_upside.Rds")
 
 
 spp_micronutr_density <- ds_spp_nutr_content %>%
@@ -122,7 +124,74 @@ ds_spp_nutr_content %>%
   distinct() %>%
   pivot_wider (names_from = nutrient,
                 values_from = amount)
+
+# which of these are in SAU data, and SAU ssf?
+sau_chl <- sau_enduse_nutr_contribution %>% filter (country == "Chile")
+sau_chl_ssf <- sau_chl %>% filter (fishing_sector == "Artisanal")
+
+chl_upside_spp$species[which (!chl_upside_spp$species %in% sau_chl$species)]
+# T. lepturus not in SAU data for Chile, only in SL and indonesia
+chl_upside_spp$species[which (!chl_upside_spp$species %in% sau_chl_ssf$species)]
+# mostly D. gigas and N. crockeri in ssf; other species start showing up in 2010s...
+
+per_upside_spp <- spp_ch %>%
+  filter (period == "2050-2060", rcp == "RCP60", country == "Peru", 
+          adapt_diff_mt > 5000)
+
+write.excel (per_upside_spp %>% select (-c(rcp, period)) %>% arrange (desc(adapt_diff_mt)))
+
+# which of these are in SAU data, and SAU ssf?
+sau_peru <- sau_enduse_nutr_contribution %>% filter (country == "Peru")
+sau_peru_ssf <- sau_peru %>% filter (fishing_sector == "Artisanal")
+
+per_upside_spp$species[which (!per_upside_spp$species %in% sau_peru$species)]
+# T. lepturus not in SAU data for Chile/Peru, only in SL and indonesia
+per_upside_spp$species[which (!per_upside_spp$species %in% sau_peru_ssf$species)]
+
+
+indo_upside_spp <- spp_ch %>%
+  filter (period == "2050-2060", rcp == "RCP60", country == "Indonesia", 
+          adapt_diff_mt > 20000)
+# maybe some decisionmaking here. spp with 70 micronutrient density has more to gain than species with 197 density. but 197 is a mollusc so who knows. let's just get rid of them both. go with 20k cutoff. 
+ds_spp_nutr_content %>% filter (species %in% c("Scomberomorus commerson", "Tegillarca granosa"), group == "Child")
+
+#BUT s. commerson and t. granosa are SSF species with SAU data
+
+write.excel (indo_upside_spp %>% ungroup() %>% select (-c(rcp, period)) %>% arrange (desc(adapt_diff_mt)))
+
+# which of these are in SAU data, and SAU ssf?
+sau_indo <- sau_enduse_nutr_contribution %>% filter (country == "Indonesia")
+sau_indo_ssf <- sau_indo %>% filter (fishing_sector == "Artisanal")
+
+indo_upside_spp$species[which (!indo_upside_spp$species %in% sau_indo$species)]
+# "Portunus trituberculatus" "Sardinops sagax"          "Scomber japonicus" 
+indo_upside_spp$species[which (!indo_upside_spp$species %in% sau_indo_ssf$species)]
+# "Muraenesox cinereus"      "Portunus trituberculatus" "Sardinops sagax"          "Scomber japonicus"        "Trichiurus lepturus"   
+
+
+sl_upside_spp <- spp_ch %>%
+  filter (period == "2050-2060", rcp == "RCP60", country == "Sierra Leone", 
+          adapt_diff_mt > 500 | mey_diff_mt > 200)
+
+write.excel (sl_upside_spp %>% ungroup() %>% select (-c(rcp, period)) %>% arrange (desc(adapt_diff_mt)))
+
+# which of these are in SAU data, and SAU ssf?
+sau_sl <- sau_enduse_nutr_contribution %>% filter (country == "Sierra Leone")
+sau_sl_ssf <- sau_sl %>% filter (fishing_sector == "Artisanal")
+
+sl_upside_spp$species[which (!sl_upside_spp$species %in% sau_sl$species)]
+
+sl_upside_spp$species[which (!sl_upside_spp$species %in% sau_sl_ssf$species)]
+# "Sardinella aurita"   "Trachurus trachurus"  
+
+
   
+ds_spp_nutr_content %>% 
+  filter (species %in% per_upside_spp$species, group == "Child") %>%
+  select (species, nutrient, amount) %>%
+  distinct() %>%
+  pivot_wider (names_from = nutrient,
+               values_from = amount)
 
 
 ## What are the overall most nutritious species? ----
@@ -149,15 +218,72 @@ ds_spp_nutr_content %>%
 chl_nutr_spp <- ds_spp_nutr_content %>%
   filter (country == "Chile", group == "Child", nutrient %in% c("Calcium", "Vitamin_A", "Iron")) %>%
   select (species, catch_mt, nutrient, perc_rda) %>%
-  filter (catch_mt > 5000, perc_rda > 10)
+  select (species, catch_mt, nutrient, perc_rda) %>%
+  pivot_wider (names_from = nutrient, values_from = perc_rda) %>%
+  filter (catch_mt > 5000, Calcium > 10 | Vitamin_A > 10 | Iron > 10) %>%
+  arrange (desc (catch_mt))
 
 write.excel (chl_nutr_spp)
+
+chl_nutr_spp$species[which (!chl_nutr_spp$species %in% sau_chl$species)]
+# "Trichiurus lepturus"       "Macruronus novaezelandiae"
+chl_nutr_spp$species[which (!chl_nutr_spp$species %in% sau_chl_ssf$species)]
 
   
 ds_spp_nutr_content %>%
   filter (country == "Chile", group == "Child", nutrient %in% c("Calcium", "Vitamin_A", "Iron")) %>%
   select (species, catch_mt, nutrient, perc_rda) %>%
   filter (perc_rda > 30)
+
+# peru
+per_nutr_spp <- ds_spp_nutr_content %>%
+  filter (country == "Peru", group == "Child", nutrient %in% c("Calcium", "Zinc", "Iron")) %>%
+  select (species, catch_mt, nutrient, perc_rda) %>%
+  pivot_wider (names_from = nutrient, values_from = perc_rda) %>%
+  filter (catch_mt > 5000, Calcium > 10 | Zinc > 10 | Iron > 10) %>%
+  arrange (desc (catch_mt))
+
+write.excel (per_nutr_spp)
+
+per_nutr_spp$species[which (!per_nutr_spp$species %in% sau_peru$species)]
+# "Trichiurus lepturus"       
+per_nutr_spp$species[which (!per_nutr_spp$species %in% sau_peru_ssf$species)]
+
+# indo
+indo_nutr_spp <- ds_spp_nutr_content %>%
+  filter (country == "Indonesia", group == "Child", nutrient %in% c("Calcium", "Vitamin_A", "Iron")) %>%
+  select (species, catch_mt, nutrient, perc_rda) %>%
+  pivot_wider (names_from = nutrient, values_from = perc_rda) %>%
+  filter (catch_mt > 10000, Calcium > 15 | Vitamin_A > 15 | Iron > 15) %>%
+  arrange (desc (catch_mt))
+
+# need to only do ssf?
+
+indo_nutr_spp %>%
+  filter (species %in% sau_indo_ssf$species) %>%
+  write.excel()
+
+write.excel (indo_nutr_spp)
+
+# just list that IS in ssf--still have 13
+indo_nutr_spp$species[which (indo_nutr_spp$species %in% sau_indo$species)]
+# "Trichiurus lepturus"       
+indo_nutr_spp$species[which (indo_nutr_spp$species %in% sau_indo_ssf$species)]
+
+# sierra leone
+sl_nutr_spp <- ds_spp_nutr_content %>%
+  filter (country == "Sierra Leone", group == "Child", nutrient %in% c("Calcium", "Vitamin_A", "Iron", "Zinc")) %>%
+  select (species, catch_mt, nutrient, perc_rda) %>%
+  pivot_wider (names_from = nutrient, values_from = perc_rda) %>%
+  filter (catch_mt > 2000, Calcium > 10 | Vitamin_A > 10 | Iron > 10 | Zinc > 10) %>%
+  arrange (desc (catch_mt))
+
+write.excel (sl_nutr_spp)
+
+sl_nutr_spp$species[which (!sl_nutr_spp$species %in% sau_sl$species)]
+    
+sl_nutr_spp$species[which (!sl_nutr_spp$species %in% sau_sl_ssf$species)]
+# "Trachurus trachurus"   "Sardinella maderensis"
 
 # for this, doesn't matter RDA? but would want amount_mt?
 
