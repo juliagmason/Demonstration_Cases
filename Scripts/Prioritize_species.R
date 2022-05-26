@@ -27,16 +27,36 @@ nutr_upside <- readRDS("Data/ds_nutr_upside.Rds")
 # SAU baseline nutrient content by sector and enduse
 sau_enduse_nutr_contribution <- readRDS("Data/SAU_nutr_content_sector_enduse.Rds")
 
+# also just want top ssf spp for each country
+sau_ds <- readRDS ("Data/SAU_countries_dirhumcons_2000_2015.Rds")
+
+sau_ssf_top_spp <- sau_ds %>%
+  filter (fishing_sector == "Artisanal", !scientific_name %in% c("Marine fishes not identified", "Miscellaneous marine crustaceans")) %>%
+  group_by (country, scientific_name) %>%
+  summarise (sum_tonnes = sum(tonnes_tot),
+             sum_value = sum (landed_value_tot)) 
+
+sau_ssf_top_spp %>% 
+  filter (grepl (" ", scientific_name)) %>%
+  ungroup() %>%
+  group_by (country) %>%
+  slice_max (sum_tonnes, n = 5)
+
+sau_ssf_top_spp %>% 
+  filter (grepl (" ", scientific_name)) %>%
+  ungroup() %>%
+  group_by (country) %>%
+  slice_max (sum_value, n = 5)
 # # two ways of looking at this. the species that are the most nutrient dense for that nutrient, and the species that are frequently caught and therefore providing a lot of that nutrient. 
 
 
-# later could bring in which species will show the most gains under management reforms; which are the most climate vulnerable/fishing vulnerable from Maire et al. 
+# later could bring in which are the most climate vulnerable/fishing vulnerable from Maire et al. 
 
 
 ## biggest adaptive mgmt upsides ----
 ## Just start with biggest changes for now. species that show more than 10% difference?
 nutr_upside_adapt_change <- nutr_upside %>%
-  group_By (country, rcp, period, nutrient species)
+  group_by (country, rcp, period, nutrient species)
   
 nutr_upside %>%
   filter (country == "Indonesia", rcp == "RCP60", nutrient == "Calcium", period == "2050-2060") %>%
@@ -113,8 +133,7 @@ spp_ch %>%
 
 # this does pull out 3 - ~7 spp for each country, looking at midcentury rcp 6 for now
 
-chl_upside_spp <- spp_ch %>%
-  filter (period == "2050-2060", rcp == "RCP60", country == "Chile", 
+chl_upside_spp <- 
           adapt_diff_mt > 5000)
 # 5 spp with mey_diff > 10k, 6 with > 5k (normanic; pretty high catch; medium nutrition)
 
@@ -133,6 +152,13 @@ chl_upside_spp$species[which (!chl_upside_spp$species %in% sau_chl$species)]
 # T. lepturus not in SAU data for Chile, only in SL and indonesia
 chl_upside_spp$species[which (!chl_upside_spp$species %in% sau_chl_ssf$species)]
 # mostly D. gigas and N. crockeri in ssf; other species start showing up in 2010s...
+
+
+# where do our regional team's priority spp, M. gayi, M. australis, G. maculatus fit in? M. gayi no nutricast data
+spp_ch %>%
+  filter (period == "2050-2060", rcp == "RCP60", country == "Chile", species %in% c("Merluccius australis", "Genypterus maculatus"))
+
+# Peru
 
 per_upside_spp <- spp_ch %>%
   filter (period == "2050-2060", rcp == "RCP60", country == "Peru", 
@@ -229,11 +255,46 @@ chl_nutr_spp$species[which (!chl_nutr_spp$species %in% sau_chl$species)]
 # "Trichiurus lepturus"       "Macruronus novaezelandiae"
 chl_nutr_spp$species[which (!chl_nutr_spp$species %in% sau_chl_ssf$species)]
 
-  
+
 ds_spp_nutr_content %>%
   filter (country == "Chile", group == "Child", nutrient %in% c("Calcium", "Vitamin_A", "Iron")) %>%
   select (species, catch_mt, nutrient, perc_rda) %>%
   filter (perc_rda > 30)
+
+# where do m. gayi, m. australis, g. maculatus fit in ----
+# have to go back to fishnutr_mu...
+rda_groups <- readRDS("Data/RDAs_5groups.Rds")
+fishnutr <- read_csv ("Data/Species_Nutrient_Predictions.csv")
+fishnutr_mu <- fishnutr %>%
+  select (species, ends_with ("_mu")) 
+
+# have to deal with _mu names
+# https://stackoverflow.com/questions/23413331/how-to-remove-last-n-characters-from-every-element-in-the-r-vector
+library(stringr)
+
+tmp <- fishnutr_mu %>%
+        filter(species %in% c("Merluccius gayi gayi", "Merluccius australis", "Genypterus maculatus")) %>%
+    pivot_longer (Selenium_mu:Vitamin_A_mu,
+              names_to = "nutrient",
+              values_to = "amount") %>%
+  mutate (nutrient = str_sub(nutrient, end = -4)) %>%
+  # join to rda data
+  left_join (filter(rda_groups, group == "Child"), by = "nutrient") %>%
+  
+  # this would be the percentage of your daily requirement you could get from a 100g serving of each species. cap at 100%
+  mutate (perc_rda = amount/mean_rda * 100,
+          perc_rda = ifelse (perc_rda > 100, 100, perc_rda)) %>%
+  ungroup() %>%
+  filter (nutrient %in% c("Calcium", "Vitamin_A", "Iron"))
+
+# m gayi micronutrient density
+tmp %>%
+  filter (!nutrient %in% c("Selenium", "Protein")) %>%
+  select (species, nutrient, perc_rda) %>%
+  distinct() %>%
+  group_by (species) %>%
+  summarise (micronutrient_density = sum (perc_rda))
+
 
 # peru
 per_nutr_spp <- ds_spp_nutr_content %>%
