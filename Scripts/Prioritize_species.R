@@ -2,7 +2,10 @@
 # 3/25/2022
 # JGM
 
+# later could bring in which are the most climate vulnerable/fishing vulnerable from Maire et al.
+
 library (tidyverse)
+library (stringr)
 
 # function for copying R output tables into word/excel----
 #https://stackoverflow.com/questions/24704344/copy-an-r-data-frame-to-an-excel-spreadsheet
@@ -21,7 +24,17 @@ ds_catch_nutr_yield_baseline <- readRDS("Data/ds_catch_nutr_yield_baseline.Rds")
 ds_catch_props_baseline <- readRDS("Data/ds_spp_catch_proportions_baseline.Rds")
 
 # projected upside
-nutr_upside <- readRDS("Data/ds_nutr_upside.Rds")
+nutr_upside <- readRDS("Data/ds_nutr_upside.Rds") # this is by nutrient
+
+# nonzero upside
+upside_nonzero <- readRDS("Data/nutricast_catch_upside.Rds") # this is by overall catch
+
+# truncated upside, just adapt_diff_mt, just midcentury, just rcp 6
+upside_sm <- upside_nonzero %>%
+  filter (rcp == "RCP60", period == "2050-2060") %>%
+  ungroup() %>%
+  select (country, species, adapt_diff_mt)
+  
 
 
 # SAU baseline nutrient content by sector and enduse
@@ -29,6 +42,36 @@ sau_enduse_nutr_contribution <- readRDS("Data/SAU_nutr_content_sector_enduse.Rds
 
 # also just want top ssf spp for each country
 sau_ds <- readRDS ("Data/SAU_countries_dirhumcons_2000_2015.Rds")
+
+# have to go back to fishnutr_mu because a lot of these aren't in nutricast
+fishnutr <- read_csv ("Data/Species_Nutrient_Predictions.csv")
+fishnutr_mu <- fishnutr %>%
+  select (species, ends_with ("_mu"))
+rda_groups <- readRDS("Data/RDAs_5groups.Rds")
+
+sau_spp_nutr <- fishnutr_mu %>%
+  filter (species %in% sau_ds$scientific_name)  %>%
+  pivot_longer (Selenium_mu:Vitamin_A_mu,
+                names_to = "nutrient",
+                values_to = "amount") %>%
+  mutate (nutrient = str_sub(nutrient, end = -4)) %>%
+  # join to rda data
+  left_join (filter(rda_groups, group == "Child"), by = "nutrient") %>%
+  
+  # this would be the percentage of your daily requirement you could get from a 100g serving of each species. cap at 100%
+  mutate (perc_rda = amount/mean_rda * 100,
+          perc_rda = ifelse (perc_rda > 100, 100, perc_rda)) %>%
+  ungroup()
+
+sau_spp_micronutr_density <- sau_spp_nutr %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  select (species, nutrient, perc_rda) %>%
+  distinct() %>%
+  group_by (species) %>%
+  summarise (micronutrient_density = sum (perc_rda))
+
+
+# top ssf species for each country ----
 
 sau_ssf_top_spp <- sau_ds %>%
   filter (fishing_sector == "Artisanal", !scientific_name %in% c("Marine fishes not identified", "Miscellaneous marine crustaceans")) %>%
@@ -47,16 +90,141 @@ sau_ssf_top_spp %>%
   ungroup() %>%
   group_by (country) %>%
   slice_max (sum_value, n = 5)
-# # two ways of looking at this. the species that are the most nutrient dense for that nutrient, and the species that are frequently caught and therefore providing a lot of that nutrient. 
 
 
-# later could bring in which are the most climate vulnerable/fishing vulnerable from Maire et al. 
+# show nutrient content and adaptive upside for top ssf species----
 
+# lots of NAs, build by hand
+
+# need genus key for squid. 
+spp_key <- read.csv("Data/Gaines_species_nutrient_content_key.csv")
+
+squid_nutr <- spp_key %>% filter (species == "Dosidicus gigas") %>%
+  select (species, calcium_mg, iron_mg, polyunsaturated_fatty_acids_g, protein_g, vitamin_a_mcg_rae, zinc_mg) %>%
+  pivot_longer (calcium_mg:zinc_mg,
+                names_to = "nutrient",
+                values_to = "amount") %>%
+  mutate (nutrient = recode (nutrient,
+                             "calcium_mg" = "Calcium",
+                             "iron_mg" = "Iron",
+                             "polyunsaturated_fatty_acids_g" = "Omega_3",
+                             "protein_g" = "Protein",
+                             "vitamin_a_mcg_rae" = "Vitamin_A",
+                             "zinc_mg" = "Zinc")) %>%
+  # join to rda data
+  left_join (filter(rda_groups, group == "Child"), by = "nutrient") %>%
+  
+  # this would be the percentage of your daily requirement you could get from a 100g serving of each species. cap at 100%
+  mutate (perc_rda = amount/mean_rda * 100,
+          perc_rda = ifelse (perc_rda > 100, 100, perc_rda)) %>%
+  ungroup()
+
+squid_nutr %>% filter (!nutrient %in% c("Protein")) %>% pull(perc_rda) %>% sum()
+
+# Chile
+ 
+chl_ssf_vol <- sau_ssf_top_spp %>% 
+  filter (grepl (" ", scientific_name), country == "Chile") %>%
+  slice_max (sum_tonnes, n = 5) %>%
+  rename (species = scientific_name) %>%
+  
+  # show needed nutrients
+  left_join(sau_spp_nutr, by = "species") %>%
+
+  filter (nutrient %in% c("Calcium", "Vitamin_A", "Iron", "Zinc")) %>%
+  select (species, sum_tonnes, nutrient, perc_rda) %>%
+  pivot_wider (names_from = nutrient, values_from = perc_rda) %>%
+  # show overall micronutrient density
+left_join (sau_spp_micronutr_density, by = "species")
+
+write.excel (chl_ssf_vol)
+  
+chl_ssf_vol <- sau_ssf_top_spp %>% 
+  filter (grepl (" ", scientific_name), country == "Chile") %>%
+  slice_max (sum_tonnes, n = 5) %>%
+  rename (species = scientific_name) %>%
+  # show upside
+  left_join (upside_sm, by = c("country", "species"))
+
+
+write.excel (chl_ssf_vol)
+
+chl_ssf_val <- sau_ssf_top_spp %>% 
+  filter (grepl (" ", scientific_name), country == "Chile") %>%
+  slice_max (sum_value, n = 5) %>%
+  rename (species = scientific_name) %>%
+  
+  # show needed nutrients
+  left_join(sau_spp_nutr, by = "species") %>%
+  
+  filter (nutrient %in% c("Calcium", "Vitamin_A", "Iron", "Zinc")) %>%
+  select (species, sum_tonnes, nutrient, perc_rda) %>%
+  pivot_wider (names_from = nutrient, values_from = perc_rda) %>%
+  # show overall micronutrient density
+  left_join (sau_spp_micronutr_density, by = "species")
+
+write.excel (chl_ssf_val)
+
+chl_ssf_val <- sau_ssf_top_spp %>% 
+  filter (grepl (" ", scientific_name), country == "Chile") %>%
+  slice_max (sum_value, n = 5) %>%
+  rename (species = scientific_name) %>%
+  # show upside
+  left_join (upside_sm, by = c("country", "species"))
+
+
+# Peru
+
+peru_ssf_vol <- sau_ssf_top_spp %>% 
+  filter (grepl (" ", scientific_name), country == "Peru") %>%
+  slice_max (sum_tonnes, n = 5) %>%
+  rename (species = scientific_name) %>%
+  
+  # show needed nutrients
+  left_join(sau_spp_nutr, by = "species") %>%
+  
+  filter (nutrient %in% c("Calcium", "Vitamin_A", "Iron")) %>%
+  select (species, sum_tonnes, nutrient, perc_rda) %>%
+  pivot_wider (names_from = nutrient, values_from = perc_rda) %>%
+  # show overall micronutrient density
+  left_join (sau_spp_micronutr_density, by = "species")
+
+
+
+peru_ssf_vol <- sau_ssf_top_spp %>% 
+  filter (grepl (" ", scientific_name), country == "Peru") %>%
+  slice_max (sum_tonnes, n = 5) %>%
+  rename (species = scientific_name) %>%
+  # show upside
+  left_join (upside_sm, by = c("country", "species"))
+
+peru_ssf_val <- sau_ssf_top_spp %>% 
+  filter (grepl (" ", scientific_name), country == "Peru") %>%
+  slice_max (sum_value, n = 5) %>%
+  rename (species = scientific_name) %>%
+  
+  # show needed nutrients
+  left_join(sau_spp_nutr, by = "species") %>%
+  
+  filter (nutrient %in% c("Calcium", "Vitamin_A", "Iron")) %>%
+  select (species, sum_tonnes, nutrient, perc_rda) %>%
+  pivot_wider (names_from = nutrient, values_from = perc_rda) %>%
+  # show overall micronutrient density
+  left_join (sau_spp_micronutr_density, by = "species")
+ 
+write.excel (peru_ssf_val)
+
+peru_ssf_val <- sau_ssf_top_spp %>% 
+  filter (grepl (" ", scientific_name), country == "Peru") %>%
+  slice_max (sum_value, n = 5) %>%
+  rename (species = scientific_name) %>%
+  # show upside
+  left_join (upside_sm, by = c("country", "species"))
 
 ## biggest adaptive mgmt upsides ----
 ## Just start with biggest changes for now. species that show more than 10% difference?
-nutr_upside_adapt_change <- nutr_upside %>%
-  group_by (country, rcp, period, nutrient species)
+# nutr_upside_adapt_change <- nutr_upside %>%
+#   group_by (country, rcp, period, nutrient species)
   
 nutr_upside %>%
   filter (country == "Indonesia", rcp == "RCP60", nutrient == "Calcium", period == "2050-2060") %>%
@@ -234,20 +402,27 @@ ds_spp_nutr_content %>%
 ## Which species provide the most needed nutrients in each country? ----
 
 
-# Chile: Calcium and vitamin A. maybe iron?
+# Chile: Calcium and vitamin A. maybe iron, zinc
 # Indo: calcium and vitamin A, maybe zinc with golden
 # Malawi: calcium, maybe vitamin A
-# Peru: calcium, zinc
+# Peru: calcium, iron, vitamin A
 #Sierra leone: calcium, viatmin A, iron, zinc
 
 # chile, do look at rda and amount_mt
-chl_nutr_spp <- ds_spp_nutr_content %>%
-  filter (country == "Chile", group == "Child", nutrient %in% c("Calcium", "Vitamin_A", "Iron")) %>%
-  select (species, catch_mt, nutrient, perc_rda) %>%
-  select (species, catch_mt, nutrient, perc_rda) %>%
+sau_chl <- sau_ds %>% filter (country == "Chile")
+
+chl_nutr_spp <- sau_chl %>%
+  rename (species = scientific_name) %>%
+  group_by (country, species) %>%
+  summarise (catch_mt = mean (tonnes_tot)) %>%
+  ungroup() %>%
+  left_join (sau_spp_nutr, by = "species") %>%
+  filter (group == "Child", nutrient %in% c("Calcium", "Vitamin_A", "Iron", "Zinc")) %>%
+  select (country, species, catch_mt, nutrient, perc_rda) %>%
   pivot_wider (names_from = nutrient, values_from = perc_rda) %>%
-  filter (catch_mt > 5000, Calcium > 10 | Vitamin_A > 10 | Iron > 10) %>%
-  arrange (desc (catch_mt))
+  filter (catch_mt > 5000, Calcium > 10 | Vitamin_A > 10 | Iron > 10 | Zinc > 10) %>%
+  arrange (desc (catch_mt)) %>%
+  left_join (upside_sm, by = c("country", "species"))
 
 write.excel (chl_nutr_spp)
 
@@ -297,14 +472,23 @@ tmp %>%
 
 
 # peru
-per_nutr_spp <- ds_spp_nutr_content %>%
-  filter (country == "Peru", group == "Child", nutrient %in% c("Calcium", "Zinc", "Iron")) %>%
-  select (species, catch_mt, nutrient, perc_rda) %>%
+sau_per <- sau_ds %>% filter (country == "Peru")
+
+per_nutr_spp <- sau_per %>%
+  rename (species = scientific_name) %>%
+  group_by (country, species) %>%
+  summarise (catch_mt = mean (tonnes_tot)) %>%
+  ungroup() %>%
+  left_join (sau_spp_nutr, by = "species") %>%
+  filter (group == "Child", nutrient %in% c("Calcium", "Vitamin_A", "Iron")) %>%
+  select (country, species, catch_mt, nutrient, perc_rda) %>%
   pivot_wider (names_from = nutrient, values_from = perc_rda) %>%
-  filter (catch_mt > 5000, Calcium > 10 | Zinc > 10 | Iron > 10) %>%
-  arrange (desc (catch_mt))
+  filter (catch_mt > 5000, Calcium > 10 | Vitamin_A > 10 | Iron > 10) %>%
+  arrange (desc (catch_mt)) %>%
+  left_join (upside_sm, by = c("country", "species"))
 
 write.excel (per_nutr_spp)
+
 
 per_nutr_spp$species[which (!per_nutr_spp$species %in% sau_peru$species)]
 # "Trichiurus lepturus"       
