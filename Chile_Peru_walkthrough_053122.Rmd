@@ -2,7 +2,9 @@
 title: "Chile and Peru nutrition optimization walkthrough"
 author: "JGM"
 date: "5/29/2022"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -77,7 +79,7 @@ We're exploring how to enhance nutrient provisioning from fisheries. If policyma
 
 ### Past and current landings
 
-I have landings from each country's EEZ from the Sea Around Us project. They show catch by industrial vs. artisanal sector; by foreign vs. domestic vessels; and end use--direct human consumption vs. fishmeal. 
+I have landings from each country's EEZ from the Sea Around Us project (SAU). They show catch by industrial vs. artisanal sector; by foreign vs. domestic vessels; and end use--direct human consumption vs. fishmeal. 
 
 In the following graphs, I'm examining landings from the years 2000-2015. They have reconstructed data from 1950-2018, so the choice of years is arbitrary. The data from 2016-2018 looks funny for all countries, where I don't think they've sorted the fishmeal vs. direct human consumption categories yet. 
 
@@ -91,7 +93,8 @@ sau_chl_per %>%
   geom_bar(stat = "identity") +
   theme_bw() +
   facet_wrap (~country) +
-  labs (x = "", y = "Catch, million tons", fill = "End use")
+  labs (x = "", y = "Catch, million tons", fill = "End use") +
+  ggtitle ("Catch by end use")
 ```
 
 
@@ -104,7 +107,8 @@ sau_chl_per %>%
   geom_bar(stat = "identity") +
   theme_bw() +
   facet_wrap (~country) +
-  labs (x = "", y = "Catch, million tons", fill = "Sector")
+  labs (x = "", y = "Catch, million tons", fill = "Sector") +
+  ggtitle ("Catch for human consumption by sector")
 ```
 
 ### Exports and trade
@@ -239,8 +243,45 @@ t %>%
   geom_bar (stat = "identity", position = "dodge") +
   facet_wrap (~country) +
   theme_bw() +
-  labs (x = "Nutrient", y = "Children fed, millions", fill = "Sector")
+  labs (x = "Nutrient", y = "Children fed, millions", fill = "Sector") +
+  ggtitle ("Nutritional needs met by current catch for human consumption")
 
+```
+```{r sau_nutr_others, include = FALSE}
+
+# by end use
+sau_nutr %>%
+  filter (country %in% c("Chile", "Peru"), fishing_sector %in% c("Industrial", "Artisanal")) %>%
+  group_by (country, end_use_type, nutrient, year) %>%
+  summarise (annual_nutr_servings = sum(nutr_servings, na.rm = TRUE)) %>%
+  group_by (country, end_use_type, nutrient) %>%
+  summarise (avg_nutr_servings = mean (annual_nutr_servings)) %>%
+  left_join (filter (rda_groups, group == "Child"), by = "nutrient") %>%
+  mutate (needs_met = avg_nutr_servings / mean_rda) %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  ggplot (aes (x = nutrient, y = needs_met/1000000, fill = end_use_type)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_wrap (~country, scales = "free_y") +
+  theme_bw() +
+  labs (x = "Nutrient", y = "Children fed, millions", fill = "End use") +
+  ggtitle ("Nutritional needs met by current catch for human consumption")
+
+# by fishing entity - negligible
+sau_nutr %>%
+  filter (country %in% c("Chile", "Peru"), fishing_sector %in% c("Industrial", "Artisanal")) %>%
+  group_by (country, fishing_entity, nutrient, year) %>%
+  summarise (annual_nutr_servings = sum(nutr_servings, na.rm = TRUE)) %>%
+  group_by (country, fishing_entity, nutrient) %>%
+  summarise (avg_nutr_servings = mean (annual_nutr_servings)) %>%
+  left_join (filter (rda_groups, group == "Child"), by = "nutrient") %>%
+  mutate (needs_met = avg_nutr_servings / mean_rda) %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  ggplot (aes (x = nutrient, y = needs_met/1000000, fill = fishing_entity)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  facet_wrap (~country, scales = "free_y") +
+  theme_bw() +
+  labs (x = "Nutrient", y = "Children fed, millions", fill = "Fishing country") +
+  ggtitle ("Nutritional needs met by current catch for human consumption")
 ```
 
 ### Future landings under climate change and management scenarios
@@ -248,26 +289,32 @@ t %>%
 Finally, what might happen to that nutrition provisioning under climate change? Can we improve nutrition provisioning with adaptive fisheries management? We can use EDF/UCSB's climate upside model and translate projected changes in yield into nutrients. 
 
 Projected number of children fed each year by mid-century under the climate scenario RCP 6.0, with SSF catch
+
+
 ```{r nutricast}
 proj_inds_fed_sector %>%
-  filter (group == "Child", country %in% c("Chile", "Peru"), rcp == "RCP60", scenario %in% c("No Adaptation", "Full Adaptation"), period == "2050-2060", !nutrient %in% c("Protein", "Selenium")) %>%
+  filter (group == "Child", country %in% c("Chile", "Peru"), rcp == "RCP60", scenario %in% c("No Adaptation", "Full Adaptation"), period == "2050-2060", !nutrient %in% c("Protein", "Selenium"), !species %in% c("Engraulis ringens")) %>%
   ggplot (aes (x = nutrient, y = inds_fed_ssf/1000000, fill = scenario)) +
   geom_bar (stat = "identity", position = "dodge") +
   theme_bw() +
   facet_wrap (~country) +
-  labs (x = "Nutrient", y = "Children fed, millions", fill = "Management\n scenario")
+  labs (x = "Nutrient", y = "Children fed, millions", fill = "Management\n scenario") +
+  ggtitle ("Projected nutritional needs met by catch in 2050-2060, RCP 6.0\n Anchovy removed")
 
 ```
 
-
+Note that the y-axis of how many children fed is quite different from the previous graphs. This is because the SAU data and the Nutricast data don't match up very well. Nutricast data doesn't account for exports or fishmeal vs. direct human consumption. I've removed anchovy from this figure (with it, the y-axis is about 10x as big!) to partially account for this.
 
 ## Prioritizing species
 
 Since it's overwhelming to look at overall landings made up of dozens of species, we're hoping to focus on a subset (< 10) of priority species for each country. 
 
 We could choose species based on:
+
 * Which species show the biggest future gains from adaptive management
 * Which species provide needed nutrients
 * Important SSF species by volume or value
 * Other criteria?
+
+See [google slides](https://docs.google.com/presentation/d/17ZFduNEhx7vsb2k93cbWBn2-Gy_7Bza79dTzV1W74_0/edit#slide=id.g12f4a0378c4_0_45) for example species from these criteria. 
 
