@@ -221,6 +221,57 @@ peru_ssf_val <- sau_ssf_top_spp %>%
   # show upside
   left_join (upside_sm, by = c("country", "species"))
 
+# Indo
+indo_ssf_vol <- sau_ssf_top_spp %>% 
+  filter (grepl (" ", scientific_name), country == "Indonesia") %>%
+  slice_max (sum_tonnes, n = 5) %>%
+  rename (species = scientific_name) %>%
+  
+  # show needed nutrients
+  left_join(sau_spp_nutr, by = "species") %>%
+  
+  filter (nutrient %in% c("Calcium", "Vitamin_A", "Zinc")) %>%
+  select (species, sum_tonnes, nutrient, perc_rda) %>%
+  pivot_wider (names_from = nutrient, values_from = perc_rda) %>%
+  # show overall micronutrient density
+  left_join (sau_spp_micronutr_density, by = "species")
+
+write.excel(indo_ssf_vol)
+
+# upside
+indo_ssf_vol <- sau_ssf_top_spp %>% 
+  filter (grepl (" ", scientific_name), country == "Indonesia") %>%
+  slice_max (sum_tonnes, n = 5) %>%
+  rename (species = scientific_name) %>%
+  # show upside
+  left_join (upside_sm, by = c("country", "species"))
+
+
+# top value
+indo_ssf_val <- sau_ssf_top_spp %>% 
+  filter (grepl (" ", scientific_name), country == "Indonesia") %>%
+  slice_max (sum_value, n = 5) %>%
+  rename (species = scientific_name) %>%
+  
+  # show needed nutrients
+  left_join(sau_spp_nutr, by = "species") %>%
+  
+  filter (nutrient %in% c("Calcium", "Vitamin_A", "Zinc")) %>%
+  select (species, sum_tonnes, nutrient, perc_rda) %>%
+  pivot_wider (names_from = nutrient, values_from = perc_rda) %>%
+  # show overall micronutrient density
+  left_join (sau_spp_micronutr_density, by = "species")
+
+write.excel(indo_ssf_val)
+
+# upside
+indo_ssf_val <- sau_ssf_top_spp %>% 
+  filter (grepl (" ", scientific_name), country == "Indonesia") %>%
+  slice_max (sum_value, n = 5) %>%
+  rename (species = scientific_name) %>%
+  # show upside
+  left_join (upside_sm, by = c("country", "species"))
+
 ## biggest adaptive mgmt upsides ----
 ## Just start with biggest changes for now. species that show more than 10% difference?
 # nutr_upside_adapt_change <- nutr_upside %>%
@@ -495,12 +546,25 @@ per_nutr_spp$species[which (!per_nutr_spp$species %in% sau_peru$species)]
 per_nutr_spp$species[which (!per_nutr_spp$species %in% sau_peru_ssf$species)]
 
 # indo
-indo_nutr_spp <- ds_spp_nutr_content %>%
-  filter (country == "Indonesia", group == "Child", nutrient %in% c("Calcium", "Vitamin_A", "Iron")) %>%
-  select (species, catch_mt, nutrient, perc_rda) %>%
+
+sau_indo <- sau_ds %>% filter (country == "Indonesia")
+
+indo_nutr_spp <- sau_indo %>%
+  rename (species = scientific_name) %>%
+  group_by (country, species) %>%
+  summarise (catch_mt = mean (tonnes_tot)) %>%
+  ungroup() %>%
+  left_join (sau_spp_nutr, by = "species") %>%
+  filter (country == "Indonesia", group == "Child", nutrient %in% c("Calcium", "Vitamin_A", "Zinc")) %>%
+  select (country, species, catch_mt, nutrient, perc_rda) %>%
   pivot_wider (names_from = nutrient, values_from = perc_rda) %>%
-  filter (catch_mt > 10000, Calcium > 15 | Vitamin_A > 15 | Iron > 15) %>%
-  arrange (desc (catch_mt))
+  filter (catch_mt > 10000, Calcium > 15 | Vitamin_A > 15 | Zinc > 25) %>%
+  arrange (desc (catch_mt)) %>%
+  left_join (upside_sm, by = c("country", "species"))
+
+write.excel (indo_nutr_spp)
+
+# this gets 10 spp, using SAU data. probably okay
 
 # need to only do ssf?
 
