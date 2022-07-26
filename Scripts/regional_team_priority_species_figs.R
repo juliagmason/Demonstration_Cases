@@ -3,6 +3,10 @@
 library (tidyverse)
 library (stringr)
 
+# top 5-7 priority species identified by regional teams
+# as of 7/26/22 only have peru and chile
+priority_spp <- read_csv ("Data/regional_teams_priority_spp.csv")
+
 # nutrient data and rda data
 rda_groups <- readRDS("Data/RDAs_5groups.Rds")
 fishnutr <- read_csv ("Data/Species_Nutrient_Predictions.csv")
@@ -25,7 +29,10 @@ ds_spp <- readRDS("Data/Free_etal_2020_country_level_outcomes_time_series_for_ju
 sau_indo <- sau %>%
   filter (grepl("Indo", area_name), between (year, 2000, 2015)) %>%
   mutate (country = "Indonesia") %>%
-  rename (species = scientific_name)
+  rename (species = scientific_name) %>%
+  group_by (country, species, year, fishing_sector, fishing_entity, end_use_type) %>%
+  summarise (tonnes = sum(tonnes),
+             landed_value = sum(landed_value))
 
 indo_spp_nutr <-  fishnutr_mu %>%
   filter (species %in% sau_indo$species)  %>%
@@ -41,7 +48,7 @@ indo_spp_nutr <-  fishnutr_mu %>%
           perc_rda = ifelse (perc_rda > 100, 100, perc_rda)) %>%
   ungroup()
 
-spp_nutr_density <- spp_nutr %>% 
+spp_nutr_density <- indo_spp_nutr %>% 
   filter (!nutrient %in% c("Protein", "Selenium")) %>%
   select (species, nutrient, perc_rda) %>%
   distinct() %>%
@@ -89,6 +96,84 @@ skipjack_country %>%
   )
 dev.off()
 
+# dummy variable for exports
+# rbinom not grouping by year. 
+
+set.seed(52)
+skipjack_export_dummy1 <- skipjack_country %>%
+  filter (fishing_country == "Domestic catch") %>%
+  ungroup() %>%
+  group_by (year) %>%
+  #rowwise() %>%
+  mutate (export_dummy = rbinom (n = length(year), size = 1, prob = 0.75)) %>%
+  ungroup() %>%
+  mutate(
+    export = case_when (
+      fishing_country == "Domestic catch" & export_dummy == 1 ~ "Exported",
+      fishing_country == "Domestic catch" & export_dummy == 0 ~ "Kept",
+      fishing_country == "Foreign catch" ~ "Foreign catch"
+    )
+  )
+
+skipjack_export_dummy1$export <- factor (skipjack_export_dummy1$export, levels = c("Foreign catch", "Exported", "Kept"))
+
+
+# brute force
+skipjack_domestic_yrs <- skipjack_country %>%
+  filter (fishing_country == "Domestic catch") %>%
+  group_by (year) %>%
+  summarise (N = n())
+
+skipjack_domestic_rbinom <- sapply (skipjack_domestic_yrs$N, rbinom, size = 1, prob = 0.75, simplify = TRUE)
+skipjac_domestic_rbinom_v <- unlist (skipjack_domestic_rbinom)
+
+skipjack_export <- skipjack_country %>%
+  arrange (fishing_country, year)
+
+skipjack_export$export_dummy <- c(rep (1, length(which(skipjack_country$fishing_country == "Foreign catch"))),
+                                       skipjac_domestic_rbinom_v)
+
+skipjack_export <- skipjack_export %>%
+  mutate(
+    export = case_when (
+      fishing_country == "Domestic catch" & export_dummy == 1 ~ "Exported",
+      fishing_country == "Domestic catch" & export_dummy == 0 ~ "Kept",
+      fishing_country == "Foreign catch" ~ "Foreign catch"
+    )
+    
+  )
+
+
+skipjack_export$export <- factor (skipjack_export$export, levels = c("Foreign catch", "Exported", "Kept"))
+
+# I want to multiply the TONNES by 0.75, not select observations!!
+         
+png ("Figures/Indo_skipjack_landings_domestic_dummy_exports.png", res = 300, width = 5, height = 5, units = "in") 
+t <- skipjack_country %>%
+  group_by (year, fishing_country) %>%
+  summarise (tot_tonnes = sum (tonnes)) %>%
+  pivot_wider (names_from = fishing_country, values_from = tot_tonnes) %>%
+  mutate (Exported = 0.75 * `Domestic catch`,
+          Kept = 0.25 * `Domestic catch`) %>%
+  select (-`Domestic catch`) %>%
+  pivot_longer (-year, names_to = "Export", 
+                values_to = "tonnes")
+
+t$Export <- factor (t$Export, levels = c("Foreign catch", "Exported", "Kept"))
+  
+png ("Figures/Indo_skipjack_landings_domestic_dummy_exports.png", res = 300, width = 5, height = 5, units = "in")
+  ggplot (t, aes (x = year, y = tonnes/1000, fill = Export)) +
+  geom_bar(stat = "identity") +
+  theme_bw() +
+  scale_fill_manual (values = c("gray70", "gray40", "dodgerblue3")) +
+  labs (x = "", y = "Catch, thousand tons", fill = "") +
+  ggtitle ("Skipjack tuna catch in Indonesia's EEZ \n Sea Around Us project data") +
+  theme (
+    axis.title = element_text (size = 12),
+    axis.text = element_text (size = 10),
+    plot.title = element_text (size = 14)
+  )
+dev.off()
 
 
 # skipjack as nutrients, just 2015
@@ -133,6 +218,98 @@ sau_nutr %>%
   labs (x = "Nutrient", y = "Children fed, millions", fill = "Sector") +
   ggtitle ("# children's daily intake needs met, 2015\n Domestic catch") +
   scale_fill_manual (values = c("dodgerblue3")) +
+  theme (
+    axis.title = element_text (size = 12),
+    axis.text = element_text (size = 10),
+    plot.title = element_text (size = 14),
+    legend.position = "none"
+  )
+dev.off()
+
+# fake domestic/kept skipjack as nutrients
+png ("Figures/Indo_skipjack_nutr_domestic_fake_kept.png", res = 300, width = 4, height = 5, units = "in")
+sau_nutr %>%
+  filter (country %in% c("Indonesia"), species == "Katsuwonus pelamis", year == 2015, fishing_entity == "Indonesia") %>%
+  group_by (nutrient, species) %>%
+  summarise (tot_servings = sum (nutr_servings)) %>%
+  left_join (filter (rda_groups, group == "Child"), by = "nutrient") %>%
+  mutate (needs_met = tot_servings / mean_rda) %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  
+  ggplot (aes (x = nutrient, y = needs_met/1000000 * 0.75, fill = species)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  theme_bw() +
+  ylim(c(0, 3.25)) +
+  labs (x = "Nutrient", y = "Children fed, millions", fill = "Sector") +
+  ggtitle ("# children's daily intake needs met, 2015\n Domestic catch not exported") +
+  scale_fill_manual (values = c("dodgerblue3")) +
+  theme (
+    axis.title = element_text (size = 12),
+    axis.text = element_text (size = 10),
+    plot.title = element_text (size = 14),
+    legend.position = "none"
+  )
+dev.off()
+
+# stacked bar
+# doing more dumb stuff here, have to re-join with export df
+# adding--divide by 100 in here. I think Chris did that in his head but making me doubt everything
+calc_nutr_supply_mt <- function(meat_mt, nutr_dens, nutr_dens_units){
+  
+  # Convert meat to grams
+  # "Mg" is metric tons
+  meat_g <- measurements::conv_unit(meat_mt, "Mg", "g")
+  
+  # Calculate amount of nutrient in density units. divide by 100 because density units are per 100g
+  nutrient_q <- meat_g *  nutr_dens / 100
+  
+  # Calculate amount of nutrient in metric tons
+  nutrient_mt <- measurements::conv_unit(nutrient_q, nutr_dens_units, "Mg")
+  
+  # Return
+  return(nutrient_mt)
+  
+}
+
+skipjack_nutr <- sau_nutr %>% 
+  filter (species == "Katsuwonus pelamis") %>%
+  select (species, nutrient, amount, pedible, dens_units) %>%
+  distinct()
+
+skipjack_stacked <- t %>%
+  mutate (species = "Katsuwonus pelamis") %>%
+  left_join (skipjack_nutr, by = "species") %>%
+  mutate (meat_mt = tonnes * pedible,
+          
+          
+          #available nutrient in mt
+          #nutr_mt = mapply(calc_nutr_supply_mt, meat_mt, amount, dens_units)
+          nutr_mt = pmap (list (meat_mt = meat_mt, nutr_dens = amount, nutr_dens_units = dens_units), calc_nutr_supply_mt),
+          
+          # edible meat in 100g servings/day
+          # meat in metric tons/yr *1000 kg/ton * 1000g/kg * 1 serving /100 g * 1 yr/365 days
+          meat_servings = meat_mt * 1000 * 1000 / 100 / 365,
+          
+          # nutrient content in servings/day
+          nutr_servings = meat_servings * amount) %>%
+
+
+  left_join (filter (rda_groups, group == "Child"), by = "nutrient") %>%
+  mutate (needs_met = nutr_servings / mean_rda) %>%
+  filter (!nutrient %in% c("Protein", "Selenium"))
+
+skipjack_stacked$Export <- factor (skipjack_stacked$Export, levels = c("Foreign catch", "Exported", "Kept"))  
+
+  png ("Figures/Indo_skipjack_nutr_domestic_stacked.png", res = 300, width = 4, height = 5, units = "in")
+  skipjack_stacked %>%
+    filter (year == 2015) %>%
+    ggplot (aes (x = nutrient, y = needs_met/1000000, fill = Export)) +
+  geom_bar (stat = "identity", position = "dodge") +
+  theme_bw() +
+  #ylim(c(0, 3.25)) +
+  labs (x = "Nutrient", y = "Children fed, millions", fill = "Sector") +
+  ggtitle ("# children's daily intake needs met, 2015") +
+  scale_fill_manual (values = c("gray70", "gray40", "dodgerblue3")) +
   theme (
     axis.title = element_text (size = 12),
     axis.text = element_text (size = 10),
