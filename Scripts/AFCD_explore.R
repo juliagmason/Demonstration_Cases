@@ -15,6 +15,30 @@
 library(AFCD)
 library (tidyverse)
 
+# cleaned version from zach, 5/31/22
+#https://github.com/Aquatic-Food-Composition-Database/AFCD
+devtools::install_github("Aquatic-Food-Composition-Database/AFCD", force=T)
+library(AFCD)
+
+# blue swimming crab??
+
+"Portunus pelagicus" %in% afcd_sci$sciname
+afcd_sci %>% filter (sciname == "Portunus pelagicus") %>% View()
+# KK request:  Kappaphycus alvarezii (commercially known as cottonii) and Eucheuma denticulatum (commercially known as spinosum).
+
+"Kappaphycus alvarezii" %in% afcd_sci$sciname
+"Eucheuma denticulatum" %in% afcd_sci$sciname
+
+afcd_sci %>% filter (sciname == "Eucheuma denticulatum") %>% pull (country) %>% unique()
+afcd_sci %>% filter (sciname == "Eucheuma denticulatum", country == "Kenya") %>% View() # protein, fat, ash
+afcd_sci %>% filter (sciname == "Eucheuma denticulatum", country == "Unknown") %>% View() # different amino acids
+afcd_sci %>% filter (sciname == "Eucheuma denticulatum", country == "United States") %>% View()
+  pull(nutrient) %>% unique()
+
+afcd_sci %>% filter (sciname == "Kappaphycus alvarezii") %>% pull (country) %>% unique()
+afcd_sci %>% filter (sciname == "Kappaphycus alvarezii", country != "Unknown") %>% View()
+
+
 colnames (afcd1)
 
 # available "studies"
