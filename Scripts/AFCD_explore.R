@@ -20,6 +20,17 @@ library (tidyverse)
 devtools::install_github("Aquatic-Food-Composition-Database/AFCD", force=T)
 library(AFCD)
 
+
+# regional team priority spp--check inverts 7/27/22
+afcd %>% filter (sciname == "Dosidicus gigas") %>% View()
+
+"Megapitaria squalida" %in% afcd$sciname
+"Chione californiensis" %in% afcd$sciname
+
+
+
+# Kelso requests
+
 # blue swimming crab??
 
 "Portunus pelagicus" %in% afcd_sci$sciname
