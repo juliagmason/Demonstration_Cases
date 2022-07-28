@@ -5,7 +5,7 @@ library (stringr)
 
 ## TO DO
 # annotate nutrient content bar with overall density
-# standardize one spp inds fed y axis
+
 
 
 ###########################################################################
@@ -44,10 +44,14 @@ pri_spp_nutr <- fishnutr_mu %>%
 # also just want top ssf spp for each country
 sau <- read.csv ("Data/SAU_EEZ_landings.csv")
 
+sau_mex <- read.csv("Data/SAU_mexico_landings.csv")
+
 # clean by country
 sau_country_cleaned <- sau %>%
+  rbind (sau_mex) %>%
   mutate (country = case_when(
           grepl("Indo", area_name) ~ "Indonesia",
+          grepl ("Mex", area_name) ~ "Mexico",
           area_name == "Chile (mainland)" ~ "Chile",
           TRUE ~ area_name)
           ) %>%
@@ -58,7 +62,7 @@ sau_country_cleaned <- sau %>%
           
           
 
-# full sau nutr data
+# full sau nutr data by sector and end use
 sau_nutr <- readRDS("Data/SAU_nutr_content_sector_enduse.Rds")
 
 # translate to inds fed
@@ -112,6 +116,39 @@ calc_nutr_supply_mt <- function(meat_mt, nutr_dens, nutr_dens_units){
 }
 
 ###########################################################################
+## Check data availability
+# nutrition
+pri_spp_nutr %>% filter (is.na(amount)) %>% select (country, comm_name, species) %>% distinct()
+
+# sau
+t <- sau_country_cleaned %>%
+  right_join (priority_spp, by = c ("country",  "species")) %>%
+  filter (between (year, 2010, 2018)) %>% View()
+  group_by (country, species, year) %>%
+  summarise (sum_tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  group_by (country, species) %>%
+  summarise (mean_tonnes = mean (sum_tonnes, na.rm = TRUE))
+
+# sau industrial vs artisanal
+sec <- sau_country_cleaned %>%
+  right_join (priority_spp, by = c ("country",  "species")) %>%
+  filter (between (year, 2010, 2018)) %>%
+  group_by (country, species, year, fishing_sector) %>%
+  summarise (sum_tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  group_by (country, species) %>%
+  summarise (prop_ssf = sum (sum_tonnes[fishing_sector == "Artisanal"]) / sum (sum_tonnes),
+             prop_ind = sum (sum_tonnes[fishing_sector == "Industrial"]) / sum (sum_tonnes))
+
+View(sec)
+
+# climate projections--which ones DONT have data
+cc <- ds_spp %>%
+  right_join (priority_spp, by = c ("country",  "species")) %>%
+  filter (is.na (catch_mt)) %>%
+  select (country, species) %>% distinct() %>% arrange (country)
+
+
+###########################################################################
 ## Make plots ----
 
 
@@ -125,16 +162,18 @@ plot_priority_spp_nutr_bar <- function (country_name, n_spp) {
   
   p <- pri_spp_nutr %>%
     # bring back common names, filter to country
-    right_join (country_spp, by = "species") %>%
-    filter (!nutrient %in% c("Protein", "Selenium")) %>%
+    #right_join (country_spp, by = "species") %>%
+    filter (country == country_name, species %in% country_spp$species, !nutrient %in% c("Protein", "Selenium")) %>%
     ggplot () +
     geom_bar (aes (x = nutrient, y = perc_rda), stat = "identity") +
     facet_wrap (~comm_name) +
+    ggtitle (paste0("Daily recommended nutrient intake for children met from 100g serving \n", country_name, " priority species")) +
     theme_bw() +
     labs (x = "", y = "Percent daily needs met") +
     theme (axis.title = element_text (size = 14),
            axis.text = element_text(size =10),
-           strip.text = element_text (size = 14))
+           strip.text = element_text (size = 14),
+           plot.title = element_text (size = 14))
   
   png (paste0("Figures/", country_name, "_pri_spp_nutr_bar.png"), res = 300, width = 8, height = 5, units = "in")
   print (p)
@@ -234,6 +273,7 @@ plot_sau_landings_one_spp <- function (country_name, species_name, year) {
 }
 
 plot_sau_landings_one_spp(country_name = "Chile", species_name = "Engraulis ringens", year = 2015)
+plot_sau_landings_one_spp(country_name = "Chile", species_name = "Trachurus murphyi", year = 2015)
 
 
 
@@ -383,8 +423,8 @@ plot_nutr_upside_one_spp <- function (country_name, species_name, climate_scenar
   
 plot_nutr_upside_one_spp ("Chile", "Trachurus murphyi", "RCP60")
 
-# stacked graph nutr upside, multispecies ----
-plot_upside_stacked_multispecies <- function (country_name, n_spp, climate_scenario) {
+# nutr upside, multispecies ----
+plot_upside_multispecies <- function (country_name, n_spp, climate_scenario) {
   
   country_spp <- priority_spp %>%
     filter (country == country_name, rank <= n_spp)
@@ -396,7 +436,10 @@ plot_upside_stacked_multispecies <- function (country_name, n_spp, climate_scena
             group == "Child", scenario %in% c("No Adaptation", "Full Adaptation"), period == "2050-2060", 
             !nutrient %in% c("Protein", "Selenium")) %>%
     # dumb but group by sector and calculate difference
-    mutate (tot_fed = inds_fed_industrial + inds_fed_ssf) %>%
+    mutate (tot_fed = inds_fed_industrial + inds_fed_ssf,
+            nutrient = case_when (nutrient == "Calcium" ~ "Cal",
+                                  nutrient == "Omega 3" ~ "Om3",
+                                  TRUE ~ nutrient)) %>%
     group_by (comm_name, nutrient) %>%
     summarise (diff_fed = tot_fed[scenario == "Full Adaptation"] - tot_fed[scenario == "No Adaptation"])
   
@@ -407,11 +450,11 @@ plot_upside_stacked_multispecies <- function (country_name, n_spp, climate_scena
     scale_fill_manual (values = rep("dodgerblue3", 5)) +
     theme_bw() +
     labs (x = "Nutrient", y = "Additional children fed, thousands", fill = "Management\n scenario") +
-    ggtitle (paste0("Additional nutrient needs met by implementing adaptive management,\n2050-2060, ", climate_scenario)) +
+    ggtitle (paste0("Additional nutrient needs met by implementing adaptive management,\n", country_name, ", 2050-2060, ", climate_scenario)) +
     facet_wrap (~comm_name, scales = "free_y") +
     theme (
       axis.title = element_text (size = 14),
-      axis.text = element_text (size = 12),
+      axis.text = element_text (size = 10),
      plot.title = element_text (size = 14),
       legend.position = "none"
     )
@@ -424,8 +467,8 @@ plot_upside_stacked_multispecies <- function (country_name, n_spp, climate_scena
   
 }
 
-plot_upside_stacked_multispecies("Chile", n_spp = 5, climate_scenario = "RCP60")
-plot_upside_stacked_multispecies("Peru", n_spp = 5, climate_scenario = "RCP60")
+plot_upside_multispecies("Chile", n_spp = 5, climate_scenario = "RCP60")
+plot_upside_multispecies("Peru", n_spp = 5, climate_scenario = "RCP60")
 
 # stacked graph with inds fed for all priority species, foreign/domestic/exported ----
 # don't have export data yet
