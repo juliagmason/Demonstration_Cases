@@ -1,7 +1,7 @@
 # Regional team priority species
 # 5/27/22, updated 7/26/22
 library (tidyverse)
-library (stringr)
+#library (stringr)
 
 ## TO DO
 # annotate nutrient content bar with overall density
@@ -12,7 +12,7 @@ library (stringr)
 # Data import ----
 
 # top 5-7 priority species identified by regional teams
-# as of 7/26/22 only have peru and chile
+# as of 8/4/22  have peru and chile, mexico (limited data avail). took indo spp from willow spreadsheet, but don't know where they came from
 priority_spp <- read_csv ("Data/regional_teams_priority_spp.csv")
 
 # nutrient data and rda data
@@ -27,7 +27,7 @@ pri_spp_nutr <- fishnutr_mu %>%
   pivot_longer (Selenium_mu:Vitamin_A_mu,
                 names_to = "nutrient",
                 values_to = "amount") %>%
-  mutate (nutrient = str_sub(nutrient, end = -4)) %>%
+  mutate (nutrient = str_sub(nutrient, end = -4)) %>% 
   # join to rda data
   left_join (filter(rda_groups, group == "Child"), by = "nutrient") %>%
   
@@ -87,6 +87,7 @@ ylim_sau <- sau_nutr_inds_fed %>%
 ds_spp <- readRDS("Data/Free_etal_2020_country_level_outcomes_time_series_for_julia.Rds")
 
 # nutricast upside
+# this is amount of nutrients, not amount of catch
 nutr_upside <- readRDS("Data/ds_nutr_upside.Rds")
 
 #  nutricast inds fed by sector
@@ -116,23 +117,65 @@ calc_nutr_supply_mt <- function(meat_mt, nutr_dens, nutr_dens_units){
 }
 
 ###########################################################################
-## Check data availability
+## Check data availability ----
 # nutrition
 pri_spp_nutr %>% filter (is.na(amount)) %>% select (country, comm_name, species) %>% distinct()
 
 # sau
 t <- sau_country_cleaned %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
-  filter (between (year, 2010, 2018)) %>% View()
+  filter (between (year, 2010, 2018)) %>% 
   group_by (country, species, year) %>%
   summarise (sum_tonnes = sum (tonnes, na.rm = TRUE)) %>%
   group_by (country, species) %>%
   summarise (mean_tonnes = mean (sum_tonnes, na.rm = TRUE))
 
-# sau industrial vs artisanal
+
+# climate projections--which ones DONT have data
+cc <- ds_spp %>%
+  right_join (priority_spp, by = c ("country",  "species")) %>%
+  filter (is.na (catch_mt)) %>%
+  select (country, species) %>% distinct() %>% arrange (country)
+
+###########################################################################
+## Print values----
+
+
+# micronutrient density----
+
+print_micronutrient_density <- function (country_name, n_spp) {
+  pri_spp_nutr %>%
+    filter (country == country_name, rank <= n_spp, 
+            !nutrient %in% c("Protein", "Selenium")) %>%
+    group_by (species) %>%
+    summarise (micronutrient_density = sum (perc_rda)) 
+}
+
+print_micronutrient_density ("Chile", 10)
+print_micronutrient_density ("Indonesia", 10)
+
+# print nutrient % ----
+pri_spp_nutr %>%
+  select (country, species, nutrient, perc_rda) %>% 
+  filter (!nutrient %in% c("Protein")) %>%
+  arrange (country, species, desc(perc_rda))
+
+# print raw values, raw nutrient content ----
+pri_spp_nutr_values <- fishnutr_mu %>%
+  right_join (priority_spp, by = "species")  %>%
+  pivot_longer (Selenium_mu:Vitamin_A_mu,
+                names_to = "nutrient",
+                values_to = "amount") %>%
+  mutate (nutrient = str_sub(nutrient, end = -4)) %>% 
+  select (country, species, nutrient, amount) %>% 
+  filter (!nutrient %in% c("Protein")) %>%
+  group_by (country, species) %>%
+  slice_max (amount, n = 4)
+
+# sau industrial vs artisanal----
 sec <- sau_country_cleaned %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
-  filter (between (year, 2010, 2018)) %>%
+  filter (between (year, 2010, 2015)) %>%
   group_by (country, species, year, fishing_sector) %>%
   summarise (sum_tonnes = sum (tonnes, na.rm = TRUE)) %>%
   group_by (country, species) %>%
@@ -141,16 +184,49 @@ sec <- sau_country_cleaned %>%
 
 View(sec)
 
-# climate projections--which ones DONT have data
-cc <- ds_spp %>%
+# sau foreign vs domestic---
+# print proportion foreign by country ----
+foreign <- sau_country_cleaned %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
-  filter (is.na (catch_mt)) %>%
-  select (country, species) %>% distinct() %>% arrange (country)
+  filter (between (year, 2000, 2015)) %>%
+  mutate (fishing_country = ifelse (fishing_entity == country, "Domestic catch", "Foreign catch")) %>%
+  group_by (country, species, year, fishing_country) %>%
+  summarise (sum_tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  group_by (country, species) %>%
+  summarise (prop_for = sum (sum_tonnes[fishing_country == "Foreign catch"]) / sum (sum_tonnes),
+             prop_dom = sum (sum_tonnes[fishing_country == "Domestic catch"]) / sum (sum_tonnes))
+
+View(foreign)
+
+# upside BAU to MEY ---
+
+# upside full adapt to no adapt---
+catch_upside <- ds_spp %>%
+  filter (scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), catch_mt > 0) %>%
+  mutate (
+    period = case_when (
+      year %in% c(2025:2035) ~ "2025-2035",
+      year %in% c(2050:2060) ~ "2050-2060",
+      year %in% c(2090:2100) ~ "2090-2100"
+    )) %>%
+  filter (!is.na (period)) %>%
+  group_by (country, rcp, scenario, period, species) %>%
+  summarise (catch_mt = mean (catch_mt, na.rm = TRUE)) %>%
+  ungroup() %>%
+  group_by (country, rcp, period, species) %>%
+  summarize (mey_diff_mt = catch_mt[scenario == "Productivity Only"] - catch_mt[scenario == "No Adaptation"],
+             mey_diff_percent = (catch_mt[scenario == "Productivity Only"] - catch_mt[scenario == "No Adaptation"])/catch_mt[scenario == "No Adaptation"] * 100,
+             adapt_diff_mt = catch_mt[scenario == "Full Adaptation"] - catch_mt[scenario == "No Adaptation"],
+             adapt_diff_percent = (catch_mt[scenario == "Full Adaptation"] - catch_mt[scenario == "No Adaptation"])/catch_mt[scenario == "No Adaptation"] * 100)
+
+catch_upside %>%
+  filter (period == "2050-2060", rcp == "RCP60") %>%
+  right_join (priority_spp, by = c ("species", "country")) %>% View()
+            
 
 
-###########################################################################
-## Make plots ----
-
+###################################################################
+# Plots----
 
 # show nutr content as bar graph ----
 plot_priority_spp_nutr_bar <- function (country_name, n_spp) {
@@ -185,18 +261,6 @@ plot_priority_spp_nutr_bar <- function (country_name, n_spp) {
 plot_priority_spp_nutr_bar(country_name = "Chile", n_spp = 5)
 plot_priority_spp_nutr_bar(country_name = "Peru", n_spp = 5)
 
-# micronutrient density----
-# try to figure out how to annotate
-print_micronutrient_density <- function (country_name, n_spp) {
-  pri_spp_nutr %>%
-    filter (country == country_name, rank <= n_spp, 
-            !nutrient %in% c("Protein", "Selenium")) %>%
-    group_by (species) %>%
-    summarise (micronutrient_density = sum (perc_rda)) 
-}
-
-print_micronutrient_density ("Chile", 5)
-print_micronutrient_density ("Peru", 5)
 
 # initial plot, landings and needs met of one species ----
 # anchoveta
@@ -354,6 +418,7 @@ plot_sau_landings_domestic_one_spp <- function (country_name, species_name, year
 }
 
 plot_sau_landings_domestic_one_spp ("Chile", "Trachurus murphyi", 2015)
+
 
 
 # plot nutritional upside projections ----
