@@ -15,6 +15,9 @@ library (tidyverse)
 # as of 8/4/22  have peru and chile, mexico (limited data avail). took indo spp from willow spreadsheet, but don't know where they came from
 priority_spp <- read_csv ("Data/regional_teams_priority_spp.csv")
 
+# 8/10/22 mexico request from sammi lin
+sammi_spp <- c("Thunnus thynnus", "Diplodus vulgaris", "Galeorhinus galeus", "Argyrosomus regius", "Dicentrarchus labrax", "Sphoeroides annulatus", "Mugil cephalus", "Scomberomorus sierra", "Sardina pilchardus")
+
 # nutrient data and rda data
 rda_groups <- readRDS("Data/RDAs_5groups.Rds")
 fishnutr <- read_csv ("Data/Species_Nutrient_Predictions.csv")
@@ -171,6 +174,33 @@ pri_spp_nutr_values <- fishnutr_mu %>%
   filter (!nutrient %in% c("Protein")) %>%
   group_by (country, species) %>%
   slice_max (amount, n = 4)
+
+
+# sammi spp
+#child_rda <- rda_groups %>% filter (group == "Child")
+
+sammi_spp_nutr <- fishnutr_mu %>%
+  filter (species %in% sammi_spp) %>%
+  pivot_longer (Selenium_mu:Vitamin_A_mu,
+                names_to = "nutrient",
+                values_to = "amount") %>%
+  mutate (nutrient = str_sub(nutrient, end = -4), 
+          units = case_when (
+            nutrient %in% c("Calcium", "Iron", "Zinc") ~ "mg",
+            nutrient %in% c("Selenium", "Vitamin_A") ~"ug",
+            nutrient %in% c("Protein", "Omega_3") ~ "g"
+          )) %>%
+  left_join(rda_groups, by = "nutrient") %>%
+  
+  # this would be the percentage of your daily requirement you could get from a 100g serving of each species. cap at 100%
+  mutate (perc_rda = amount/mean_rda * 100,
+          perc_rda = ifelse (perc_rda > 100, 100, perc_rda)) %>%
+  ungroup() %>%
+  select (species, nutrient, amount, units, group, perc_rda) %>%
+  rename (unit = units)
+
+write.csv (sammi_spp_nutr, file = "Data/nutrient_content_Mexico_spp_for_Sammi.csv", row.names = FALSE)
+
 
 # sau industrial vs artisanal----
 sec <- sau_country_cleaned %>%
