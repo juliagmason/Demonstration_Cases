@@ -3,8 +3,18 @@
 library (tidyverse)
 #library (stringr)
 
-## TO DO
-# annotate nutrient content bar with overall density
+# function for copying R output tables into word/excel----
+#https://stackoverflow.com/questions/24704344/copy-an-r-data-frame-to-an-excel-spreadsheet
+write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
+  write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
+}
+
+# country nutrient deficiencies from nutricast ----
+# do children to match rda
+golden_mic_def <- readRDS("../nutrient_endowment/output/nutr_deficiencies_by_cntry_sex_age_2011.Rds") %>%
+  filter (sex == "Children", nutrient %in% c ("Vitamin A", "Calcium", "Iron", "Zinc"), country %in% pri_spp_nutr$country) %>% 
+  arrange (country, nutrient) %>%
+  write.excel()
 
 
 
@@ -42,6 +52,12 @@ pri_spp_nutr <- fishnutr_mu %>%
                        nutrient == "Omega_3" ~ "Omega 3",
                        TRUE ~ nutrient)) %>%
   ungroup()
+
+# remove protein and copy to excel
+pri_spp_nutr %>%
+  filter (!nutrient == "Protein") %>%
+  arrange (country, rank, nutrient) %>%
+  write.excel()
 
 # SAU data
 # also just want top ssf spp for each country
@@ -91,7 +107,10 @@ ds_spp <- readRDS("Data/Free_etal_2020_country_level_outcomes_time_series_for_ju
 
 # nutricast upside
 # this is amount of nutrients, not amount of catch
+# has proportion of future population RDAs met, and number of children fed (nutritional needs met)
+# I think this is what the team wants for nutrient diff for each 
 nutr_upside <- readRDS("Data/ds_nutr_upside.Rds")
+
 
 #  nutricast inds fed by sector
 proj_inds_fed_sector <- readRDS("Data/Nutricast_by_SAU_sector_inds_fed.Rds") %>%
@@ -202,6 +221,8 @@ sammi_spp_nutr <- fishnutr_mu %>%
 write.csv (sammi_spp_nutr, file = "Data/nutrient_content_Mexico_spp_for_Sammi.csv", row.names = FALSE)
 
 
+
+
 # sau industrial vs artisanal----
 sec <- sau_country_cleaned %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
@@ -229,8 +250,26 @@ foreign <- sau_country_cleaned %>%
 View(foreign)
 
 # upside BAU to MEY ---
+## nutritional upside inds fed
 
-# upside full adapt to no adapt---
+nutr_upside_excel <- nutr_upside %>%
+  right_join (priority_spp, by = c ("country",  "species")) %>%
+  filter (rcp == "RCP60", period == "2050-2060", !nutrient == "Protein")
+
+nutr_upside_excel %>%
+  ungroup() %>%
+  select (country, species, nutrient, mey_diff_child_rda, rank) %>%
+  arrange (country, rank) %>%
+  write.excel()
+
+
+nutr_upside_excel %>%
+  ungroup() %>%
+  select (country, species, nutrient, adapt_diff_child_rda, rank) %>%
+  arrange (country, rank) %>%
+  write.excel()
+
+# upside full adapt to no adapt percent changes---
 catch_upside <- ds_spp %>%
   filter (scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), catch_mt > 0) %>%
   mutate (
