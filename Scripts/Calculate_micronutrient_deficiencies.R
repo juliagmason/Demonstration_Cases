@@ -10,6 +10,7 @@
 # can do calcium, vitamin A, iron, zinc, same as Hicks
 golden_mic_def <- readRDS("../nutrient_endowment/output/nutr_deficiencies_by_cntry_sex_age_2011.Rds") 
 
+
 mic_pdef_golden  <-  golden_mic_def %>%
   # no data for sierra leone. use guinea
   filter (country %in% c("Sierra Leone", "Indonesia", "Peru", "Chile", "Malawi", "Guinea"),
@@ -27,7 +28,7 @@ mic_pdef_golden  <-  golden_mic_def %>%
 # look at beal data, from 2017 PlosONE SI, in crfs maps project. use data from 2011
 # not separated into age groups, this has been included? should I use fortification? maybe?
 # can do calcium, zinc, iron, vitamin A, same as Hicks
-beal_mic_def <- read_csv ("../FishClimateNutritionMapping/Data/Beal_2017_SI_inadequate_micronutrients.csv")
+beal_mic_def <- read_csv ("Data/Beal_2017_SI_inadequate_micronutrients.csv")
 
 mic_def_rda_beal <- beal_mic_def %>%
   filter (Year == 2011, Country %in% c("Sierra Leone", "Indonesia", "Peru", "Chile", "Malawi"), 
