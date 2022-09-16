@@ -30,7 +30,7 @@ pop <- read_csv("Data/WPP2019_PopulationByAgeSex_Medium.csv")
 
 # separate into broad adult male/female and child categories to  match RDAs
 pop_current <- pop %>%
-  filter (Location %in% c("Sierra Leone", "Indonesia", "Peru", "Chile", "Malawi"), Time == 2020) %>%
+  filter (Location %in% c("Sierra Leone", "Indonesia", "Peru", "Chile", "Malawi", "Mexico"), Time == 2020) %>%
   mutate (group = 
             case_when (
               AgeGrp %in% c("0-4", "5-9") ~ "Child",
@@ -52,7 +52,7 @@ pop_current <- pop %>%
 # future population in decadal time periods ----
 
 pop_future <- pop %>%
-  filter (Location %in% c("Sierra Leone", "Indonesia", "Peru", "Chile", "Malawi"), Time %in% c(2025:2035, 2050:2060, 2090:2100)) %>%
+  filter (Location %in% c("Sierra Leone", "Indonesia", "Peru", "Chile", "Malawi", "Mexico"), Time %in% c(2026:2035, 2051:2060, 2091:2100)) %>%
   mutate (group = 
             case_when (
               AgeGrp %in% c("0-4", "5-9") ~ "Child",
@@ -65,9 +65,9 @@ pop_future <- pop %>%
   ungroup() %>%
   mutate (
     period = case_when (
-      Time %in% c(2025:2035) ~ "2025-2035",
-      Time %in% c(2050:2060) ~ "2050-2060",
-      Time %in% c(2090:2100) ~ "2090-2100"
+      Time %in% c(2026:2035) ~ "2026-2035",
+      Time %in% c(2051:2060) ~ "2051-2060",
+      Time %in% c(2091:2100) ~ "2091-2100"
     )) %>%
   group_by (Location, period) %>%
   summarise (Pop_Males = mean (Pop_Males),
@@ -116,9 +116,9 @@ rdas_met_projected_spp <- ds_catch_nutr_yield_projected %>%
   select (-c(catch_mt, amount, dens_units, pedible, meat_mt, nutr_mt, meat_servings)) %>%
   mutate (
     period = case_when (
-      year %in% c(2025:2035) ~ "2025-2035",
-      year %in% c(2050:2060) ~ "2050-2060",
-      year %in% c(2090:2100) ~ "2090-2100"
+      year %in% c(2026:2035) ~ "2026-2035",
+      year %in% c(2051:2060) ~ "2051-2060",
+      year %in% c(2091:2100) ~ "2091-2100"
     )) %>%
   filter (!is.na (period)) %>%
   group_by (country, rcp, scenario, period, nutrient, species) %>%

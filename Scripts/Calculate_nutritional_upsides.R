@@ -5,7 +5,8 @@
 library (tidyverse)
 
 # updated 3/25/22 to use rda data
-# projected nutrient yield in mt (per year) and servings (native units per day)
+# projected nutrient yield from FishNutrients for fish, GENuS for nonfish. in mt (per year) and servings (native units per day)
+# made this in Convert_catch_to_nutrients.R
 ds_catch_nutr_yield_projected <- readRDS ("Data/ds_catch_nutr_yield_projected.Rds")
 
 # RDAs data ----
@@ -17,21 +18,38 @@ rda_groups <- readRDS("Data/RDAs_5groups.Rds")
 pop_future <- readRDS("Data/country_pop_projections.Rds")
 
 # calculate population level rda needs
-rda_needs <- rda_groups %>%
+rda_needs_pop <- rda_groups %>%
   left_join (pop_future, by = "group") %>%
   filter (!is.na (population)) %>%
   mutate (rda_needs_group = mean_rda * population) %>%
   group_by (country, period, nutrient) %>%
-  summarize (rda_needs = sum(rda_needs_group)) 
+  summarize (rda_needs_pop = sum(rda_needs_group)) 
+
+# calculate rda needs just for children
+rda_needs_child <- rda_groups %>%
+  left_join (pop_future, by = "group") %>%
+  filter (!is.na (population), group == "Child") %>%
+  mutate (rda_needs_child = mean_rda * population) %>%
+  select (country, period, nutrient, mean_rda, rda_needs_child)
+
+#dumb
+rda_needs <- rda_needs_pop %>%
+  left_join (rda_needs_child, by = c ("country", "period", "nutrient"))
+
 
 # calculate difference in mt and servings between MEY/adaptive management and BAU for periods of interest. translate into projected RDAs met
-nutr_upside <- ds_catch_nutr_yield_projected %>%
+# small test dataset
+ds_sm <- ds_catch_nutr_yield_projected %>%
+  filter (scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), year %in% c(2026:2035, 2051:2060, 2091:2100)) %>%
+            sample_n(10000)
+
+nutr_upside <- ds_catch_nutr_yield_projected %>% #ds_catch_nutr_yield_projected %>%
   filter (scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation")) %>%
   mutate (
     period = case_when (
-      year %in% c(2025:2035) ~ "2025-2035",
-      year %in% c(2050:2060) ~ "2050-2060",
-      year %in% c(2090:2100) ~ "2090-2100"
+      year %in% c(2026:2035) ~ "2026-2035",
+      year %in% c(2051:2060) ~ "2051-2060",
+      year %in% c(2091:2100) ~ "2091-2100"
     )) %>%
   filter (!is.na (period)) %>%
   group_by (country, rcp, scenario, period, nutrient, species) %>%
@@ -43,13 +61,14 @@ nutr_upside <- ds_catch_nutr_yield_projected %>%
              adapt_diff_mt = nutr_mt[scenario == "Full Adaptation"] - nutr_mt[scenario == "No Adaptation"],
              mey_diff_servings = nutr_servings[scenario == "Productivity Only"] - nutr_servings[scenario == "No Adaptation"],
              adapt_diff_servings = nutr_servings[scenario == "Full Adaptation"] - nutr_servings[scenario == "No Adaptation"]) %>%
-  # also show rdas met fpr children
+  # also show rdas met for children, population
   left_join (rda_needs, by = c("country", "period", "nutrient")) %>%
-  left_join (filter (rda_groups, group == "Child"), by = "nutrient") %>%
-  mutate (mey_diff_rdas_prop = mey_diff_servings / rda_needs,
-          mey_diff_child_rda = mey_diff_servings / mean_rda,
-          adapt_diff_rdas_prop = adapt_diff_servings / rda_needs,
-          adapt_diff_child_rda = adapt_diff_servings / mean_rda)
+  mutate (mey_diff_rdas_prop = mey_diff_servings / rda_needs_pop, # this is the proportion of population's needs met
+          mey_diff_child_rda = mey_diff_servings / mean_rda, # this is how many child rdas met
+          mey_diff_child_prop = mey_diff_servings / rda_needs_child, # this is proportion of child rdas met
+          adapt_diff_rdas_prop = adapt_diff_servings / rda_needs_pop,
+          adapt_diff_child_rda = adapt_diff_servings / mean_rda,
+          adapt_diff_child_prop = adapt_diff_servings / rda_needs_child)
 
 saveRDS(nutr_upside, file = "Data/ds_nutr_upside.Rds")
 

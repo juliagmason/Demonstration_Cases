@@ -1,5 +1,6 @@
 # convert free scenario data to nutrient yield
 # updated 20220317
+# update 20220916 to use fishnutrients data
 
 library (tidyverse)
 library (measurements) # for converting units
@@ -11,7 +12,7 @@ library (measurements) # for converting units
 
 ds_spp <- readRDS("Data/Free_etal_2020_country_level_outcomes_time_series_for_julia.Rds")
 
-# nutrient content for each species, with baseline catch ----
+# nutrient content for each species from FishNutrients, with baseline catch (2012-2020) ----
 
 ds_spp_nutr_content <- readRDS ("Data/ds_spp_nutr_content_FishNutrientsGENuS_RDA_groups.Rds") 
 
