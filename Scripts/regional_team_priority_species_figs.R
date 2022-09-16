@@ -11,15 +11,22 @@ write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
 
 # country nutrient deficiencies from nutricast ----
 # do children to match rda
-golden_mic_def <- readRDS("../nutrient_endowment/output/nutr_deficiencies_by_cntry_sex_age_2011.Rds") %>%
+golden_mic_def <- readRDS("../nutrient_endowment/output/nutr_deficiencies_by_cntry_sex_age_2011.Rds") 
+
+golden_mic_def %>%
   filter (sex == "Children", nutrient %in% c ("Vitamin A", "Calcium", "Iron", "Zinc"), country %in% pri_spp_nutr$country) %>% 
   arrange (country, nutrient) %>%
   write.excel()
 
 
+# no data for sierra leone, use guinea
+golden_mic_def %>%
+  filter (sex == "Children", nutrient %in% c ("Vitamin A", "Calcium", "Iron", "Zinc", "Vitamin B6"), country %in% c("Guinea", "Malawi")) %>% 
+  arrange (country, nutrient) %>%
+  write.excel()
 
-###########################################################################
-# Data import ----
+
+# Priority species ----
 
 # top 5-7 priority species identified by regional teams
 # as of 8/4/22  have peru and chile, mexico (limited data avail). took indo spp from willow spreadsheet, but don't know where they came from
@@ -28,7 +35,7 @@ priority_spp <- read_csv ("Data/regional_teams_priority_spp.csv")
 # 8/10/22 mexico request from sammi lin
 sammi_spp <- c("Thunnus thynnus", "Diplodus vulgaris", "Galeorhinus galeus", "Argyrosomus regius", "Dicentrarchus labrax", "Sphoeroides annulatus", "Mugil cephalus", "Scomberomorus sierra", "Sardina pilchardus")
 
-# nutrient data and rda data
+# nutrient data and rda data ----
 rda_groups <- readRDS("Data/RDAs_5groups.Rds")
 fishnutr <- read_csv ("Data/Species_Nutrient_Predictions.csv")
 fishnutr_mu <- fishnutr %>%
@@ -53,13 +60,9 @@ pri_spp_nutr <- fishnutr_mu %>%
                        TRUE ~ nutrient)) %>%
   ungroup()
 
-# remove protein and copy to excel
-pri_spp_nutr %>%
-  filter (!nutrient == "Protein") %>%
-  arrange (country, rank, nutrient) %>%
-  write.excel()
 
-# SAU data
+
+# SAU data ----
 # also just want top ssf spp for each country
 sau <- read.csv ("Data/SAU_EEZ_landings.csv")
 
@@ -78,6 +81,8 @@ sau_country_cleaned <- sau %>%
   group_by (country, species, year, fishing_sector, fishing_entity, end_use_type) %>%
   summarise (tonnes = sum(tonnes),
              landed_value = sum(landed_value))
+
+# percent SSF for priority species 
           
           
 
@@ -102,41 +107,9 @@ ylim_sau <- sau_nutr_inds_fed %>%
   group_by (country, species) %>%
   summarise (max = max (needs_met/1000000))
 
-# nutricast full data
-ds_spp <- readRDS("Data/Free_etal_2020_country_level_outcomes_time_series_for_julia.Rds")
-
-# nutricast upside
-# this is amount of nutrients, not amount of catch
-# has proportion of future population RDAs met, and number of children fed (nutritional needs met)
-# I think this is what the team wants for nutrient diff for each 
-nutr_upside <- readRDS("Data/ds_nutr_upside.Rds")
-
-
-#  nutricast inds fed by sector
-proj_inds_fed_sector <- readRDS("Data/Nutricast_by_SAU_sector_inds_fed.Rds") %>%
-  mutate (
-          nutrient = case_when (nutrient == "Vitamin_A" ~ "Vit A",
-                                nutrient == "Omega_3" ~ "Omega 3",
-                                TRUE ~ nutrient))
-
-### calculate nutr supply function ----
-# adding--divide by 100 in here. I think Chris did that in his head but making me doubt everything
-calc_nutr_supply_mt <- function(meat_mt, nutr_dens, nutr_dens_units){
-  
-  # Convert meat to grams
-  # "Mg" is metric tons
-  meat_g <- measurements::conv_unit(meat_mt, "Mg", "g")
-  
-  # Calculate amount of nutrient in density units. divide by 100 because density units are per 100g
-  nutrient_q <- meat_g *  nutr_dens / 100
-  
-  # Calculate amount of nutrient in metric tons
-  nutrient_mt <- measurements::conv_unit(nutrient_q, nutr_dens_units, "Mg")
-  
-  # Return
-  return(nutrient_mt)
-  
-}
+# climate projection data ----
+# smaller, just rcp 60 and 85. now has mexico
+ds_spp <- readRDS("Data/Free_etal_proj_smaller.Rds")
 
 ###########################################################################
 ## Check data availability ----
@@ -159,9 +132,18 @@ cc <- ds_spp %>%
   filter (is.na (catch_mt)) %>%
   select (country, species) %>% distinct() %>% arrange (country)
 
+
+
+
 ###########################################################################
 ## Print values----
 
+# nutrition content ----
+# remove protein and copy to excel
+pri_spp_nutr %>%
+  filter (!nutrient == "Protein") %>%
+  arrange (country, rank, nutrient) %>%
+  write.excel()
 
 # micronutrient density----
 
@@ -175,6 +157,9 @@ print_micronutrient_density <- function (country_name, n_spp) {
 
 print_micronutrient_density ("Chile", 10)
 print_micronutrient_density ("Indonesia", 10)
+print_micronutrient_density("Sierra Leone", 4)
+
+# not using these anymore
 
 # print nutrient % ----
 pri_spp_nutr %>%
@@ -221,44 +206,104 @@ sammi_spp_nutr <- fishnutr_mu %>%
 write.csv (sammi_spp_nutr, file = "Data/nutrient_content_Mexico_spp_for_Sammi.csv", row.names = FALSE)
 
 
+# SAU print catch ----
+sau_country_catch <- 
+  sau_country_cleaned %>%
+  right_join (priority_spp, by = c ("country",  "species")) %>%
+  filter (year == 2015) %>%
+  group_by (country, species, rank) %>%
+  summarise (sum_tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  arrange (country, rank) %>%
+  write.excel()
 
+# tiny catches for SL...
+sau_country_cleaned %>%
+  filter (country == "Sierra Leone", species %in% priority_spp$species, between (year, 2000, 2015)) %>%
+  ggplot (aes (x = year, y = tonnes, fill = species)) +
+  geom_bar(stat = "identity")
 
 # sau industrial vs artisanal----
-sec <- sau_country_cleaned %>%
+sau_country_cleaned %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
-  filter (between (year, 2010, 2015)) %>%
-  group_by (country, species, year, fishing_sector) %>%
+  filter (between (year, 2000, 2015)) %>%
+  group_by (country, species, rank, year, fishing_sector) %>%
   summarise (sum_tonnes = sum (tonnes, na.rm = TRUE)) %>%
-  group_by (country, species) %>%
-  summarise (prop_ssf = sum (sum_tonnes[fishing_sector == "Artisanal"]) / sum (sum_tonnes),
-             prop_ind = sum (sum_tonnes[fishing_sector == "Industrial"]) / sum (sum_tonnes))
+  group_by (country, species, rank) %>%
+  summarise (prop_ssf = sum (sum_tonnes[fishing_sector == "Artisanal"]) / sum (sum_tonnes) * 100,
+             prop_ind = sum (sum_tonnes[fishing_sector == "Industrial"]) / sum (sum_tonnes) * 100) %>%
+  arrange (country, rank) %>%
+  write.excel()
 
-View(sec)
+# this seems like it really reduced SSF catch...yes, much more in recent years
+sau_country_cleaned %>%
+  right_join (priority_spp, by = c ("country",  "species")) %>%
+  filter (between (year, 2000, 2015)) %>%
+  filter (country == "Chile") %>%
+  ggplot (aes (x = year, y = tonnes, fill = fishing_sector)) +
+  geom_bar (stat = "identity")
 
-# sau foreign vs domestic---
+
+# sau foreign vs domestic----
 # print proportion foreign by country ----
-foreign <- sau_country_cleaned %>%
+sau_country_cleaned %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
   filter (between (year, 2000, 2015)) %>%
   mutate (fishing_country = ifelse (fishing_entity == country, "Domestic catch", "Foreign catch")) %>%
-  group_by (country, species, year, fishing_country) %>%
+  group_by (country, species, rank, year, fishing_country) %>%
   summarise (sum_tonnes = sum (tonnes, na.rm = TRUE)) %>%
-  group_by (country, species) %>%
+  group_by (country, species, rank) %>%
   summarise (prop_for = sum (sum_tonnes[fishing_country == "Foreign catch"]) / sum (sum_tonnes),
-             prop_dom = sum (sum_tonnes[fishing_country == "Domestic catch"]) / sum (sum_tonnes))
+             prop_dom = sum (sum_tonnes[fishing_country == "Domestic catch"]) / sum (sum_tonnes)) %>%
+  arrange (country, rank) %>%
+  write.excel()
 
-View(foreign)
 
-# upside BAU to MEY ---
+
+# upside BAU to MEY ----
+
+# nutricast upside ----
+
+# for spreadsheet just calculate the tons
+pri_spp_catch_upside <- ds_spp %>% 
+  right_join (priority_spp, by = c ("country",  "species")) %>%
+  mutate (
+    period = case_when (
+      year %in% c(2026:2035) ~ "2026-2035",
+      year %in% c(2051:2060) ~ "2051-2060",
+      year %in% c(2091:2100) ~ "2091-2100"
+    )) %>%
+  filter (!is.na (catch_mt), !is.na (period), scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation")) %>%
+  #take mean projected catch for the decade period
+  group_by (country, rcp, period, species, scenario) %>%
+  summarise (catch_mt = mean (catch_mt)) %>%
+  ungroup() %>%
+  # find difference among scenarios--absolute and percent diff
+  group_by (country, rcp, period, species) %>%
+  summarize (mey_diff_mt = catch_mt[scenario == "Productivity Only"] - catch_mt[scenario == "No Adaptation"],
+             mey_diff_percent = (catch_mt[scenario == "Productivity Only"] - catch_mt[scenario == "No Adaptation"])/catch_mt[scenario == "No Adaptation"] * 100,
+             adapt_diff_mt = catch_mt[scenario == "Full Adaptation"] - catch_mt[scenario == "No Adaptation"],
+             adapt_diff_percent = (catch_mt[scenario == "Full Adaptation"] - catch_mt[scenario == "No Adaptation"])/catch_mt[scenario == "No Adaptation"] * 100) %>%
+  ungroup()
+
+# rejoin to rank
+pri_spp_catch_upside %>%
+  filter (period == "2051-2060", rcp == "RCP60") %>%
+  left_join (priority_spp, by = c("country", "species")) %>%
+  arrange (country, rank) %>%
+  write.excel()
+
+
 ## nutritional upside inds fed
 
 nutr_upside_excel <- nutr_upside %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
-  filter (rcp == "RCP60", period == "2050-2060", !nutrient == "Protein")
+  filter (rcp == "RCP60", period == "2051-2060", !nutrient == "Protein")
+
+# prop is proportion, so multiply by 100 for percent
 
 nutr_upside_excel %>%
   ungroup() %>%
-  select (country, species, nutrient, mey_diff_child_rda, rank) %>%
+  select (country, species, nutrient, mey_diff_child_rda, mey_diff_rdas_prop, rank) %>%
   arrange (country, rank) %>%
   write.excel()
 
@@ -274,9 +319,9 @@ catch_upside <- ds_spp %>%
   filter (scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), catch_mt > 0) %>%
   mutate (
     period = case_when (
-      year %in% c(2025:2035) ~ "2025-2035",
-      year %in% c(2050:2060) ~ "2050-2060",
-      year %in% c(2090:2100) ~ "2090-2100"
+      year %in% c(2026:2035) ~ "2026-2035",
+      year %in% c(2051:2060) ~ "2051-2060",
+      year %in% c(2091:2100) ~ "2091-2100"
     )) %>%
   filter (!is.na (period)) %>%
   group_by (country, rcp, scenario, period, species) %>%
