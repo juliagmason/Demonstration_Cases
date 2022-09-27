@@ -9,6 +9,9 @@ write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
   write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
 }
 
+# function for converting catch in mt to children fed
+source ("Scripts/Function_convert_catch_amt_children_fed.R")
+
 # country nutrient deficiencies from nutricast ----
 # do children to match rda
 golden_mic_def <- readRDS("../nutrient_endowment/output/nutr_deficiencies_by_cntry_sex_age_2011.Rds") 
@@ -42,6 +45,7 @@ fishnutr_mu <- fishnutr %>%
   select (species, ends_with ("_mu"))
 
 # join priority spp to nutrient data
+# need to add genus data
 pri_spp_nutr <- fishnutr_mu %>%
   right_join (priority_spp, by = "species")  %>%
   pivot_longer (Selenium_mu:Vitamin_A_mu,
@@ -61,7 +65,10 @@ pri_spp_nutr <- fishnutr_mu %>%
   ungroup()
 
 
+# Landings ----
 
+# Chile country specific 
+chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
 # SAU data ----
 # also just want top ssf spp for each country
 sau <- read.csv ("Data/SAU_EEZ_landings.csv")
@@ -82,11 +89,9 @@ sau_country_cleaned <- sau %>%
   summarise (tonnes = sum(tonnes),
              landed_value = sum(landed_value))
 
-# percent SSF for priority species 
-          
-          
 
-# full sau nutr data by sector and end use
+
+# full sau nutr data by sector and end use --> do I need this?
 sau_nutr <- readRDS("Data/SAU_nutr_content_sector_enduse.Rds")
 
 # translate to inds fed
@@ -111,10 +116,18 @@ ylim_sau <- sau_nutr_inds_fed %>%
 # smaller, just rcp 60 and 85. now has mexico
 ds_spp <- readRDS("Data/Free_etal_proj_smaller.Rds")
 
+
 ###########################################################################
 ## Check data availability ----
 # nutrition
-pri_spp_nutr %>% filter (is.na(amount)) %>% select (country, comm_name, species) %>% distinct()
+fishnutr_mu %>%
+  right_join (priority_spp, by = "species")  %>%
+  pivot_longer (Selenium_mu:Vitamin_A_mu,
+                names_to = "nutrient",
+                values_to = "amount") %>%
+  filter (is.na(amount)) %>% 
+  select (country, comm_name, species) %>% 
+  distinct()
 
 # sau
 t <- sau_country_cleaned %>%
@@ -205,8 +218,22 @@ sammi_spp_nutr <- fishnutr_mu %>%
 
 write.csv (sammi_spp_nutr, file = "Data/nutrient_content_Mexico_spp_for_Sammi.csv", row.names = FALSE)
 
+# landings ----
 
-# SAU print catch ----
+#print mean catch, last five years ----
+
+# Chile
+chl_landings %>%
+  mutate (country = "Chile") %>%
+  right_join (priority_spp, by = c ("country", "species")) %>%
+  filter (between (year, 2017, 2021)) %>%
+  
+  group_by (species, rank) %>%
+  summarise (catch = mean (catch_mt, na.rm = TRUE)) %>%
+  arrange (rank) %>%
+  write.excel()
+
+# SAU catch
 sau_country_catch <- 
   sau_country_cleaned %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
@@ -222,10 +249,28 @@ sau_country_cleaned %>%
   ggplot (aes (x = year, y = tonnes, fill = species)) +
   geom_bar(stat = "identity")
 
-# sau industrial vs artisanal----
+# sau foreign vs domestic----
+# print proportion foreign by country ----
 sau_country_cleaned %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
-  filter (between (year, 2000, 2015)) %>%
+  filter (between (year, 2011, 2015)) %>%
+  mutate (fishing_country = ifelse (fishing_entity == country, "Domestic catch", "Foreign catch")) %>%
+  group_by (country, species, rank, year, fishing_country) %>%
+  summarise (sum_tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  group_by (country, species, rank) %>%
+  summarise (prop_for = sum (sum_tonnes[fishing_country == "Foreign catch"]) / sum (sum_tonnes),
+             mean_for_catch = mean (sum_tonnes[fishing_country == "Foreign catch"], na.rm = TRUE)) %>%
+  
+  arrange (country, rank) %>%
+  write.excel()
+
+
+
+# sau industrial vs artisanal----
+# domestic only
+sau_country_cleaned %>%
+  right_join (priority_spp, by = c ("country",  "species")) %>%
+  filter (between (year, 2011, 2015), fishing_entity == country) %>%
   group_by (country, species, rank, year, fishing_sector) %>%
   summarise (sum_tonnes = sum (tonnes, na.rm = TRUE)) %>%
   group_by (country, species, rank) %>%
@@ -237,25 +282,26 @@ sau_country_cleaned %>%
 # this seems like it really reduced SSF catch...yes, much more in recent years
 sau_country_cleaned %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
-  filter (between (year, 2000, 2015)) %>%
+  filter (between (year, 2000, 2015), fishing_entity == country) %>%
   filter (country == "Chile") %>%
   ggplot (aes (x = year, y = tonnes, fill = fishing_sector)) +
   geom_bar (stat = "identity")
 
+# chile national landings artisanal vs industrial
+# landings ----
 
-# sau foreign vs domestic----
-# print proportion foreign by country ----
-sau_country_cleaned %>%
-  right_join (priority_spp, by = c ("country",  "species")) %>%
-  filter (between (year, 2000, 2015)) %>%
-  mutate (fishing_country = ifelse (fishing_entity == country, "Domestic catch", "Foreign catch")) %>%
-  group_by (country, species, rank, year, fishing_country) %>%
-  summarise (sum_tonnes = sum (tonnes, na.rm = TRUE)) %>%
-  group_by (country, species, rank) %>%
-  summarise (prop_for = sum (sum_tonnes[fishing_country == "Foreign catch"]) / sum (sum_tonnes),
-             prop_dom = sum (sum_tonnes[fishing_country == "Domestic catch"]) / sum (sum_tonnes)) %>%
-  arrange (country, rank) %>%
+# chile, national landings data ----
+chl_landings %>%
+  mutate (country = "Chile") %>%
+  right_join (priority_spp, by = c ("country", "species")) %>%
+  filter (between (year, 2017, 2021)) %>%
+  
+  group_by (species, rank) %>%
+  summarise (prop_ssf = sum (catch_mt[sector == "Artisanal"]) / sum (catch_mt),
+             prop_ind = sum (catch_mt[sector == "Industrial"]) / sum (catch_mt)) %>%
+  arrange ( rank) %>%
   write.excel()
+
 
 
 
@@ -334,13 +380,163 @@ catch_upside <- ds_spp %>%
              adapt_diff_percent = (catch_mt[scenario == "Full Adaptation"] - catch_mt[scenario == "No Adaptation"])/catch_mt[scenario == "No Adaptation"] * 100)
 
 catch_upside %>%
-  filter (period == "2050-2060", rcp == "RCP60") %>%
+  filter (period == "2051-2060", rcp == "RCP60") %>%
   right_join (priority_spp, by = c ("species", "country")) %>% View()
+
+
+# upside in terms of relation to baseline catch----
+# to be able to use with our updated landings data, instead I want to calculate what the catch in 2050 is relative to baseline under the different scenarios. 
+
+catch_upside_relative <-  ds_spp %>%
+  filter (scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), catch_mt > 0) %>%
+  mutate (
+    # baseline and mid century and end century
+  period = case_when (
+    year %in% c(2012:2021) ~ "2012-2021",
+    year %in% c(2051:2060) ~ "2051-2060",
+    year %in% c(2091:2100) ~ "2091-2100")) %>%
+    filter (!is.na (period)) %>%
+    group_by (country, rcp, scenario, period, species) %>%
+    summarise (catch_mt = mean (catch_mt, na.rm = TRUE)) %>%
+    ungroup() %>%
+    group_by (country, rcp, species) %>%
+    summarize (bau_ratio_midcentury = catch_mt[scenario == "No Adaptation" & period == "2051-2060"]/ catch_mt[scenario == "No Adaptation" & period == "2012-2021"],
+               bau_ratio_endcentury = catch_mt[scenario == "No Adaptation" & period == "2091-2100"]/ catch_mt[scenario == "No Adaptation" & period == "2012-2021"],
+               mey_ratio_midcentury = catch_mt[scenario == "Productivity Only" & period == "2051-2060"]/ catch_mt[scenario == "No Adaptation" & period == "2012-2021"],
+               mey_ratio_endcentury = catch_mt[scenario == "Productivity Only" & period == "2091-2100"]/ catch_mt[scenario == "No Adaptation" & period == "2012-2021"],
+               adapt_ratio_midcentury = catch_mt[scenario == "Full Adaptation" & period == "2051-2060"]/ catch_mt[scenario == "No Adaptation" & period == "2012-2021"],
+               adapt_ratio_endcentury = catch_mt[scenario == "Full Adaptation" & period == "2091-2100"]/ catch_mt[scenario == "No Adaptation" & period == "2012-2021"]
+               )
+
+catch_upside_relative %>%
+  filter (rcp == "RCP60") %>%
+  right_join (priority_spp, by = c("country", "species")) %>%
+  write.excel()
             
+
+# convert to children fed, mid century, mey for chile ----
+
+# For each species, i would take the landings, then multiply by the ratio, then feed that number into the function
+
+chl_landings_input <- chl_landings %>%
+  filter (between (year, 2017, 2021)) %>%
+  group_by (species) %>%
+  summarise (catch = mean (catch_mt, na.rm = TRUE)) %>%
+  mutate (country = "Chile") %>%
+  inner_join (priority_spp, by = c ("country", "species")) %>%
+  inner_join (catch_upside_relative, by = c ("country", "species")) %>%
+  filter (rcp == "RCP60") %>%
+  mutate (mey_diff_catch = mey_ratio_midcentury * catch - bau_ratio_midcentury * catch,
+          adapt_diff_catch = adapt_ratio_midcentury * catch - bau_ratio_midcentury * catch)
+
+chl_landings_input_ls <- list (
+  species = chl_landings_input$species,
+  taxa = "Finfish",
+  amount_mt = chl_landings_input$mey_diff_catch
+)
+
+q <- pmap_dfr (chl_landings_input_ls, calc_children_fed_func)
+
+p <- pmap_dfr (chl_landings_input_ls, calc_children_fed_func)
+
 
 
 ###################################################################
 # Plots----
+
+# plot nutricast projections for all priority spp ----
+
+ds_pri_spp <-  ds_spp %>%
+  right_join (priority_spp, by = c("country", "species"))
+
+plot_nutricast_proj<- function (country_name, spp_name) {
+  
+  dat <- ds_pri_spp %>% 
+    filter (country == country_name, species == spp_name, year  >2030)
+  
+  dat$scenario <- factor (dat$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
+  
+  p <- dat %>% ggplot (aes (x = year, y = catch_mt, col = scenario)) +
+    geom_line() +
+    theme_bw() +
+    facet_grid (species ~ rcp, scales = "free_y") +
+    labs (x = "", y = "Catch, metric tons", col = "Mgmt scenario") +
+    ggtitle (paste0 ("Free et al. (2020) projections for ", spp_name, ", ", country_name)) +
+    theme (plot.title = element_text (size = 14),
+           axis.text = element_text (size = 12))
+  
+  print (p)
+  
+}
+
+plot_nutricast_proj(country_name = "Peru",spp_name = "Engraulis ringens")
+
+# need to take out missing country/spp combos? must be a faster way
+ds_pri_spp_input <- ds_pri_spp %>% filter (!is.na (catch_mt), catch_mt > 0) %>% select (country, species, rank) %>% distinct %>%
+  arrange (country, rank)
+
+pri_input_ls <- list (country_name = ds_pri_spp_input$country, spp_name = ds_pri_spp_input$species)
+
+pdf (file = "Figures/Priority_spp_Nutricast_timeseries.pdf", width = 12, height = 8)
+print(
+mapply (plot_nutricast_proj, ds_pri_spp_input$country, ds_pri_spp_input$species)
+)
+dev.off()
+
+
+# plot micronutrient density vs. % loss nutricast ----
+t <- ds_spp %>%
+  right_join (priority_spp, by = c("country", "species")) %>%
+  filter (scenario %in% c("No Adaptation"), catch_mt > 0) %>%
+  mutate (
+    period = case_when (
+      year %in% c(2012:2021) ~ "2012-2021",
+      year %in% c(2026:2035) ~ "2026-2035",
+      year %in% c(2051:2060) ~ "2051-2060",
+      year %in% c(2091:2100) ~ "2091-2100"
+    )) %>%
+  filter (!is.na (period)) %>%
+  group_by (country, rcp, period, species) %>%
+  summarise (catch_mt = mean (catch_mt, na.rm = TRUE)) %>%
+  ungroup() %>%
+  group_by (country, rcp, species) %>%
+  summarise (perc_ratio_midcentury = (catch_mt[period == "2051-2060"] - catch_mt[period == "2012-2021"])/catch_mt[period == "2012-2021"],
+             perc_diff_endcentury = (catch_mt[period == "2091-2100"] - catch_mt[period == "2012-2021"])/catch_mt[period == "2012-2021"])
+
+
+mic_dens <- pri_spp_nutr %>%
+  filter ( 
+          !nutrient %in% c("Protein", "Selenium")) %>%
+  group_by (country, species) %>%
+  summarise (micronutrient_density = sum (perc_rda)) 
+
+
+mic_dens %>%
+  left_join (t, by = c ("country", "species")) %>%
+  filter (rcp == "RCP60") %>%
+  ggplot (aes (x = perc_diff_midcentury, y = micronutrient_density, col = country)) +
+  geom_point () +
+  geom_text (aes(label = species)) +
+  theme_bw() +
+  geom_hline (yintercept = 0, lty = 2) +
+  geom_vline (xintercept = 0, lty = 2) +
+  xlim (c(-1, 0.005))
+
+# plot mic dens vs. percent gain adapt diff ----
+x <- catch_upside %>%
+  right_join (priority_spp, by = c ("country", "species")) %>%
+  right_join (mic_dens, by = c("species", "country")) %>%
+  filter (rcp == "RCP60", period == "2051-2060") %>%
+  ggplot (aes (x = adapt_diff_percent, y = micronutrient_density, col = country)) +
+  geom_point () +
+  geom_text (aes(label = species)) +
+  theme_bw() +
+  geom_hline (yintercept = 0, lty = 2) +
+  geom_vline (xintercept = 0, lty = 2) #+
+  #xlim (c(-1, 0.005))
+  
+
+
 
 # show nutr content as bar graph ----
 plot_priority_spp_nutr_bar <- function (country_name, n_spp) {
