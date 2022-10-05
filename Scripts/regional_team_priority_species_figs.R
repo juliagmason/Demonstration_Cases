@@ -33,7 +33,11 @@ golden_mic_def %>%
 
 # top 5-7 priority species identified by regional teams
 # as of 8/4/22  have peru and chile, mexico (limited data avail). took indo spp from willow spreadsheet, but don't know where they came from
-priority_spp <- read_csv ("Data/regional_teams_priority_spp.csv")
+priority_spp <- read_csv ("Data/regional_teams_priority_spp.csv") %>%
+  # just change S. japonicus peruanus to S. japonicus; no nutrient or SAU or nutricast data
+  mutate (species = case_when (species == "Scomber japonicus peruanus" ~ "Scomber japonicus",
+                               TRUE ~ species)
+          )
 
 # 8/10/22 mexico request from sammi lin
 sammi_spp <- c("Thunnus thynnus", "Diplodus vulgaris", "Galeorhinus galeus", "Argyrosomus regius", "Dicentrarchus labrax", "Sphoeroides annulatus", "Mugil cephalus", "Scomberomorus sierra", "Sardina pilchardus")
@@ -46,6 +50,22 @@ fishnutr_mu <- fishnutr %>%
 
 # join priority spp to nutrient data
 # need to add genus data
+# add invert genus key
+# genus data for nonfish [eventually could use AFCD]
+spp_key <- read.csv(file.path ("../nutrient_endowment/output/Gaines_species_nutrient_content_key.csv"), as.is=T) %>% 
+  select (species, major_group, genus_food_name, calcium_mg, iron_mg, polyunsaturated_fatty_acids_g, protein_g, vitamin_a_mcg_rae, zinc_mg) %>%
+  # recode major_Group_ name from nutricast code
+  mutate (
+    major_group=recode(genus_food_name,
+                       "Cephalopods"="Cephalopods",
+                       "Crustaceans"="Crustaceans",
+                       "Demersal Fish"="Finfish",
+                       "Marine Fish; Other"="Finfish",
+                       "Molluscs; Other"="Molluscs",
+                       "Pelagic Fish"="Finfish")
+    
+  ) 
+
 pri_spp_nutr <- fishnutr_mu %>%
   right_join (priority_spp, by = "species")  %>%
   pivot_longer (Selenium_mu:Vitamin_A_mu,
@@ -143,7 +163,9 @@ t <- sau_country_cleaned %>%
 cc <- ds_spp %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
   filter (is.na (catch_mt)) %>%
-  select (country, species) %>% distinct() %>% arrange (country)
+  select (country, species) %>% 
+  distinct() %>% 
+  arrange (country)
 
 
 
@@ -153,9 +175,25 @@ cc <- ds_spp %>%
 
 # nutrition content ----
 # remove protein and copy to excel
+
 pri_spp_nutr %>%
   filter (!nutrient == "Protein") %>%
   arrange (country, rank, nutrient) %>%
+  write.excel()
+
+# just take cephalopod and molluscs and copy into sheet; I circumvented this problem with the convert_catch_amt_children_fed function 
+spp_key_long %>%
+  filter (taxa == "Cephalopods", !nutrient == "Protein") %>%
+  select (-species) %>%
+  distinct() %>%
+  arrange (nutrient) %>%
+  write.excel()
+
+spp_key_long %>%
+  filter (taxa == "Molluscs; Other", !nutrient == "Protein") %>%
+  select (-species) %>%
+  distinct() %>%
+  arrange (nutrient) %>%
   write.excel()
 
 # micronutrient density----
@@ -274,9 +312,9 @@ sau_country_cleaned %>%
   group_by (country, species, rank, year, fishing_sector) %>%
   summarise (sum_tonnes = sum (tonnes, na.rm = TRUE)) %>%
   group_by (country, species, rank) %>%
-  summarise (prop_ssf = sum (sum_tonnes[fishing_sector == "Artisanal"]) / sum (sum_tonnes) * 100,
-             prop_ind = sum (sum_tonnes[fishing_sector == "Industrial"]) / sum (sum_tonnes) * 100) %>%
-  arrange (country, rank) %>%
+  summarise (prop_ssf = sum (sum_tonnes[fishing_sector == "Artisanal"]) / sum (sum_tonnes) ,
+             prop_ind = sum (sum_tonnes[fishing_sector == "Industrial"]) / sum (sum_tonnes)) %>%
+  arrange (country, rank) %>% 
   write.excel()
 
 # this seems like it really reduced SSF catch...yes, much more in recent years
@@ -411,6 +449,8 @@ catch_upside_relative <-  ds_spp %>%
 catch_upside_relative %>%
   filter (rcp == "RCP60") %>%
   right_join (priority_spp, by = c("country", "species")) %>%
+  filter (!country == "Indonesia") %>%
+  arrange (country, rank) %>%
   write.excel()
             
 
