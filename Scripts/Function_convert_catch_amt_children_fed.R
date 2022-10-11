@@ -25,6 +25,12 @@ fishnutr_long <- fishnutr_mu %>%
                            values_to = "amount") %>%
   mutate (nutrient = str_sub(nutrient, end = -4))
 
+# d gigas data from Bianchi et al. 2022 supp table 2. Vita A is retinol equiv; omega 3 is n-3 fatty acids
+d_gigas_nutr <- data.frame (
+  species = "Dosidicus gigas", 
+  nutrient = c ("Calcium", "Iron", "Omega_3", "Protein", "Selenium", "Vitamin_A", "Zinc"),
+  amount = c(37.5, 3.3, 0.6, 16.4, 50.9, 0, 2.8)
+)
 
 # genus data for nonfish [eventually could use AFCD]
 spp_key <- read.csv(file.path ("../nutrient_endowment/output/Gaines_species_nutrient_content_key.csv"), as.is=T)
@@ -58,16 +64,23 @@ mutate (
 rda_groups <- readRDS("Data/RDAs_5groups.Rds")
 rda_child <- rda_groups %>% filter (group == "Child")
 
+# use WHO RNI
+rni_child <- readRDS("Data/RNI_child.Rds") 
+
+
+
 calc_children_fed_func <- function (species_name, taxa, amount_mt) {
   
   p_edible <- case_when (
     taxa == "Finfish" ~ 0.87,
     taxa == "Crustacean" ~ 0.36,
     taxa == "Mollusc" ~ 0.17,
-    taxa == "Cephalopod" ~ 0.21)
-  
+    taxa == "Cephalopod" ~ 0.67)
+ # GENuS/nutricast is 0.21 for cephalopods. Using 0.67, Bianchi et al. 2022 value for D. gigas; only cephalopod in our priority species. They also have a blanket 0.7 value for cephalopods.  
   if (taxa == "Finfish") {
     nutr_content <- fishnutr_long %>% filter (species == species_name)
+  } else if (species_name == "Dosidicus gigas") {
+    nutr_content = d_gigas_nutr
   } else {
     nutr_content <- spp_key_long %>% filter (species == species_name)
   }   
@@ -77,11 +90,12 @@ calc_children_fed_func <- function (species_name, taxa, amount_mt) {
             # convert tons per year to 100g /day, proportion edible
             edible_servings = catch_mt * p_edible * 1000 * 1000 /100 / 365,
             nutrient_servings = edible_servings * amount) %>%
-    left_join (rda_child, by = "nutrient") %>%
-    mutate (children_fed = nutrient_servings / mean_rda)
+    left_join (rni_child, by = "nutrient") %>%
+    mutate (children_fed = nutrient_servings / RNI)
   
 
 }
 
-# s <- calc_children_fed_func("Dosidicus gigas", "Cephalopod", 151407)
-# t <- calc_children_fed_func("Trachurus murphyi", "Finfish", 15429)
+s <- calc_children_fed_func("Dosidicus gigas", "Cephalopod", 151407)
+t <- calc_children_fed_func("Trachurus murphyi", "Finfish", 15429)
+m <- calc_children_fed_func ("Crassostrea gigas", "Mollusc", 200)
