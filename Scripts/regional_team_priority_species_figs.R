@@ -111,6 +111,19 @@ sau_country_cleaned <- sau %>%
 
 
 
+
+# quick check
+sau_country_cleaned %>%
+  filter (species == "Engraulis ringens", between (year, 2010, 2018)) %>%
+  ggplot (aes (x = year, y = tonnes, fill = fishing_sector)) +
+  geom_bar (stat = "identity") +
+  facet_wrap (~country)
+
+sau_country_cleaned %>%
+  filter ( between (year, 2010, 2018)) %>%
+  ggplot (aes (x = year, y = tonnes, fill = fishing_sector)) +
+  geom_bar (stat = "identity") +
+  facet_wrap (~country, scales = "free_y")
 # full sau nutr data by sector and end use --> do I need this?
 sau_nutr <- readRDS("Data/SAU_nutr_content_sector_enduse.Rds")
 
