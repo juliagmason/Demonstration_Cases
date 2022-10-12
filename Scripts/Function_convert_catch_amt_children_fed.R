@@ -61,8 +61,8 @@ mutate (
   
 
 
-rda_groups <- readRDS("Data/RDAs_5groups.Rds")
-rda_child <- rda_groups %>% filter (group == "Child")
+# rda_groups <- readRDS("Data/RDAs_5groups.Rds")
+# rda_child <- rda_groups %>% filter (group == "Child")
 
 # use WHO RNI
 rni_child <- readRDS("Data/RNI_child.Rds") 
@@ -96,6 +96,6 @@ calc_children_fed_func <- function (species_name, taxa, amount_mt) {
 
 }
 
-s <- calc_children_fed_func("Dosidicus gigas", "Cephalopod", 151407)
-t <- calc_children_fed_func("Trachurus murphyi", "Finfish", 15429)
-m <- calc_children_fed_func ("Crassostrea gigas", "Mollusc", 200)
+# s <- calc_children_fed_func("Dosidicus gigas", "Cephalopod", 151407)
+# t <- calc_children_fed_func("Trachurus murphyi", "Finfish", 15429)
+# m <- calc_children_fed_func ("Crassostrea gigas", "Mollusc", 200)
