@@ -57,6 +57,10 @@ t <- map_dfr (chl_files, clean_chl_data)
 chl_landings  <- t %>%
   left_join (chl_spp, by = "ESPECIE") %>%
   select (species, catch_mt, year, sector) %>%
-  filter (!is.na (species))
+  filter (!is.na (species)) %>%
+  # fix some species names
+  mutate (species = 
+            case_when (species == "Mujil cephalus" ~ "Mugil cephalus", 
+                       TRUE ~ species))
 
 saveRDS (chl_landings, file = "Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
