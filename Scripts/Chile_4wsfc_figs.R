@@ -223,6 +223,11 @@ chl_landings_nutr_mean %>%
   labs (x = "", y = "", fill = "")
 dev.off()
 
+# check values
+chl_landings_nutr_mean %>%
+  group_by (sector, nutrient) %>%
+  summarise (sum = sum (children_fed, na.rm = TRUE)/1000000)
+
 
 # children fed, end use  ----
 # take end proportions for each species from sau
@@ -387,13 +392,224 @@ ggplot ( aes (x = nutrient, y = children_fed/1000000)) +
   )
 dev.off()
 
+
+##### 
+## SAU overall sample figs again----
+
+# sau taxa key to join to nutrient data
+sau_taxa <- sau %>%
+  select (scientific_name, functional_group) %>% distinct() %>%
+  rename (species = scientific_name) %>%
+  mutate (taxa = case_when (
+    functional_group %in% c("Shrimps", "Lobsters, crabs") ~ "Crustacean",
+    functional_group == "Cephalopods" ~ "Cephalopod",
+    # not exact but close enought
+    functional_group %in% c ("Other demersal invertebrates") ~ "Mollusc",
+    functional_group %in% c("Jellyfish") ~ "NA",
+    TRUE ~ "Finfish")
+  ) 
+
+# summarise and subset, last 5 years
+sau_summarized <- sau %>%
+  mutate (country = case_when(
+    grepl("Indo", area_name) ~ "Indonesia",
+    grepl ("Mex", area_name) ~ "Mexico",
+    area_name == "Chile (mainland)" ~ "Chile",
+    TRUE ~ area_name),
+    foreign = ifelse (fishing_entity == country, "Domestic", "Foreign")
+  ) %>%
+  rename (species = scientific_name) %>%
+  filter (year > 2013) %>%
+  # first sum within year, many data layers
+  group_by (country, species, year, fishing_sector, foreign, end_use_type) %>%
+  summarise (tonnes = sum(tonnes)) %>%
+  ungroup() %>%
+  # then mean across years
+  group_by(country, species, fishing_sector, foreign, end_use_type) %>%
+  summarise (catch_mt = mean (tonnes, na.rm = TRUE)) %>%
+  left_join (sau_taxa, by = "species")
+
+# make input list for convert children fed
+sau_nutr_ls <- list (species_name = sau_summarized$species, 
+                     taxa = sau_summarized$taxa,
+                     amount_mt = sau_summarized$catch_mt)
+
+sau_nutr <- pmap_dfr (sau_nutr_ls, calc_children_fed_func)
+
+sau_summarized_nutr <- sau_nutr %>%
+  select (-taxa) %>%
+  left_join (sau_summarized, by = c("species", "catch_mt"))
+
+
+# plot dhc industrial vs. artisanal facet by country ----
+png ("Figures/4WSFC_sau_dom_dhc_sector_compare.png", width = 12, height = 5, res = 300, units = "in", bg = "transparent")
+sau_summarized_nutr %>%
+  filter (foreign == "Domestic",
+          end_use_type == "Direct human consumption",
+          fishing_sector %in% c("Industrial", "Artisanal"),
+          nutrient != "Protein") %>% 
+  mutate (nutrient = case_when (nutrient == "Omega_3" ~ "Om 3",
+                                nutrient == "Vitamin_A" ~ "Vit A", 
+                                nutrient == "Calcium" ~ "Cal",
+                                nutrient == "Selenium" ~ "Sel",
+                                TRUE ~ nutrient)) %>% 
+  ggplot (aes (x = nutrient, y = children_fed/1000000, fill = fishing_sector)) +
+  geom_col(position = "dodge", stat = "identity") +
+  facet_wrap (~country, scales = "free_y") +
+  theme_bw() +
+  labs (x = "", y = "") +
+  theme (
+    legend.position = "none",
+    axis.text = element_text (size = 20),
+    strip.text = element_text (size = 24)
+  )
+dev.off()
+
+# check dodge....giving bad values. but on par with previous ones for chile sernapesca...
+sau_summarized_nutr %>%
+  filter (foreign == "Domestic",
+          end_use_type == "Direct human consumption",
+          fishing_sector %in% c("Industrial", "Artisanal"),
+          nutrient != "Protein", 
+          country == "Chile") %>%
+  group_by (nutrient, fishing_sector) %>%
+  summarise (fed = sum(children_fed, na.rm = TRUE)/1000000)
+ 
+
+# plot domestic vs. foreign ----
+png ("Figures/4WSFC_sau_foreign_dhc_sector_compare.png", width = 12, height = 5, res = 300, units = "in", bg = "transparent")
+
+sau_summarized_nutr %>%
+  filter (
+          #end_use_type == "Direct human consumption",
+          fishing_sector %in% c("Industrial", "Artisanal"),
+          nutrient != "Protein") %>% 
+  mutate (nutrient = case_when (nutrient == "Omega_3" ~ "Om 3",
+                                nutrient == "Vitamin_A" ~ "Vit A", 
+                                nutrient == "Calcium" ~ "Cal",
+                                nutrient == "Selenium" ~ "Sel",
+                                TRUE ~ nutrient)) %>% 
+  ggplot (aes (x = nutrient, y = children_fed/1000000, fill = foreign)) +
+  geom_col(position = "dodge") +
+  facet_wrap (~country, scales = "free_y") +
+  scale_fill_manual (values = c ("goldenrod3", "dodgerblue3")) +
+  theme_bw() +
+  labs (x = "", y = "") +
+  theme (
+    legend.position = "none",
+    axis.text = element_text (size = 20),
+    strip.text = element_text (size = 24)
+  )
+dev.off()
+
+# plot end use ----
+# set levels
+sau_summarized_nutr$end_use_type <- factor (sau_summarized_nutr$end_use_type, levels = c ("Fishmeal and fish oil", "Discards", "Direct human consumption", "Other"))
+
+png ("Figures/4WSFC_sau_enduse_sector_compare.png", width = 12, height = 5, res = 300, units = "in", bg = "transparent")
+
+sau_summarized_nutr %>%
+  filter (
+    end_use_type != "Other",
+    fishing_sector %in% c("Industrial", "Artisanal"),
+    nutrient != "Protein") %>% 
+  mutate (nutrient = case_when (nutrient == "Omega_3" ~ "Om 3",
+                                nutrient == "Vitamin_A" ~ "Vit A", 
+                                nutrient == "Calcium" ~ "Cal",
+                                nutrient == "Selenium" ~ "Sel",
+                                TRUE ~ nutrient)) %>% 
+  ggplot (aes (x = nutrient, y = children_fed/1000000, fill = end_use_type)) +
+  geom_col(position = "dodge") +
+  facet_wrap (~country, scales = "free_y") +
+ # scale_fill_manual (values = c ("goldenrod3", "dodgerblue3")) +
+  theme_bw() +
+  labs (x = "", y = "") +
+  theme (
+    legend.position = "none",
+    axis.text = element_text (size = 20),
+    strip.text = element_text (size = 24)
+  )
+dev.off()
+
+
+#####
+# nutricast upside overall ----
+# use catch_upside_relative from regional_team_priority_species_figs.r
+
+# do total landings for sau
+sau_total <- sau %>%
+  mutate (country = case_when(
+    grepl("Indo", area_name) ~ "Indonesia",
+    grepl ("Mex", area_name) ~ "Mexico",
+    area_name == "Chile (mainland)" ~ "Chile",
+    TRUE ~ area_name)
+  ) %>%
+  rename (species = scientific_name) %>%
+  filter (year > 2013) %>%
+  group_by (country, species, year) %>%
+  summarise (total = sum (tonnes, na.rm = TRUE)) %>%
+  ungroup() %>%
+  group_by (country, species) %>%
+  summarise (mean = mean (total, na.rm = TRUE))
+
+upside_4countries <- catch_upside_relative %>%
+  filter (rcp == "RCP60") %>%
+  left_join (sau_total, by = c ("country", "species")) %>%
+  # catch_mt to join back after do nutrient
+  mutate (catch_mt = mean * adapt_ratio_midcentury) %>%
+  # join taxa
+  left_join (sau_taxa, by = "species") %>%
+  # many missing taxa??? just do finfish, will return NA if not in fisnnutrients
+  replace_na (list(taxa = "Finfish"))
+
+upside_nutr_ls <- list (species_name = upside_4countries$species, taxa = upside_4countries$taxa, amount_mt = upside_4countries$catch_mt)
+
+upside_nutr <- pmap_dfr (upside_nutr_ls, calc_children_fed_func)
+
+# rejoin
+upside_4countries_join <- upside_4countries %>%
+  select (-taxa) %>%
+  left_join (upside_nutr, by = c("species", "catch_mt")) %>%
+  filter (!is.na (children_fed))
+
+
+png ("Figures/4WSFC_nutricast_upside_4countries.png", width = 12, height = 5, res = 300, units = "in", bg = "transparent")
+
+upside_4countries_join %>%
+  filter (!nutrient == "Protein") %>%
+  mutate (nutrient = case_when (nutrient == "Omega_3" ~ "Om 3",
+                                nutrient == "Vitamin_A" ~ "Vit A", 
+                                nutrient == "Calcium" ~ "Cal",
+                                nutrient == "Selenium" ~ "Sel",
+                                TRUE ~ nutrient)) %>% 
+  ggplot (aes (x = nutrient, y = children_fed/1000000)) +
+  geom_col() +
+  facet_wrap (~country, scales = "free_y") +
+  theme_bw() +
+  labs (x = "", y = "") +
+  theme (
+    legend.position = "none",
+    axis.text = element_text (size = 20),
+    strip.text = element_text (size = 24)
+  )
+dev.off()
+  
+
 ####################################################3333
 ### same with Peru, just children fed, end use ssf vs ind----
 # SAU data, mean of last five years
 # sau taxa key
 sau_taxa <- sau %>%
   select (scientific_name, functional_group) %>% distinct() %>%
-  rename (species = scientific_name)
+  rename (species = scientific_name) %>%
+  mutate (taxa = case_when (
+    functional_group %in% c("Shrimps", "Lobsters, crabs") ~ "Crustacean",
+    functional_group == "Cephalopods" ~ "Cephalopod",
+    # not exact but close enought
+    functional_group %in% c ("Other demersal invertebrates") ~ "Mollusc",
+    functional_group %in% c("Jellyfish") ~ "NA",
+    TRUE ~ "Finfish")
+  ) 
 
 peru_sau <- sau %>% 
   filter (area_name == "Peru", year > 2013) %>%
@@ -466,6 +682,10 @@ peru_sau_nutr_mean %>%
          axis.text = element_text (size = 16)) +
   labs (x = "", y = "", fill = "")
 dev.off()
+
+
+######
+# comparative nutrient upside graph?? just adaptive mgmt?
 
 
 ##########################################################333
