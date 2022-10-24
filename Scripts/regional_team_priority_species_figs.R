@@ -339,7 +339,6 @@ sau_country_cleaned %>%
   geom_bar (stat = "identity")
 
 # chile national landings artisanal vs industrial
-# landings ----
 
 # chile, national landings data ----
 chl_landings %>%
@@ -354,7 +353,17 @@ chl_landings %>%
   write.excel()
 
 
+# exports ARTIS ----
+exports <- read_csv ("Data/20221019_edf_ARTIS_snet.csv")
+# most recent year is 2019
+exports_5yr_mean <- exports %>%
+  filter (between (year, 2015, 2019)) %>%
+  group_by (exporter_iso3c, sciname) %>%
+  summarise (mn_perc_exp = mean (exports_percent_of_prod, na.rm = TRUE))
 
+# join to pri-spp to arrange by rank? too much trouble
+
+write.excel (exports_5yr_mean)
 
 # upside BAU to MEY ----
 
