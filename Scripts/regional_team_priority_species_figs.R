@@ -9,7 +9,8 @@ write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
   write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
 }
 
-# function for converting catch in mt to children fed
+# function for converting catch in mt to children fed ----
+# this will also bring in fishnutr data and RNI data
 source ("Scripts/Function_convert_catch_amt_children_fed.R")
 
 # country nutrient deficiencies from nutricast ----
@@ -42,13 +43,8 @@ priority_spp <- read_csv ("Data/regional_teams_priority_spp.csv") %>%
 # 8/10/22 mexico request from sammi lin
 sammi_spp <- c("Thunnus thynnus", "Diplodus vulgaris", "Galeorhinus galeus", "Argyrosomus regius", "Dicentrarchus labrax", "Sphoeroides annulatus", "Mugil cephalus", "Scomberomorus sierra", "Sardina pilchardus")
 
-# nutrient data and rda data ----
-rda_groups <- readRDS("Data/RDAs_5groups.Rds")
-fishnutr <- read_csv ("Data/Species_Nutrient_Predictions.csv")
-fishnutr_mu <- fishnutr %>%
-  select (species, ends_with ("_mu"))
 
-# join priority spp to nutrient data
+# join priority spp to nutrient data ----
 # need to add genus data
 # add invert genus key
 # genus data for nonfish [eventually could use AFCD]
@@ -89,7 +85,16 @@ pri_spp_nutr <- fishnutr_mu %>%
 
 # Chile country specific 
 chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
+
 # SAU data ----
+
+# as of 10/25/22 just 2019 data, suggested by Deng Palomares
+sau_2019 <- readRDS("Data/SAU_2019.Rds")
+
+# or mean of most recent 5 yeras
+sau_2015_2019 <- readRDS("Data/SAU_2015_2019.Rds")
+
+
 # also just want top ssf spp for each country
 sau <- read.csv ("Data/SAU_EEZ_landings.csv")
 
@@ -111,7 +116,6 @@ sau_country_cleaned <- sau %>%
 
 
 
-
 # quick check
 sau_country_cleaned %>%
   filter (species == "Engraulis ringens", between (year, 2010, 2018)) %>%
@@ -124,26 +128,8 @@ sau_country_cleaned %>%
   ggplot (aes (x = year, y = tonnes, fill = fishing_sector)) +
   geom_bar (stat = "identity") +
   facet_wrap (~country, scales = "free_y")
-# full sau nutr data by sector and end use --> do I need this?
-sau_nutr <- readRDS("Data/SAU_nutr_content_sector_enduse.Rds")
 
-# translate to inds fed
-sau_nutr_inds_fed <- sau_nutr %>%
-  group_by (species, country, nutrient) %>%
-  summarise (tot_servings = sum (nutr_servings)) %>%
-  left_join (filter (rda_groups, group == "Child"), by = "nutrient") %>%
-  mutate (needs_met = tot_servings / mean_rda, 
-          nutrient = case_when (nutrient == "Vitamin_A" ~ "Vit A",
-                                nutrient == "Omega_3" ~ "Omega 3",
-                                TRUE ~ nutrient)) %>%
-  filter (!nutrient %in% c("Protein", "Selenium"))
 
-# calculate upper value for each one?
-ylim_sau <- sau_nutr_inds_fed %>%
-  right_join (priority_spp, by = c("country", "species")) %>%
-  # keep species so I can plot whichever species
-  group_by (country, species) %>%
-  summarise (max = max (needs_met/1000000))
 
 # climate projection data ----
 # smaller, just rcp 60 and 85. now has mexico
@@ -163,9 +149,9 @@ fishnutr_mu %>%
   distinct()
 
 # sau
-t <- sau_country_cleaned %>%
+t <- sau_2019 %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
-  filter (between (year, 2010, 2018)) %>% 
+ 
   group_by (country, species, year) %>%
   summarise (sum_tonnes = sum (tonnes, na.rm = TRUE)) %>%
   group_by (country, species) %>%
@@ -188,26 +174,18 @@ cc <- ds_spp %>%
 
 # nutrition content ----
 # remove protein and copy to excel
+# this is species nutrition content in excel sheet; species_nutrition_info in google sheet
 
-pri_spp_nutr %>%
-  filter (!nutrient == "Protein") %>%
+fishnutr_mu %>%
+  right_join (priority_spp, by = "species")  %>%
+  pivot_longer (Selenium_mu:Vitamin_A_mu,
+                names_to = "nutrient",
+                values_to = "amount") %>%
+  mutate (nutrient = str_sub(nutrient, end = -4)) %>%
   arrange (country, rank, nutrient) %>%
-  write.excel()
+  write.excel ()
 
-# just take cephalopod and molluscs and copy into sheet; I circumvented this problem with the convert_catch_amt_children_fed function 
-spp_key_long %>%
-  filter (taxa == "Cephalopods", !nutrient == "Protein") %>%
-  select (-species) %>%
-  distinct() %>%
-  arrange (nutrient) %>%
-  write.excel()
 
-spp_key_long %>%
-  filter (taxa == "Molluscs; Other", !nutrient == "Protein") %>%
-  select (-species) %>%
-  distinct() %>%
-  arrange (nutrient) %>%
-  write.excel()
 
 # micronutrient density----
 
@@ -222,26 +200,6 @@ print_micronutrient_density <- function (country_name, n_spp) {
 print_micronutrient_density ("Chile", 10)
 print_micronutrient_density ("Indonesia", 10)
 print_micronutrient_density("Sierra Leone", 4)
-
-# not using these anymore
-
-# print nutrient % ----
-pri_spp_nutr %>%
-  select (country, species, nutrient, perc_rda) %>% 
-  filter (!nutrient %in% c("Protein")) %>%
-  arrange (country, species, desc(perc_rda))
-
-# print raw values, raw nutrient content ----
-pri_spp_nutr_values <- fishnutr_mu %>%
-  right_join (priority_spp, by = "species")  %>%
-  pivot_longer (Selenium_mu:Vitamin_A_mu,
-                names_to = "nutrient",
-                values_to = "amount") %>%
-  mutate (nutrient = str_sub(nutrient, end = -4)) %>% 
-  select (country, species, nutrient, amount) %>% 
-  filter (!nutrient %in% c("Protein")) %>%
-  group_by (country, species) %>%
-  slice_max (amount, n = 4)
 
 
 # sammi spp
@@ -284,11 +242,12 @@ chl_landings %>%
   arrange (rank) %>%
   write.excel()
 
+
+
 # SAU catch
-sau_country_catch <- 
-  sau_country_cleaned %>%
+sau_country_catch_2019 <- 
+  sau_2019 %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
-  filter (year == 2015) %>%
   group_by (country, species, rank) %>%
   summarise (sum_tonnes = sum (tonnes, na.rm = TRUE)) %>%
   arrange (country, rank) %>%
@@ -301,10 +260,11 @@ sau_country_cleaned %>%
   geom_bar(stat = "identity")
 
 # sau foreign vs domestic----
-# print proportion foreign by country ----
-sau_country_cleaned %>%
+# print proportion foreign by country 
+# use mean? or just 2019?
+
+sau_2015_2019 %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
-  filter (between (year, 2011, 2015)) %>%
   mutate (fishing_country = ifelse (fishing_entity == country, "Domestic catch", "Foreign catch")) %>%
   group_by (country, species, rank, year, fishing_country) %>%
   summarise (sum_tonnes = sum (tonnes, na.rm = TRUE)) %>%
@@ -313,15 +273,26 @@ sau_country_cleaned %>%
              mean_for_catch = mean (sum_tonnes[fishing_country == "Foreign catch"], na.rm = TRUE)) %>%
   
   arrange (country, rank) %>%
+  filter (!country == "Indonesia") %>%
   write.excel()
 
-
+sau_2019 %>%
+  right_join (priority_spp, by = c ("country",  "species")) %>%
+  mutate (fishing_country = ifelse (fishing_entity == country, "Domestic catch", "Foreign catch")) %>%
+  group_by (country, species, rank) %>%
+  summarise (prop_for = sum (tonnes[fishing_country == "Foreign catch"]) / sum (tonnes),
+             mean_for_catch = mean (tonnes[fishing_country == "Foreign catch"], na.rm = TRUE)) %>%
+  
+  arrange (country, rank) %>%
+  filter (!country == "Indonesia") %>%
+  write.excel()
 
 # sau industrial vs artisanal----
 # domestic only
-sau_country_cleaned %>%
+# try 2015-2019 mean and 2019 only. Values are similar. However, for chile anchovy values are very different from 2011-2015, way more artisanal catch. this does match up with official landings though. 
+sau_2015_2019 %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
-  filter (between (year, 2011, 2015), fishing_entity == country) %>%
+  filter (fishing_entity == country, !country == "Indonesia") %>%
   group_by (country, species, rank, year, fishing_sector) %>%
   summarise (sum_tonnes = sum (tonnes, na.rm = TRUE)) %>%
   group_by (country, species, rank) %>%
@@ -330,17 +301,17 @@ sau_country_cleaned %>%
   arrange (country, rank) %>% 
   write.excel()
 
-# this seems like it really reduced SSF catch...yes, much more in recent years
-sau_country_cleaned %>%
+sau_2019 %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
-  filter (between (year, 2000, 2015), fishing_entity == country) %>%
-  filter (country == "Chile") %>%
-  ggplot (aes (x = year, y = tonnes, fill = fishing_sector)) +
-  geom_bar (stat = "identity")
+  filter (fishing_entity == country, !country == "Indonesia") %>%
+  group_by (country, species, rank) %>%
+  summarise (prop_ssf = sum (tonnes[fishing_sector == "Artisanal"]) / sum (tonnes) ,
+             prop_ind = sum (tonnes[fishing_sector == "Industrial"]) / sum (tonnes)) %>%
+  arrange (country, rank) %>% 
+  write.excel()
 
-# chile national landings artisanal vs industrial
 
-# chile, national landings data ----
+# chile, national landings data artisanal vs industrial ----
 chl_landings %>%
   mutate (country = "Chile") %>%
   right_join (priority_spp, by = c ("country", "species")) %>%
@@ -352,6 +323,59 @@ chl_landings %>%
   arrange ( rank) %>%
   write.excel()
 
+# end use SAU ----
+#discards only in indonesia data
+sau_2015_2019 %>%
+  right_join (priority_spp, by = c ("country",  "species")) %>%
+  filter (fishing_entity == country, !country == "Indonesia") %>%
+  group_by (country, species, rank, year, end_use_type) %>%
+  summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  group_by (country, species, rank) %>%
+  summarise (prop_dhc = sum (tonnes[end_use_type == "Direct human consumption"]) / sum (tonnes) ,
+             prop_fmfo = sum (tonnes[end_use_type == "Fishmeal and fish oil"]) / sum (tonnes),
+             prop_other = sum (tonnes [end_use_type == "Other"]) / sum (tonnes),
+             prop_non_dhc = 1-prop_dhc) %>%
+  arrange (country, rank) %>% 
+  write.excel()
+
+sau_2019 %>%
+  right_join (priority_spp, by = c ("country",  "species")) %>%
+  filter (fishing_entity == country, !country == "Indonesia") %>%
+  group_by (country, species, rank) %>%
+  summarise (prop_dhc = sum (tonnes[end_use_type == "Direct human consumption"]) / sum (tonnes) ,
+             prop_fmfo = sum (tonnes[end_use_type == "Fishmeal and fish oil"]) / sum (tonnes),
+             prop_other = sum (tonnes [end_use_type == "Other"]) / sum (tonnes),
+             prop_non_dhc = 1-prop_dhc) %>%
+  arrange (country, rank) %>% 
+  write.excel()
+
+# big jump in Peru anchovy dhc
+sau_2015_2019 %>%
+  filter (country == "Peru", species == "Engraulis ringens") %>%
+  ggplot (aes (x = year, y = tonnes, fill = end_use_type)) +
+  geom_col () +
+  theme_bw() +
+  ggtitle ("Peru anchovy landings, SAU")
+
+sau_2015_2019 %>%
+  filter (country == "Peru", species == "Engraulis ringens", year < 2019) %>%
+  group_by (year) %>%
+  summarise (prop_dhc = sum (tonnes[end_use_type == "Direct human consumption"]) / sum (tonnes) ,
+             prop_fmfo = sum (tonnes[end_use_type == "Fishmeal and fish oil"]) / sum (tonnes),
+             prop_other = sum (tonnes [end_use_type == "Other"]) / sum (tonnes),
+             prop_non_dhc = 1-prop_dhc)
+
+# use 2018 value?
+sau_2015_2019 %>%
+  filter (country == "Peru", species == "Engraulis ringens", year == 2018) %>%
+  group_by (year) %>%
+  summarise (prop_dhc = sum (tonnes[end_use_type == "Direct human consumption"]) / sum (tonnes) ,
+             prop_fmfo = sum (tonnes[end_use_type == "Fishmeal and fish oil"]) / sum (tonnes),
+             prop_other = sum (tonnes [end_use_type == "Other"]) / sum (tonnes),
+             prop_non_dhc = 1-prop_dhc) %>%
+  pull (prop_non_dhc) %>%
+  write.excel()
+
 
 # exports ARTIS ----
 exports <- read_csv ("Data/20221019_edf_ARTIS_snet.csv")
@@ -361,9 +385,7 @@ exports_5yr_mean <- exports %>%
   group_by (exporter_iso3c, sciname) %>%
   summarise (mn_perc_exp = mean (exports_percent_of_prod, na.rm = TRUE))
 
-# join to pri-spp to arrange by rank? too much trouble
 
-write.excel (exports_5yr_mean)
 
 # upside BAU to MEY ----
 
