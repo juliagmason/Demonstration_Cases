@@ -4,6 +4,48 @@
 
 library (tidyverse)
 
+# 10/25/22 updating with 2019 data. Did grab mexico but not indonesia (too big; timed out)
+sau_2019 <- read.csv("Data/SAU EEZ 2019.csv") %>%
+  filter (year == 2019) %>%
+  mutate (country = case_when(
+    grepl("Indo", area_name) ~ "Indonesia",
+    grepl ("Mex", area_name) ~ "Mexico",
+    area_name == "Chile (mainland)" ~ "Chile",
+    TRUE ~ area_name)
+  ) %>%
+  rename (species = scientific_name) %>%
+  group_by (country, species, year, fishing_sector, fishing_entity, end_use_type) %>%
+  summarise (tonnes = sum(tonnes),
+             landed_value = sum(landed_value))
+
+saveRDS (sau_2019, file = "Data/SAU_2019.Rds")
+
+sau_2015_2019 <- read.csv("Data/SAU EEZ 2019.csv") %>%
+  filter (between(year,2015,2019)) %>%
+  mutate (country = case_when(
+    grepl("Indo", area_name) ~ "Indonesia",
+    grepl ("Mex", area_name) ~ "Mexico",
+    area_name == "Chile (mainland)" ~ "Chile",
+    TRUE ~ area_name)
+  ) %>%
+  rename (species = scientific_name) %>%
+  group_by (country, species, year, fishing_sector, fishing_entity, end_use_type) %>%
+  summarise (tonnes = sum(tonnes),
+             landed_value = sum(landed_value))
+
+saveRDS(sau_2015_2019, file = "Data/SAU_2015_2019.Rds")
+
+sau_2015_2019 %>%
+  ggplot (aes (x = year, y = tonnes, fill = fishing_sector)) +
+  geom_col (stat = "identity") +
+  facet_wrap (~country, scales = "free_y")
+
+sau_2015_2019 %>%
+  ggplot (aes (x = year, y = tonnes, fill = fishing_entity)) +
+  geom_col (stat = "identity") +
+  facet_wrap (~country, scales = "free_y")
+
+
 sau <- read.csv ("Data/SAU_EEZ_landings.csv")
 
 # have to consolidate indo eezs, restrict to "Direct human consumption", truncate year, remove discards
