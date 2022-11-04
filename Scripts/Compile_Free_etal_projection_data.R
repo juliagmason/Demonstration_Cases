@@ -19,6 +19,6 @@ saveRDS (ds_spp_full, file = "Data/Free_etal_proj_full_Chl_Per_Ind_SL_Mex_Gha.Rd
 
 # smaller file to make life easier
 ds_spp_sm <- ds_spp_full %>%
-  filter (catch_mt > 0, scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), rcp %in% c("RCP60", "RCP85"))
+  filter (catch_mt > 0, scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"))
 
 saveRDS(ds_spp_sm, file = "Data/Free_etal_proj_smaller.Rds")
