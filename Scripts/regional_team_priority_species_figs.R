@@ -237,14 +237,31 @@ chl_landings %>%
   right_join (priority_spp, by = c ("country", "species")) %>%
   filter (between (year, 2017, 2021)) %>%
   
+  group_by (species, rank, year) %>%
+  # have to sum artisanal and industrial first
+  summarise (catch = sum (catch_mt, na.rm = TRUE)) %>%
+  ungroup() %>%
   group_by (species, rank) %>%
-  summarise (catch = mean (catch_mt, na.rm = TRUE)) %>%
+  summarise (catch = mean (catch, na.rm = TRUE)) %>%
+  arrange (rank) %>%
+  write.excel()
+
+
+chl_landings %>%
+  mutate (country = "Chile") %>%
+  right_join (priority_spp, by = c ("country", "species")) %>%
+  filter (year == 2021)%>%
+  
+  group_by (species, rank) %>%
+  # have to sum artisanal and industrial first
+  summarise (catch = sum (catch_mt, na.rm = TRUE)) %>%
   arrange (rank) %>%
   write.excel()
 
 
 
 # SAU catch
+# Deng Palomares suggested just using 2019 data; improved. Updated with just 2019 as of oct 2022
 sau_country_catch_2019 <- 
   sau_2019 %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
@@ -261,7 +278,8 @@ sau_country_cleaned %>%
 
 # sau foreign vs domestic----
 # print proportion foreign by country 
-# use mean? or just 2019?
+# use mean? or just 2019? look at both to compare
+# skipping indonesia for now because don't have priority species
 
 sau_2015_2019 %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
@@ -324,7 +342,7 @@ chl_landings %>%
   write.excel()
 
 # end use SAU ----
-#discards only in indonesia data
+#discards only show up in indonesia data
 sau_2015_2019 %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
   filter (fishing_entity == country, !country == "Indonesia") %>%
@@ -349,7 +367,7 @@ sau_2019 %>%
   arrange (country, rank) %>% 
   write.excel()
 
-# big jump in Peru anchovy dhc
+# big jump in Peru anchovy dhc in 2019
 sau_2015_2019 %>%
   filter (country == "Peru", species == "Engraulis ringens") %>%
   ggplot (aes (x = year, y = tonnes, fill = end_use_type)) +
@@ -378,13 +396,28 @@ sau_2015_2019 %>%
 
 
 # exports ARTIS ----
+# emailed 10 19 2022
 exports <- read_csv ("Data/20221019_edf_ARTIS_snet.csv")
+
+# stringr for all lowercase species names
+library (stringr)
+
+# also have to rep
 # most recent year is 2019
 exports_5yr_mean <- exports %>%
   filter (between (year, 2015, 2019)) %>%
   group_by (exporter_iso3c, sciname) %>%
-  summarise (mn_perc_exp = mean (exports_percent_of_prod, na.rm = TRUE))
-
+  summarise (mn_prop_exp = mean (exports_percent_of_prod, na.rm = TRUE)/100) %>%
+  ungroup() %>%
+  mutate (species = str_to_sentence(sciname),
+          # just doing country names by hand...
+          country = case_when (
+            exporter_iso3c == "CHL" ~ "Chile",
+            exporter_iso3c == "IDN" ~ "Indonesia",
+            exporter_iso3c == "PER" ~ "Peru", 
+            exporter_iso3c == "MEX" ~ "Mexico",
+            exporter_iso3c == "SLE" ~ "Sierra Leone"
+          ), .keep = "unused") 
 
 
 # upside BAU to MEY ----
@@ -705,6 +738,303 @@ print(
   mapply (plot_nutricast_proj, ds_pri_spp_input$country, ds_pri_spp_input$species)
 )
 dev.off()
+
+##############################################################################################
+
+# mega plot of policy levers. ----
+#I need to recreate the quant sheet and then pivot long, so there's a "variable" column and a "children fed" column
+
+#could have facets with species, or also have facets with variable and species on x axis
+
+# start with just SAU data--> foreign, non-DHC, and exports
+# messy hack, but replace Peru anchovy dhc value with 2018 value. in 2018, all artisanal was dhc and all industrial is fmfo
+peru_anchov_dhc <- sau_2015_2019 %>%
+  filter (country == "Peru", fishing_entity == "Peru", year == 2018, species == "Engraulis ringens") %>%
+  group_by (country, species, year) %>%
+  summarise (prop_non_dhc = sum(tonnes[end_use_type == "Fishmeal and fish oil" & fishing_entity == "Peru"])/sum(tonnes[fishing_entity == "Peru"])) # 0.955
+
+peru_anchov_total_2019 <- sau_2015_2019 %>%
+  filter (country == "Peru", fishing_entity == "Peru", year == 2019, species == "Engraulis ringens") %>%
+  pull (tonnes) %>% sum()
+
+
+  
+t <- sau_2019 %>%
+  right_join (priority_spp, by = c ("country",  "species")) %>%
+  mutate (fishing_country = ifelse (fishing_entity == country, "Domestic catch", "Foreign catch")) %>%
+  filter (!country == "Indonesia") %>%
+  group_by (country, species, taxa) %>%
+  summarise (total_domestic_catch = sum (tonnes[fishing_country == "Domestic catch"]),
+             foreign_catch = sum (tonnes[fishing_country == "Foreign catch"]),
+             domestic_non_dhc = sum (tonnes[end_use_type != "Direct human consumption" & fishing_country == "Domestic catch"])) %>%
+  ungroup () %>%
+  # mutate hack, fix peru anchovy. multiply total domestic anchov production * proportion non dhc from 2018
+  mutate (domestic_non_dhc = ifelse (country == "Peru" & species == "Engraulis ringens", peru_anchov_dhc$prop_non_dhc * peru_anchov_total_2019,  domestic_non_dhc)) %>%
+  # join to exports
+  left_join (exports_5yr_mean, by = c ("species", "country")) %>%
+  mutate (export_volume = total_domestic_catch * mn_prop_exp, .keep = "unused") %>%
+  # pivot longer
+  pivot_longer (foreign_catch:export_volume,
+                names_to = "lever",
+                values_to = "mt")
+# need to replace NA with 0?
+
+# convert to list for calculate nutrients function
+sau_lever_ls <-  list (
+    species = t$species,
+    taxa = t$taxa,
+    amount_mt = t$mt)
+
+sau_levers_nutr <- pmap_dfr (sau_lever_ls, calc_children_fed_func)
+
+# just select one nutrient?
+sau_levers_calcium <- sau_levers_nutr %>%
+  filter (nutrient == "Calcium") %>%
+  select (species, nutrient, catch_mt, children_fed) %>%
+  rename (mt = catch_mt)
+
+# bring back to ds
+r <- t %>%
+  left_join (sau_levers_calcium, by = c("species", "mt"))
+
+plot_supply_chain_levers <- function (country_name) {
+  
+  p <- r %>%
+    filter (country == country_name)
+    
+  
+  q <- p %>%
+    ggplot (aes (y = children_fed, x = lever)) +
+    geom_col () +
+    facet_wrap( ~ species, scales = "free_y") +
+    theme_bw() +
+    scale_x_discrete(labels = c ("Non-DHC", "Exports", "Foreign catch")) +
+    labs (y = "Children's RNIs forgone", x = "Policy lever") +
+    ggtitle (paste0("Calcium losses, ", country_name)) +
+    theme (plot.title = element_text (size = 18),
+          axis.text = element_text (size = 12),
+          strip.text = element_text (size = 14),
+          axis.title = element_text (size = 14))
+    
+  
+
+  
+}
+  
+plot_supply_chain_levers("Sierra Leone")
+countries <- c("Chile", "Peru", "Mexico", "Sierra Leone")
+
+pdf (file = "Figures/Foreign_DHC_Export_losses.pdf", width = 12, height = 8)
+
+  lapply (countries, plot_supply_chain_levers)
+
+dev.off()
+
+# plot with species as x axis? I don't think this is as helpful
+plot_supply_chain_levers_spp <- function (country_name) {
+  
+  p <- r %>%
+    filter (country == country_name)
+  
+  
+  q <- p %>%
+    ggplot (aes (y = children_fed, x = species)) +
+    geom_col () +
+    facet_wrap( ~ lever, scales = "free_y") +
+    theme_bw() +
+    #scale_x_discrete(labels = c ("Non-DHC", "Exports", "Foreign catch")) +
+    labs (y = "Children's RNIs forgone", x = "Policy lever") +
+    ggtitle (paste0("Nutrient losses, ", country_name)) +
+    theme (plot.title = element_text (size = 18),
+           axis.text = element_text (size = 12),
+           strip.text = element_text (size = 14),
+           axis.title = element_text (size = 14))
+  
+  
+  
+  
+}
+
+## plot dhc industrial vs. artisanal ----
+
+# hack peru again --> all years all artisanal is 0 and all industrial is 1
+# so need industrial catch 2019
+peru_anchov_total_2019_ind <- sau_2015_2019 %>%
+  filter (country == "Peru", fishing_entity == "Peru", year == 2019, fishing_sector == "Industrial", species == "Engraulis ringens") %>%
+  pull (tonnes) %>% sum()
+
+
+
+sector_dhc <- sau_2019 %>%
+  right_join (priority_spp, by = c ("country",  "species")) %>%
+  mutate (fishing_country = ifelse (fishing_entity == country, "Domestic catch", "Foreign catch")) %>%
+  filter (!country == "Indonesia", fishing_country =="Domestic catch", fishing_sector %in% c("Artisanal", "Industrial")) %>%
+  group_by (country, species, taxa, fishing_sector) %>%
+  summarise (non_dhc = sum (tonnes[end_use_type != "Direct human consumption"])) %>%
+  ungroup () %>%
+  # fix peru
+  mutate (non_dhc = case_when (
+          country == "Peru" & species == "Engraulis ringens" & fishing_sector == "Industrial" ~ peru_anchov_total_2019_ind, 
+          country == "Peru" & species == "Engraulis ringens" & fishing_sector == "Artisanal" ~ 0,
+        TRUE ~ non_dhc
+          )
+  ) 
+
+sector_dhc_ls <- list (
+  species = sector_dhc$species,
+  taxa = sector_dhc$taxa,
+  amount_mt = sector_dhc$non_dhc)
+  
+sector_dhc_nutr <- pmap_dfr (sector_dhc_ls, calc_children_fed_func)
+
+# just select one nutrient?
+sector_dhc_calcium <- sector_dhc_nutr %>%
+  filter (nutrient == "Calcium") %>%
+  select (species, nutrient, catch_mt, children_fed) %>%
+  rename (non_dhc = catch_mt)
+
+# bring back to ds
+sector_dhc_calcium_join <- sector_dhc %>%
+  left_join (sector_dhc_calcium, by = c("species", "non_dhc"))
+
+plot_sector_dhc <- function (country_name) {
+  
+  p <- sector_dhc_calcium_join %>%
+    filter (country == country_name)
+  
+  
+  q <- p %>%
+    ggplot (aes (y = children_fed, x = fishing_sector)) +
+    geom_col () +
+    facet_wrap( ~ species, scales = "free_y") +
+    theme_bw() +
+    labs (y = "Children's RNIs forgone", x = "") +
+    ggtitle (paste0("Calcium losses from non-DHC use, ", country_name)) +
+    theme (plot.title = element_text (size = 18),
+           axis.text = element_text (size = 12),
+           strip.text = element_text (size = 14),
+           axis.title = element_text (size = 14))
+  
+  
+
+  
+}
+
+plot_sector_dhc("Peru")
+countries <- c("Chile", "Peru", "Mexico", "Sierra Leone")
+
+pdf (file = "Figures/DHC_sector_losses.pdf", width = 12, height = 8)
+
+lapply (countries, plot_sector_dhc)
+
+dev.off()
+
+# plot nutrient upsides MEY and BEY bar graphs ----
+
+# also need to combine the landings data
+chl_pri_21 <- priority_spp %>%
+  filter (country == "Chile") %>%
+  left_join (chl_landings, by = "species") %>%
+  # take only 2021?
+  filter (year == 2021) %>%
+  group_by (country, species) %>%
+  summarise (total_tonnes = sum (catch_mt)) %>%
+  ungroup() %>%
+  select (country, species, total_tonnes)
+
+# disaggregate small scale vs. industrial; not looking at this right now
+
+# start with DOMESTIC only
+pri_spp_landings_sau_dom <- sau_2019 %>%
+  filter (fishing_entity == country) %>%
+  right_join(priority_spp, by = c ("country", "species")) %>%
+  filter (!country %in% c("Indonesia", "Chile")) %>%
+  group_by(country, species) %>%
+  summarise (total_tonnes = sum(tonnes)) %>%
+  ungroup()
+
+
+compiled_landings_dom <- rbind (chl_pri_21, pri_spp_landings_sau_dom)
+
+# just calcium content and p_edible 
+
+p_edible <- data.frame (
+  taxa = c ("Finfish", "Mollusc", "Cephalopod"), 
+  p_edible = c (0.87, 0.17, 0.67)
+)
+
+calcium_amts <-fishnutr_long %>%
+  filter (nutrient == "Calcium") %>%
+  right_join (priority_spp, by = "species") %>%
+  left_join (p_edible, by = "taxa") %>%
+  select (-c(country, comm_name, rank)) %>%
+  distinct()
+
+# manually do d.gigas?
+calcium_amts$amount[which (calcium_amts$species == "Dosidicus gigas")] <- d_gigas_nutr$amount[which (d_gigas_nutr$nutrient == "Calcium")]
+
+# attach to upside
+upside_ratios_pri_spp <- catch_upside_relative %>%
+  right_join (compiled_landings_dom, by = c("country", "species")) %>%
+  left_join (calcium_amts, by = "species") %>%
+  mutate (# multiply ratio by current landings
+    across(bau_ratio_midcentury:adapt_ratio_endcentury, ~.x * total_tonnes),
+          #convert to upside, subtract 
+          mey_midcentury = mey_ratio_midcentury - bau_ratio_midcentury,
+          mey_endcentury = mey_ratio_endcentury - bau_ratio_endcentury,
+          adapt_midcentury = adapt_ratio_midcentury - bau_ratio_midcentury,
+          adapt_endcentury = adapt_ratio_endcentury - bau_ratio_endcentury,
+          # convert to calcium amount and then RNIs met
+          across (mey_midcentury:adapt_endcentury, 
+                  ~.x * p_edible * amount * 1000 * 1000 /100 / 365 / 500 ) # 500 is RNI
+          ) 
+
+write.excel (upside_ratios_pri_spp)
+
+
+
+# make sure this checks out with excel sheet
+catch_upside_relative %>%
+  right_join (compiled_landings_dom, by = c("country", "species")) %>%
+  write.excel()
+
+# similar but not perfect, some might be bc foreign fishing
+
+v <- upside_ratios_pri_spp %>%
+  select (country, rcp, species, mey_midcentury:adapt_endcentury) %>%
+  pivot_longer(mey_midcentury:adapt_endcentury, 
+               names_to = "upside",
+               values_to = "child_rni") 
+
+v$upside <- factor(v$upside, levels = c ("mey_midcentury", "mey_endcentury", "adapt_midcentury", "adapt_endcentury"))
+
+plot_upside_bar <- function (country_name) {
+  v %>%
+    filter (country == country_name, !is.na(rcp)) %>%
+    ggplot (aes (x = upside, y = child_rni)) +
+    geom_col () +
+    facet_grid (species ~ rcp, scales = "free_y") +
+    theme_bw() +
+    geom_hline (yintercept = 0, lty = 2) +
+    labs (y = "Additional child RNIs met", x = "") +
+    ggtitle (paste0("Calcium upside, ", country_name)) +
+    theme (plot.title = element_text (size = 18),
+           axis.text = element_text (size = 12),
+           axis.text.x = element_text (angle = 60, hjust = 1),
+           strip.text.x =  element_text (size = 14),
+           strip.text.y = element_text (size = 12),
+           axis.title = element_text (size = 14)) 
+} 
+
+plot_upside_bar("Peru")
+
+pdf (file = "Figures/upside_calcium_bar.pdf", width = 14, height = 12)
+
+lapply (countries, plot_upside_bar)
+
+dev.off()
+  
+#################################################################################
 
 # plot micronutrient density vs. % loss nutricast ----
 t <- ds_spp %>%
