@@ -33,7 +33,7 @@ d_gigas_nutr <- data.frame (
 )
 
 # genus data for nonfish [eventually could use AFCD]
-spp_key <- read.csv(file.path ("../nutrient_endowment/output/Gaines_species_nutrient_content_key.csv"), as.is=T)
+spp_key <- read.csv(file.path ("Data/Gaines_species_nutrient_content_key.csv"), as.is=T)
 spp_key_long <- spp_key %>% 
   select (species, major_group, genus_food_name, calcium_mg, iron_mg, polyunsaturated_fatty_acids_g, protein_g, vitamin_a_mcg_rae, zinc_mg) %>%
  
