@@ -24,12 +24,23 @@ library(AFCD)
 # regional team priority spp--check inverts 7/27/22
 afcd %>% filter (sciname == "Dosidicus gigas") %>% View()
 
-"Megapitaria squalida" %in% afcd$sciname
-"Chione californiensis" %in% afcd$sciname
+"Megapitaria squalida" %in% afcd$sciname #no
+"Chione californiensis" %in% afcd$sciname #no
+
+"Scylla serrata" %in% afcd$sciname
+
+# Indo team requested Scylla serrata, Kepiting bakau 
 
 
+# picking somewhat randomly. note that there's a separate dha + epa for omegas, and different vitamin As
+teri_nutr <- afcd_sci %>% 
+  filter (sciname == "Scylla serrata",
+          nutrient_code_fao %in% c(
+            "CA", "ZN", "FE", "SE", "Protein", "FAPU", "VITA")) %>%
+            group_by(nutrient_code_fao) %>%
+            summarise (amount = mean (value, na.rm = TRUE))
 
-# Kelso requests
+# Kelso requests ----
 
 # blue swimming crab??
 
