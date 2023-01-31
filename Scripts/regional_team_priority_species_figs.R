@@ -1,5 +1,6 @@
 # Regional team priority species
-# 5/27/22, updated 7/26/22
+
+# 5/27/22, updated 7/26/22, jan 23
 library (tidyverse)
 #library (stringr)
 
@@ -13,23 +14,6 @@ write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
 # this will also bring in fishnutr data and RNI data
 source ("Scripts/Function_convert_catch_amt_children_fed.R")
 
-# country nutrient deficiencies from nutricast ----
-# do children to match rda
-golden_mic_def <- readRDS("../nutrient_endowment/output/nutr_deficiencies_by_cntry_sex_age_2011.Rds") 
-
-golden_mic_def %>%
-  filter (sex == "Children", nutrient %in% c ("Vitamin A", "Calcium", "Iron", "Zinc"), country %in% pri_spp_nutr$country) %>% 
-  arrange (country, nutrient) %>%
-  write.excel()
-
-
-# no data for sierra leone, use guinea
-golden_mic_def %>%
-  filter (sex == "Children", nutrient %in% c ("Vitamin A", "Calcium", "Iron", "Zinc", "Vitamin B6"), country %in% c("Guinea", "Malawi")) %>% 
-  arrange (country, nutrient) %>%
-  write.excel()
-
-
 # Priority species ----
 
 # top 5-7 priority species identified by regional teams
@@ -40,13 +24,10 @@ priority_spp <- read_csv ("Data/regional_teams_priority_spp.csv") %>%
                                TRUE ~ species)
           )
 
-# 8/10/22 mexico request from sammi lin
-sammi_spp <- c("Thunnus thynnus", "Diplodus vulgaris", "Galeorhinus galeus", "Argyrosomus regius", "Dicentrarchus labrax", "Sphoeroides annulatus", "Mugil cephalus", "Scomberomorus sierra", "Sardina pilchardus")
-
 
 # join priority spp to nutrient data ----
 
-# macgyver pota data
+# macgyver pota data for chile/peru
 d_gigas_rbind <- data.frame (
   species = d_gigas_nutr$species,
   country = "Peru",
@@ -57,6 +38,36 @@ d_gigas_rbind <- data.frame (
   amount = d_gigas_nutr$amount)
 
 
+# also grab crab nutrients from afcd for indo
+# picking somewhat randomly. note that there's a separate dha + epa for omegas, and different vitamin As
+library (AFCD)
+
+scylla_nutr <- afcd_sci %>% 
+  filter (sciname == "Scylla serrata",
+          nutrient_code_fao %in% c(
+            "CA", "ZN", "FE", "SE", "Protein", "FAPU", "VITA")) %>%
+  group_by(nutrient_code_fao) %>%
+  summarise (amount = mean (value, na.rm = TRUE)) %>%
+  mutate (nutrient =
+            case_when (nutrient_code_fao == "CA" ~ "Calcium",
+                       nutrient_code_fao == "FE" ~ "Iron",
+                       nutrient_code_fao == "SE" ~ "Selenium", 
+                       nutrient_code_fao == "ZN" ~ "Zinc",
+                       nutrient_code_fao == "FAPU" ~ "Omega_3",
+                       nutrient_code_fao == "VITA" ~ "Vitamin_A"),
+          # make columns to match other df
+          country = "Indonesia",
+          comm_name = "Kepiting bakau",
+          rank = 6,
+          taxa = "Crustacean",
+          species = "Scylla serrata"
+          ) %>%
+  # reorder
+  select (species, country, comm_name, rank, taxa, nutrient, amount)
+          
+  
+
+
 pri_spp_nutr <- fishnutr_mu %>%
   right_join (priority_spp, by = "species")  %>%
   pivot_longer (Selenium_mu:Vitamin_A_mu,
@@ -64,8 +75,9 @@ pri_spp_nutr <- fishnutr_mu %>%
                 values_to = "amount") %>%
   mutate (nutrient = str_sub(nutrient, end = -4)) %>% 
   # join d_gigas
-  filter (!species == "Dosidicus gigas") %>%
+  filter (!species %in% c("Dosidicus gigas", "Scylla serrata")) %>%
   rbind (d_gigas_rbind) %>%
+  rbind (scylla_nutr) %>%
 
   
   # join to rni data
@@ -88,85 +100,16 @@ chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
 
 # SAU data ----
 
-# as of 10/25/22 just 2019 data, suggested by Deng Palomares
+# as of 10/25/22 just 2019 data, suggested by Deng Palomares. Clipped in SAU_explore.R
 sau_2019 <- readRDS("Data/SAU_2019.Rds")
 
-# or mean of most recent 5 years
+# or mean of most recent 5 years *doesn't currently include indonesia* 
 sau_2015_2019 <- readRDS("Data/SAU_2015_2019.Rds")
-
-
-# also just want top ssf spp for each country
-sau <- read.csv ("Data/SAU_EEZ_landings.csv")
-
-sau_mex <- read.csv("Data/SAU_mexico_landings.csv")
-
-# clean by country
-sau_country_cleaned <- sau %>%
-  rbind (sau_mex) %>%
-  mutate (country = case_when(
-          grepl("Indo", area_name) ~ "Indonesia",
-          grepl ("Mex", area_name) ~ "Mexico",
-          area_name == "Chile (mainland)" ~ "Chile",
-          TRUE ~ area_name)
-          ) %>%
-  rename (species = scientific_name) %>%
-  group_by (country, species, year, fishing_sector, fishing_entity, end_use_type) %>%
-  summarise (tonnes = sum(tonnes),
-             landed_value = sum(landed_value))
-
-
-
-# quick check
-sau_country_cleaned %>%
-  filter (species == "Engraulis ringens", between (year, 2010, 2018)) %>%
-  ggplot (aes (x = year, y = tonnes, fill = fishing_sector)) +
-  geom_bar (stat = "identity") +
-  facet_wrap (~country)
-
-sau_country_cleaned %>%
-  filter ( between (year, 2010, 2018)) %>%
-  ggplot (aes (x = year, y = tonnes, fill = fishing_sector)) +
-  geom_bar (stat = "identity") +
-  facet_wrap (~country, scales = "free_y")
-
 
 
 # climate projection data ----
 # smaller, just rcp 60 and 85. now has mexico
 ds_spp <- readRDS("Data/Free_etal_proj_smaller.Rds")
-
-
-###########################################################################
-## Check data availability ----
-# nutrition
-fishnutr_mu %>%
-  right_join (priority_spp, by = "species")  %>%
-  pivot_longer (Selenium_mu:Vitamin_A_mu,
-                names_to = "nutrient",
-                values_to = "amount") %>%
-  filter (is.na(amount)) %>% 
-  select (country, comm_name, species) %>% 
-  distinct()
-
-# sau
-t <- sau_2019 %>%
-  right_join (priority_spp, by = c ("country",  "species")) %>%
- 
-  group_by (country, species, year) %>%
-  summarise (sum_tonnes = sum (tonnes, na.rm = TRUE)) %>%
-  group_by (country, species) %>%
-  summarise (mean_tonnes = mean (sum_tonnes, na.rm = TRUE))
-
-
-# climate projections--which ones DONT have data
-cc <- ds_spp %>%
-  right_join (priority_spp, by = c ("country",  "species")) %>%
-  filter (is.na (catch_mt)) %>%
-  select (country, species) %>% 
-  distinct() %>% 
-  arrange (country)
-
-
 
 
 ###########################################################################
@@ -399,6 +342,11 @@ sau_2015_2019 %>%
 # emailed 10 19 2022
 exports <- read_csv ("Data/20221019_edf_ARTIS_snet.csv")
 
+# additional Indo species emailed 1/28/23
+exports_indo <- read_csv("Data/20230125_edf_ARTIS_indo.csv")
+
+exports <- rbind (exports, exports_indo)
+
 # stringr for all lowercase species names
 library (stringr)
 
@@ -422,7 +370,7 @@ exports_5yr_mean <- exports %>%
 
 # upside BAU to MEY ----
 
-# nutricast upside ----
+# nutricast upside ---- [move to calculate_nutritional_upsides script??]
 
 # for spreadsheet just calculate the tons
 pri_spp_catch_upside <- ds_spp %>% 
@@ -561,188 +509,6 @@ p <- pmap_dfr (chl_landings_input_ls, calc_children_fed_func)
 ###################################################################
 # Plots----
 
-# plot nutricast projections for all priority spp ----
-
-ds_pri_spp <-  ds_spp %>%
-  right_join (priority_spp, by = c("country", "species"))
-
-plot_nutricast_proj<- function (country_name, spp_name) {
-  
-  dat <- ds_pri_spp %>% 
-    filter (country == country_name, species == spp_name, year  >2030, rcp %in% c("RCP26", "RCP60"))
-  
-  dat$scenario <- factor (dat$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
-  
-  p <- dat %>% ggplot (aes (x = year, y = catch_mt, col = scenario)) +
-    geom_line() +
-    theme_bw() +
-    facet_grid (species ~ rcp, scales = "free_y") +
-    labs (x = "", y = "Catch, metric tons", col = "Mgmt scenario") +
-    ggtitle (paste0 ("Free et al. (2020) projections for ", spp_name, ", ", country_name)) +
-    theme (plot.title = element_text (size = 14),
-           axis.text = element_text (size = 12))
-  
-  print (p)
-  
-}
-
-plot_nutricast_proj(country_name = "Peru",spp_name = "Engraulis ringens")
-
-# need to take out missing country/spp combos? must be a faster way
-ds_pri_spp_input <- ds_pri_spp %>% filter (!is.na (catch_mt), catch_mt > 0) %>% select (country, species, rank) %>% distinct %>%
-  arrange (country, rank)
-
-pri_input_ls <- list (country_name = ds_pri_spp_input$country, spp_name = ds_pri_spp_input$species)
-
-pdf (file = "Figures/Priority_spp_Nutricast_timeseries.pdf", width = 12, height = 8)
-print(
-mapply (plot_nutricast_proj, ds_pri_spp_input$country, ds_pri_spp_input$species)
-)
-dev.off()
-
-# plot nutricast LAC for presentation----
-
-
-# John also requested biomass, profits
-
-# try to pivot_long so can show on the same graph?
-ds_pri_long <- ds_pri_spp %>%
-  pivot_longer(range_km2:ffmsy, 
-               names_to = "variable",
-               values_to = "value")
-
-ds_pri_long %>%
-  filter (country == "Peru", species == "Mugil cephalus", 
-          !variable %in% c ("catch_mt", "biomass_mt", "profits_usd")) %>%
-  ggplot (aes (x = year, y = value, col = scenario)) +
-  geom_line () +
-  facet_grid (variable ~ rcp, scales = "free_y") +
-  theme_bw() +
-  labs (x = "", y = "") +
-  ggtitle (paste0 ("Free et al. (2020) projections for ", spp_name, ", ", country_name)) +
-  theme (plot.title = element_text (size = 14),
-         axis.text = element_text (size = 12))
-
-
-ds_pri_long %>%
-  filter (country == "Peru", species == "Mugil cephalus", 
-          variable %in% c ("catch_mt", "msy_mt")) %>%
-  ggplot (aes (x = year, y = value, col = variable)) +
-  geom_line () +
-  facet_grid (scenario ~ rcp, scales = "free_y") +
-  theme_bw() +
-  labs (x = "", y = "") +
-  ggtitle (paste0 ("Free et al. (2020) projections for ", spp_name, ", ", country_name)) +
-  theme (plot.title = element_text (size = 14),
-         axis.text = element_text (size = 12))
-
-
-# Plot biomass, catch, profits 
-plot_nutricast_proj<- function (country_name, spp_name) {
-  
-  dat <- ds_pri_long %>% 
-    filter (country == country_name, species == spp_name, year  >2030)
-  
-  dat$scenario <- factor (dat$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
-  
-  dat$variable <- factor (dat$variable, levels = c ("biomass_mt", "catch_mt", "profits_usd", "range_km2", "msy_mt", "bbmsy", "ffmsy"))
-  
-  p <- dat %>% 
-    filter (variable %in% c ("catch_mt", "biomass_mt", "profits_usd")) %>%
-    ggplot (aes (x = year, y = value, col = scenario)) +
-  geom_line () +
-  facet_grid (variable ~ rcp, scales = "free_y") +
-  theme_bw() +
-  labs (x = "", y = "") +
-  ggtitle (paste0 ("Free et al. (2020) projections for ", spp_name, ", ", country_name)) +
-  theme (plot.title = element_text (size = 14),
-         axis.text = element_text (size = 12))
-
-  
-  print (p)
-  
-}
-
-plot_nutricast_proj ("Sierra Leone", "Sardinella maderensis")
-
-ds_pri_spp_input <- ds_pri_spp %>% filter (!is.na (catch_mt), catch_mt > 0) %>% select (country, species, rank) %>% distinct %>%
-  arrange (country, rank)
-
-pri_input_ls <- list (country_name = ds_pri_spp_input$country, spp_name = ds_pri_spp_input$species)
-
-pdf (file = "Figures/Nutricast_timeseries_Biomass_Catch_Profits.pdf", width = 12, height = 8)
-print(
-  mapply (plot_nutricast_proj, ds_pri_spp_input$country, ds_pri_spp_input$species)
-)
-dev.off()
-
-# Plot other variables
-plot_nutricast_proj<- function (country_name, spp_name) {
-  
-  dat <- ds_pri_long %>% 
-    filter (country == country_name, species == spp_name, year  >2030)
-  
-  dat$scenario <- factor (dat$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
-  
-  dat$variable <- factor (dat$variable, levels = c ("biomass_mt", "catch_mt", "profits_usd", "range_km2", "msy_mt", "bbmsy", "ffmsy"))
-  
-  p <- dat %>% 
-    filter (!variable %in% c ("catch_mt", "biomass_mt", "profits_usd")) %>%
-    ggplot (aes (x = year, y = value, col = scenario)) +
-    geom_line () +
-    facet_grid (variable ~ rcp, scales = "free_y") +
-    theme_bw() +
-    labs (x = "", y = "") +
-    ggtitle (paste0 ("Free et al. (2020) projections for ", spp_name, ", ", country_name)) +
-    theme (plot.title = element_text (size = 14),
-           axis.text = element_text (size = 12))
-  
-  
-  print (p)
-  
-}
-
-
-pdf (file = "Figures/Nutricast_timeseries_MSY_BBMSY_FFMSY.pdf", width = 12, height = 8)
-print(
-  mapply (plot_nutricast_proj, ds_pri_spp_input$country, ds_pri_spp_input$species)
-)
-dev.off()
-
-# plot catch and msy together
-plot_nutricast_proj<- function (country_name, spp_name) {
-  
-  dat <- ds_pri_long %>% 
-    filter (country == country_name, species == spp_name, year  >2030)
-  
-  dat$scenario <- factor (dat$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
-  
-  dat$variable <- factor (dat$variable, levels = c ("biomass_mt", "catch_mt", "profits_usd", "range_km2", "msy_mt", "bbmsy", "ffmsy"))
-  
-  p <- dat %>% 
-    filter (variable %in% c ("catch_mt", "msy_mt")) %>%
-    ggplot (aes (x = year, y = value, col = variable)) +
-    geom_line () +
-    facet_grid (scenario ~ rcp, scales = "free_y") +
-    theme_bw() +
-    labs (x = "", y = "") +
-    ggtitle (paste0 ("Free et al. (2020) projections for ", spp_name, ", ", country_name)) +
-    theme (plot.title = element_text (size = 14),
-           axis.text = element_text (size = 12))
-  
-  
-  print (p)
-  
-}
-
-
-pdf (file = "Figures/Nutricast_timeseries_catch_vs_MSY.pdf", width = 12, height = 8)
-print(
-  mapply (plot_nutricast_proj, ds_pri_spp_input$country, ds_pri_spp_input$species)
-)
-dev.off()
-
-##############################################################################################
 
 # mega plot of policy levers. ----
 #I need to recreate the quant sheet and then pivot long, so there's a "variable" column and a "children fed" column
@@ -765,7 +531,6 @@ peru_anchov_total_2019 <- sau_2015_2019 %>%
 t <- sau_2019 %>%
   right_join (priority_spp, by = c ("country",  "species")) %>%
   mutate (fishing_country = ifelse (fishing_entity == country, "Domestic catch", "Foreign catch")) %>%
-  filter (!country == "Indonesia") %>%
   group_by (country, species, taxa) %>%
   summarise (total_domestic_catch = sum (tonnes[fishing_country == "Domestic catch"]),
              foreign_catch = sum (tonnes[fishing_country == "Foreign catch"]),
@@ -837,6 +602,10 @@ png ("Figures/Foreign_DHC_Export_losses_Mex_comm_names.png", width = 12, height 
 print(plot_supply_chain_levers("Mexico"))
 dev.off()
 
+png ("Figures/Foreign_DHC_Export_losses_Indo_comm_names.png", width = 12, height = 7, unit = "in", res = 300)  
+print(plot_supply_chain_levers("Indonesia"))
+dev.off()
+
 countries <- c("Chile", "Peru", "Mexico", "Sierra Leone")
 
 pdf (file = "Figures/Foreign_DHC_Export_losses.pdf", width = 12, height = 8)
@@ -849,21 +618,57 @@ dev.off()
 # plot stacked?
 png ("Figures/Foreign_DHC_Export_losses_Chile_stacked.png", width = 12, height = 8, unit = "in", res = 300)  
 r %>%
+  left_join (priority_spp, by = c ("country", "species")) %>%
   filter (country == "Chile", children_fed> 0) %>%
-  ggplot (aes (y = children_fed/1000000, x = fct_rev(reorder(species, children_fed)), fill = lever)) +
+  ggplot (aes (y = children_fed/1000000, x = fct_rev(reorder(comm_name, children_fed)), fill = lever)) +
   geom_col (position = "stack") +
   #facet_wrap( ~ species, scales = "free_y") +
   theme_bw() +
   #scale_x_discrete(labels = c ("Non-DHC", "Exports", "Foreign catch")) +
-  labs (y = "Children's RNIs forgone, millions", x = "") +
-  ggtitle (paste0("Calcium losses, ", country_name)) +
+  labs (y = "Children's RNIs forgone, millions", x = "", fill = "Policy lever") +
+  ggtitle ("Calcium losses, Chile") +
   theme (plot.title = element_text (size = 18),
          axis.text = element_text (size = 18),
          strip.text = element_text (size = 14),
          axis.title = element_text (size = 14))
          #legend.position = "none")
 dev.off()
+
+png ("Figures/Foreign_DHC_Export_losses_Peru_stacked.png", width = 12, height = 8, unit = "in", res = 300)  
+r %>%
+  left_join (priority_spp, by = c ("country", "species")) %>%
+  filter (country == "Peru", children_fed> 0) %>%
+  ggplot (aes (y = children_fed/1000000, x = fct_rev(reorder(comm_name, children_fed)), fill = lever)) +
+  geom_col (position = "stack") +
+  #facet_wrap( ~ species, scales = "free_y") +
+  theme_bw() +
+  #scale_x_discrete(labels = c ("Non-DHC", "Exports", "Foreign catch")) +
+  labs (y = "Children's RNIs forgone, millions", x = "", fill = "Policy lever") +
+  ggtitle ("Calcium losses, Peru") +
+  theme (plot.title = element_text (size = 18),
+         axis.text = element_text (size = 18),
+         strip.text = element_text (size = 14),
+         axis.title = element_text (size = 14))
+#legend.position = "none")
+dev.off()
   
+png ("Figures/Foreign_DHC_Export_losses_Peru_stacked_no_anchov.png", width = 12, height = 8, unit = "in", res = 300)  
+r %>%
+  left_join (priority_spp, by = c ("country", "species")) %>%
+  filter (country == "Peru", children_fed> 0, comm_name != "Anchoveta") %>%
+  ggplot (aes (y = children_fed/1000000, x = fct_rev(reorder(comm_name, children_fed)), fill = lever)) +
+  geom_col (position = "stack") +
+  #facet_wrap( ~ species, scales = "free_y") +
+  theme_bw() +
+  #scale_x_discrete(labels = c ("Non-DHC", "Exports", "Foreign catch")) +
+  labs (y = "Children's RNIs forgone, millions", x = "", fill = "Policy lever") +
+  ggtitle ("Calcium losses, Peru") +
+  theme (plot.title = element_text (size = 18),
+         axis.text = element_text (size = 18),
+         strip.text = element_text (size = 14),
+         axis.title = element_text (size = 14))
+#legend.position = "none")
+dev.off()
 
 # plot with species as x axis? I don't think this is as helpful
 plot_supply_chain_levers_spp <- function (country_name) {
@@ -963,6 +768,75 @@ pdf (file = "Figures/DHC_sector_losses.pdf", width = 12, height = 8)
 lapply (countries, plot_sector_dhc)
 
 dev.off()
+
+# plot as stacked instead, children fed, not just losses ----
+
+sector_dhc_full <- sau_2019 %>%
+  right_join (priority_spp, by = c ("country",  "species")) %>%
+  mutate (fishing_country = ifelse (fishing_entity == country, "Domestic catch", "Foreign catch")) %>%
+  filter (!country == "Indonesia", fishing_country =="Domestic catch", fishing_sector %in% c("Artisanal", "Industrial")) %>%
+  group_by (country, species, comm_name, taxa, fishing_sector) %>%
+  summarise (non_dhc = sum (tonnes[end_use_type != "Direct human consumption"]),
+             dhc = sum (tonnes[end_use_type == "Direct human consumption"])) %>%
+  ungroup () %>%
+  # fix peru
+  mutate (non_dhc = case_when (
+    country == "Peru" & species == "Engraulis ringens" & fishing_sector == "Industrial" ~ peru_anchov_total_2019_ind, 
+    country == "Peru" & species == "Engraulis ringens" & fishing_sector == "Artisanal" ~ 0,
+    TRUE ~ non_dhc),
+    dhc = case_when (
+      country == "Peru" & species == "Engraulis ringens" & fishing_sector == "Industrial" ~ 0,
+      TRUE ~ dhc)
+  ) %>%
+  pivot_longer(c(non_dhc, dhc),
+               names_to = "end_use",
+               values_to = "catch_mt")
+
+sector_dhc_full_ls <- list (
+  species = sector_dhc_full$species,
+  taxa = sector_dhc_full$taxa,
+  amount_mt = sector_dhc_full$catch_mt)
+
+sector_dhc_full_nutr <- pmap_dfr (sector_dhc_full_ls, calc_children_fed_func)
+
+# bring back to ds
+sector_dhc_calcium_join_full <- sector_dhc_full %>%
+  left_join (filter (sector_dhc_full_nutr, nutrient == "Calcium"), by = c("species", "catch_mt"))
+sector_dhc_calcium_join_full$end_use <- factor (sector_dhc_calcium_join_full$end_use, levels = c ("non_dhc", "dhc"))
+
+png ("Figures/Chile_sector_calcium_dhc.png", width = 11, height = 8, unit = "in", res = 300)
+sector_dhc_calcium_join_full %>%
+  filter (country == "Chile") %>%
+  ggplot (aes (x = fishing_sector, y = children_fed/1000000, fill = end_use)) +
+  geom_col () +
+  ggtitle ("Calcium provisioning by sector, Chile") +
+  facet_wrap (~comm_name, scales = "free_y") +
+  theme_bw() +
+  labs (x = "", y = "Children's RNIs met (millions)") +
+  theme (plot.title = element_text (size = 24),
+         axis.text = element_text (size = 18),
+         strip.text = element_text (size = 16),
+         axis.title = element_text (size = 20),
+         legend.position = "none")
+dev.off()
+
+
+png ("Figures/Peru_sector_calcium_dhc.png", width = 11, height = 8, unit = "in", res = 300)
+sector_dhc_calcium_join_full %>%
+  filter (country == "Peru") %>%
+  ggplot (aes (x = fishing_sector, y = children_fed/1000000, fill = end_use)) +
+  geom_col () +
+  facet_wrap (~comm_name, scales = "free_y") +
+  ggtitle ("Calcium provisioning by sector, Peru") +
+  labs (x = "", y = "Children's RNIs met (millions)") +
+  theme_bw() +
+  theme (plot.title = element_text (size = 24),
+         axis.text = element_text (size = 18),
+         strip.text = element_text (size = 16),
+         axis.title = element_text (size = 20),
+         legend.position = "none")
+dev.off()
+
 
 # plot nutrient upsides MEY and BEY bar graphs ----
 
@@ -1128,6 +1002,37 @@ v %>%
            axis.title = element_text (size = 18)) 
   dev.off()
   
+  
+  # for mexico, have to do grouper from raw nutricast data
+  mex_group <- pri_spp_catch_upside %>%
+    filter (country == "Mexico", species == "Epinephelus morio", period == "2051-2060") 
+  
+  mex_group_input_ls <- list (
+    species = "Epinephelus morio",
+    taxa = "Finfish",
+    amount_mt = mex_group$adapt_diff_mt
+  )
+  
+  mex_group_fed <- pmap_dfr (mex_group_input_ls, calc_children_fed_func)
+  
+  png ("Figures/Mexico_calcium_upside_LAC_pres_Grouper.png", width = 5, height = 5, units= "in", res = 300)
+  mex_group %>%
+    rename (catch_mt = adapt_diff_mt) %>%
+    left_join (mex_group_fed, by = "catch_mt") %>%
+    filter (nutrient == "Calcium", rcp %in% c("RCP26", "RCP60")) %>%
+    ggplot (aes (x = rcp, y = children_fed)) +
+    geom_col() +
+    theme_bw( ) +
+    geom_hline (yintercept = 0, lty = 2) +
+    labs (y = "Additional child RNIs met", x = "") +
+    theme (plot.title = element_text (size = 24),
+           axis.text = element_text (size = 14),
+           #axis.text.x = element_text (angle = 60, hjust = 1),
+           strip.text.x =  element_text (size = 16),
+           axis.title = element_text (size = 18)) 
+  
+  dev.off()
+  
 #################################################################################
 
 # plot micronutrient density vs. % loss nutricast ----
@@ -1268,6 +1173,8 @@ pri_spp_nutr %>%
 dev.off()
 
 
+
+
 # initial plot, landings and needs met of one species ----
 # anchoveta
 
@@ -1344,7 +1251,7 @@ png ("Figures/Peru_SAU_2019_landings_pri_spp.png", res = 300, width = 6, height 
                   values_to = "mt")
   
   
-  png ("Figures/Peru_SAU_2019_landings_pri_spp.png", res = 300, width = 6, height = 5, units = "in")  
+  png ("Figures/Peru_SAU_2019_landings_pri_spp.png", res = 300, width = 6.5, height = 5, units = "in")  
 sau_2019 %>%
 
     filter (country == "Peru") %>%
@@ -1385,17 +1292,37 @@ sau_2019 %>%
   png ("Figures/Peru_SAU_2019_pota_children_fed.png", res = 300, width = 5.5, height = 5, units = "in")  
   pota_2019 %>%
     filter (nutrient != "Protein") %>%
-    ggplot (aes (x = nutrient, y = children_fed / 1000000)) +
+    ggplot (aes (x = nutrient, y = children_fed / 1000000, fill = nutrient)) +
     geom_col() +
     theme_bw() +
     labs (x = "", y = "") +
-    theme (axis.text.x = element_text (size = 13),
-           axis.text.y = element_text (size = 15))
+    theme (axis.text.x = element_blank (),
+           axis.text.y = element_text (size = 15),
+           legend.position = "none")
  
   dev.off()
   
+  #indonesia
+  mack_catch <- sau_2019 %>%
+    filter (country == "Indonesia", 
+            fishing_entity == "Indonesia",
+            species == "Rastrelliger brachysoma")%>%
+    group_by (species) %>% summarise (tonnes = sum (tonnes))
   
+  mack_2019_children_fed <- calc_children_fed_func(taxa = "Finfish", species = "Rastrelliger brachysoma", amount =  mack_catch$tonnes)
   
+  png ("Figures/Indo_SAU_2019_R_brach_children_fed.png", res = 300, width = 5.5, height = 5, units = "in")  
+  mack_2019_children_fed %>%
+    filter (!nutrient %in% c("Protein", "Selenium")) %>%
+    ggplot (aes (x = nutrient, y = children_fed / 1000000, fill = nutrient)) +
+    geom_col() +
+    theme_bw() +
+    labs (x = "", y = "") +
+    theme (axis.text.x = element_blank (),
+           axis.text.y = element_text (size = 15),
+           legend.position = "none")
+  
+  dev.off()
   # plot overall needs met for priority spp, each country ----
   
 
@@ -1687,6 +1614,10 @@ nutr_upside_bar <- addl_needs %>%
     legend.position = "none"
     
   )
+
+
+
+
 
 
 # nutr upside, multispecies ----
