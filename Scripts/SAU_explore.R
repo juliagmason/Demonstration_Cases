@@ -5,6 +5,16 @@
 library (tidyverse)
 
 # 10/25/22 updating with 2019 data. Did grab mexico but not indonesia (too big; timed out)
+# 1/31/23 grabbed into data for regional team presentation
+
+sau_indo <- read.csv("Data/SAU EEZ indonesia.csv") %>% 
+  filter (year == 2019) %>%
+  mutate (country = "Indonesia") %>%
+  rename (species = scientific_name) %>%
+  group_by (country, species, year, fishing_sector, fishing_entity, end_use_type) %>%
+  summarise (tonnes = sum(tonnes),
+             landed_value = sum(landed_value))
+
 sau_2019 <- read.csv("Data/SAU EEZ 2019.csv") %>%
   filter (year == 2019) %>%
   mutate (country = case_when(
@@ -17,6 +27,8 @@ sau_2019 <- read.csv("Data/SAU EEZ 2019.csv") %>%
   group_by (country, species, year, fishing_sector, fishing_entity, end_use_type) %>%
   summarise (tonnes = sum(tonnes),
              landed_value = sum(landed_value))
+
+sau_2019 <- rbind (sau_2019, sau_indo)
 
 saveRDS (sau_2019, file = "Data/SAU_2019.Rds")
 
