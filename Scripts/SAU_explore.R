@@ -7,6 +7,45 @@ library (tidyverse)
 # 10/25/22 updating with 2019 data. Did grab mexico but not indonesia (too big; timed out)
 # 1/31/23 grabbed into data for regional team presentation
 
+
+# Function to plot time series of landings
+# plot initial landings figure function ----
+plot_sau_landings_one_spp <- function (country_name, species_name, year) {
+  
+  common_name <- filter (priority_spp, country == country_name, species == species_name) %>%
+    pull (comm_name)
+  
+  
+  landings <- sau_country_cleaned %>%
+    filter (country == country_name, species == species_name, between (year, 2010, 2019)) 
+  
+  p_title <- paste0 (common_name, " catch in ", country_name, "'s EEZ \n Sea Around Us project data")
+  
+  p_filename <- paste (country_name, common_name, "landings", sep = "_")
+  
+  p <- ggplot (landings,
+               aes (x = year, y = tonnes/1000, fill = species)) +
+    geom_bar(stat = "identity") +
+    theme_bw() +
+    scale_fill_manual (values = c("dodgerblue3")) +
+    labs (x = "", y = "Catch, thousand tons") +
+    ggtitle (p_title) +
+    theme (
+      
+      axis.title = element_text (size = 14),
+      axis.text = element_text (size = 12),
+      plot.title = element_text (size = 14),
+      legend.position = "none"
+    )
+  
+  
+  png (paste0("Figures/", p_filename, ".png"), res = 300, width = 4, height = 5, units = "in")
+  print (p)
+  dev.off()
+  
+} 
+  
+
 sau_indo <- read.csv("Data/SAU EEZ indonesia.csv") %>% 
   filter (year == 2019) %>%
   mutate (country = "Indonesia") %>%
