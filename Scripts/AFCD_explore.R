@@ -33,7 +33,7 @@ afcd %>% filter (sciname == "Dosidicus gigas") %>% View()
 
 
 # picking somewhat randomly. note that there's a separate dha + epa for omegas, and different vitamin As
-teri_nutr <- afcd_sci %>% 
+scylla_nutr <- afcd_sci %>% 
   filter (sciname == "Scylla serrata",
           nutrient_code_fao %in% c(
             "CA", "ZN", "FE", "SE", "Protein", "FAPU", "VITA")) %>%
