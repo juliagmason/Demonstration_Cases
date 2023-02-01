@@ -43,6 +43,90 @@ catch_upside_relative %>%
   write.excel()
 
 
+# copying code here on 2/1 from regional team priority species but not checking
+# upside BAU to MEY ----
+
+# nutricast upside ---- [move to calculate_nutritional_upsides script??]
+
+# for spreadsheet just calculate the tons
+pri_spp_catch_upside <- ds_spp %>% 
+  right_join (priority_spp, by = c ("country",  "species")) %>%
+  mutate (
+    period = case_when (
+      year %in% c(2026:2035) ~ "2026-2035",
+      year %in% c(2051:2060) ~ "2051-2060",
+      year %in% c(2091:2100) ~ "2091-2100"
+    )) %>%
+  filter (!is.na (catch_mt), !is.na (period), scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation")) %>%
+  #take mean projected catch for the decade period
+  group_by (country, rcp, period, species, scenario) %>%
+  summarise (catch_mt = mean (catch_mt)) %>%
+  ungroup() %>%
+  # find difference among scenarios--absolute and percent diff
+  group_by (country, rcp, period, species) %>%
+  summarize (mey_diff_mt = catch_mt[scenario == "Productivity Only"] - catch_mt[scenario == "No Adaptation"],
+             mey_diff_percent = (catch_mt[scenario == "Productivity Only"] - catch_mt[scenario == "No Adaptation"])/catch_mt[scenario == "No Adaptation"] * 100,
+             adapt_diff_mt = catch_mt[scenario == "Full Adaptation"] - catch_mt[scenario == "No Adaptation"],
+             adapt_diff_percent = (catch_mt[scenario == "Full Adaptation"] - catch_mt[scenario == "No Adaptation"])/catch_mt[scenario == "No Adaptation"] * 100) %>%
+  ungroup()
+
+# rejoin to rank
+pri_spp_catch_upside %>%
+  filter (period == "2051-2060", rcp == "RCP60") %>%
+  left_join (priority_spp, by = c("country", "species")) %>%
+  arrange (country, rank) %>%
+  write.excel()
+
+
+## nutritional upside inds fed
+
+nutr_upside_excel <- nutr_upside %>%
+  right_join (priority_spp, by = c ("country",  "species")) %>%
+  filter (rcp == "RCP60", period == "2051-2060", !nutrient == "Protein")
+
+# prop is proportion, so multiply by 100 for percent
+
+nutr_upside_excel %>%
+  ungroup() %>%
+  select (country, species, nutrient, mey_diff_child_rda, mey_diff_rdas_prop, rank) %>%
+  arrange (country, rank) %>%
+  write.excel()
+
+
+nutr_upside_excel %>%
+  ungroup() %>%
+  select (country, species, nutrient, adapt_diff_child_rda, rank) %>%
+  arrange (country, rank) %>%
+  write.excel()
+
+# upside full adapt to no adapt percent changes---
+catch_upside <- ds_spp %>%
+  filter (scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), catch_mt > 0) %>%
+  mutate (
+    period = case_when (
+      year %in% c(2026:2035) ~ "2026-2035",
+      year %in% c(2051:2060) ~ "2051-2060",
+      year %in% c(2091:2100) ~ "2091-2100"
+    )) %>%
+  filter (!is.na (period)) %>%
+  group_by (country, rcp, scenario, period, species) %>%
+  summarise (catch_mt = mean (catch_mt, na.rm = TRUE)) %>%
+  ungroup() %>%
+  group_by (country, rcp, period, species) %>%
+  summarize (mey_diff_mt = catch_mt[scenario == "Productivity Only"] - catch_mt[scenario == "No Adaptation"],
+             mey_diff_percent = (catch_mt[scenario == "Productivity Only"] - catch_mt[scenario == "No Adaptation"])/catch_mt[scenario == "No Adaptation"] * 100,
+             adapt_diff_mt = catch_mt[scenario == "Full Adaptation"] - catch_mt[scenario == "No Adaptation"],
+             adapt_diff_percent = (catch_mt[scenario == "Full Adaptation"] - catch_mt[scenario == "No Adaptation"])/catch_mt[scenario == "No Adaptation"] * 100)
+
+catch_upside %>%
+  filter (period == "2051-2060", rcp == "RCP60") %>%
+  right_join (priority_spp, by = c ("species", "country")) %>% View()
+
+
+
+  
+
+
 # updated 3/25/22 to use rda data
 # projected nutrient yield from FishNutrients for fish, GENuS for nonfish. in mt (per year) and servings (native units per day)
 # made this in Convert_catch_to_nutrients.R
