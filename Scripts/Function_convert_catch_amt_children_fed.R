@@ -6,6 +6,7 @@
 
 
 library (tidyverse)
+library (AFCD)
 
 # using code from Species_level_nutrient_content.R
 
@@ -31,6 +32,35 @@ d_gigas_nutr <- data.frame (
   nutrient = c ("Calcium", "Iron", "Omega_3", "Protein", "Selenium", "Vitamin_A", "Zinc"),
   amount = c(37.5, 3.3, 0.6, 16.4, 50.9, 0, 2.8)
 )
+
+# scylla serrata for indonesia
+s_serrata_nutr <- afcd_sci %>% 
+  filter (sciname == "Scylla serrata",
+          nutrient_code_fao %in% c(
+            "CA", "ZN", "FE", "SE", "Protein", "FAPU", "VITA")) %>%
+  group_by(nutrient_code_fao) %>%
+  summarise (amount = mean (value, na.rm = TRUE)) %>%
+  mutate (nutrient =
+            case_when (nutrient_code_fao == "CA" ~ "Calcium",
+                       nutrient_code_fao == "FE" ~ "Iron",
+                       nutrient_code_fao == "SE" ~ "Selenium", 
+                       nutrient_code_fao == "ZN" ~ "Zinc",
+                       nutrient_code_fao == "FAPU" ~ "Omega_3",
+                       nutrient_code_fao == "VITA" ~ "Vitamin_A"),
+          species = "Scylla serrata"
+  ) %>%
+  # reorder to match
+  select (species, nutrient, amount)
+
+# composite Stolephorus spp for Indonesia
+indo_stolephorus <- readRDS("Data/indo_stolephorus.Rds")
+
+stoleph_nutr <- fishnutr_long %>%
+  filter (species %in% indo_stolephorus) %>%
+  group_by (nutrient) %>%
+  summarise (amount = mean (amount)) %>%
+  mutate (species = "Stolephorus") %>%
+  select (species, nutrient, amount)
 
 # genus data for nonfish [eventually could use AFCD]
 spp_key <- read.csv(file.path ("Data/Gaines_species_nutrient_content_key.csv"), as.is=T)
@@ -77,11 +107,17 @@ calc_children_fed_func <- function (species_name, taxa, amount_mt) {
     taxa == "Mollusc" ~ 0.17,
     taxa == "Cephalopod" ~ 0.67)
  # GENuS/nutricast is 0.21 for cephalopods. Using 0.67, Bianchi et al. 2022 value for D. gigas; only cephalopod in our priority species. They also have a blanket 0.7 value for cephalopods.  
-  if (taxa == "Finfish") {
+  if (taxa == "Finfish" & species_name != "Stolephorus") {
     nutr_content <- fishnutr_long %>% filter (species == species_name)
-  } else if (species_name == "Dosidicus gigas") {
+  } else if (species_name == "Stolephorus") {
+    nutr_content = stoleph_nutr
+  }
+    else if (species_name == "Dosidicus gigas") {
     nutr_content = d_gigas_nutr
-  } else {
+  } else if (species_name == "Scylla serrata") {
+    nutr_content = s_serrata_nutr
+  }
+  else {
     nutr_content <- spp_key_long %>% filter (species == species_name)
   }   
   
@@ -99,3 +135,5 @@ calc_children_fed_func <- function (species_name, taxa, amount_mt) {
 # s <- calc_children_fed_func("Dosidicus gigas", "Cephalopod", 151407)
 # t <- calc_children_fed_func("Trachurus murphyi", "Finfish", 15429)
 # m <- calc_children_fed_func ("Crassostrea gigas", "Mollusc", 200)
+# s <- calc_children_fed_func ("Scylla serrata", "Crustacean", 55)
+a <- calc_children_fed_func("Stolephorus", "Finfish", 1000)
