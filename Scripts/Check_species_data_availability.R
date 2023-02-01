@@ -28,7 +28,7 @@ fishnutr_mu %>%
 
 
 # related sp?
-fishnutr_mu %>% filter (grepl("Stholephorus", species))
+fishnutr_mu %>% filter (grepl("Stolephorus", species))
 
 # sau ----
 sau_avail <- sau_2019 %>%
