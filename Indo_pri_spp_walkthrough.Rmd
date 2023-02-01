@@ -1,0 +1,106 @@
+---
+title: "Indonesia regional spp"
+date: 2/1/2023
+output: html_notebook
+---
+
+Indonesia team sent an updated list of species on Jan 24, 2023 for a presentation on 2/2/23
+
+•	Kakap merah (red snapper) Lutjanus gibbus
+•	Kerapu lumpur (Orange-spotted grouper) Epinephelus coioides
+•	Ikan Kembung (Indian and short mackerel) Rastrelliger kanagurta and R. brachysoma : Regarding to this one, can we mention some other small pelagic species? Including Layang (Indian scad) Decapterus russeli and Teri (Anchovy) Stholephorus sp.
+•	Kepiting bakau (mud crab) Schylla serrata
+•	Tuna sirip kuning (yellowfin tuna) Thunnus albacares
+
+
+
+```{r data_import}
+library (tidyverse)
+library (AFCD)
+library (stringr)
+
+# this will also bring in fishnutr data and RNI data
+source ("Scripts/Function_convert_catch_amt_children_fed.R")
+
+# priority species from regional teams
+pri_spp <- read.csv("Data/regional_teams_priority_spp.csv") 
+pri_spp_indo <- filter (pri_spp, country == "Indonesia")
+
+# SAU landings data
+sau_indo <- read.csv("Data/SAU EEZ indonesia.csv") 
+sau_indo_2019 <- sau_indo %>% filter (year == 2019)
+
+# nutricast/fishcast projections
+ds_spp <- read_rds("Data/Free_etal_proj_smaller.Rds")
+ds_spp_indo <- filter (ds_spp, country == "Indonesia")
+
+# exports from ARTIS, emailed 1/28/23
+exports_indo <- read_csv("Data/20230125_edf_ARTIS_indo.csv")
+```
+
+```{r data_avail}
+
+fishnutr_mu %>%
+  right_join (pri_spp, by = "species")  %>%
+  pivot_longer (Selenium_mu:Vitamin_A_mu,
+                names_to = "nutrient",
+                values_to = "amount") %>%
+  filter (is.na(amount)) %>% 
+  select (country, comm_name, species) %>% 
+  distinct()
+
+fishnutr_mu %>% filter (grepl("Stolephorus", species))
+
+
+sau_indo_2019 %>%
+  filter (scientific_name %in% pri_spp_indo$species) %>% #pull (scientific_name) %>% unique()
+  group_by (scientific_name) %>%
+  summarise (tonnes = sum (tonnes, na.rm = TRUE))
+
+sau_2019 %>% filter (grepl ("Stolephorus", scientific_name)) %>% View()
+sau_2019 %>% filter (grepl ("Lutjanus", scientific_name)) %>% View()
+sau_2019 %>% filter (grepl ("Epinephelus", scientific_name)) %>% View()
+sau_indo_2019 %>% filter (grepl ("Epinephelus", scientific_name)) %>% group_by (scientific_name) %>% summarise (tonnes = sum (tonnes))
+
+ds_spp_indo %>% 
+  filter (species %in% pri_spp_indo$species) %>% pull (species) %>% unique()
+ds_spp_indo %>% filter (grepl("Stolephorus", species)) %>% View()
+
+```
+
+FishNutrients has 6: doesn't have scylla (crab). 
+8 Stolephorus options, all of which occur in Indonesia according to FishBase. Also Encrasicholina puncifer or E. japonicus
+Just take the average of all of them! 
+
+SAU: Has 5 spp: R. brach, R. kanagurat, D. russ, S. serrata, T. alb. 
+But D. russelli; R. kanagurta is all foreign catch (thai); S. serrata very litte (42 tonnes)
+SAU has general Stolephorus (calls it garment anchovy) and Lutjanus; no other Lutjanus species.
+Also has general Epinephelus (only at genus level, no other species), but only Malaysian catch
+
+Nutricast has 6: R. brach, R. kana, S. serrat, T. alb, D. russ, L. gib; NO: Stolephorus but does have Engraulis japonicus; Encrasicholina punctifer (these are the two with anchovy in common name); NO E. coides but 6 other Ephinephelus spp. Fishbase says coioides often misidentified as E. tauvina which is in ds
+
+Exports has 5: R. brach, R. kana, S. serrat, Stolephorus, T. alb
+*Might work if I ask for Lutjanus
+
+```{r indo_stolep_possibilities}
+
+# make a vector of possible stolep spp to pull from fishnutr
+
+indo_stolephorus <- fishnutr_mu %>% 
+  filter (grepl("Stolephorus", species) | species == "Encrasicholina punctifer" | species =="Engraulis japonicus") %>%
+  pull (species) %>%
+  unique ()
+
+saveRDS (indo_stolephorus, file = "Data/indo_stolephorus.Rds")
+
+```
+
+```{r}
+sau_indo_2019 %>%
+    filter (scientific_name %in% pri_spp_indo$species | scientific_name == "Lutjanus" | scientific_name == "Stolephorus" | scientific_name == "Epinephelus") %>%
+  ggplot (aes (x= scientific_name, y = tonnes)) +
+  geom_col() +
+  theme_bw()
+    
+```
+
