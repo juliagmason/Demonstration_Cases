@@ -2,15 +2,21 @@
 
 # 1/31/23 from regional_team_priority_species_figs older code
 
+# smaller, just rcp 60 and 85. now has mexico
+ds_spp <- readRDS("Data/Free_etal_proj_smaller.Rds")
+
+priority_spp <- read_csv ("Data/regional_teams_priority_spp.csv") %>%
+  # just change S. japonicus peruanus to S. japonicus; no nutrient or SAU or nutricast data
+  mutate (species = case_when (species == "Scomber japonicus peruanus" ~ "Scomber japonicus",
+                               TRUE ~ species)
+  ) # 
+# Add E. 
 
 # plot nutricast projections for all priority spp ----
 
-ds_pri_spp <-  ds_spp %>%
-  right_join (priority_spp, by = c("country", "species"))
-
 plot_nutricast_proj<- function (country_name, spp_name) {
   
-  dat <- ds_pri_spp %>% 
+  dat <- ds_spp%>% 
     filter (country == country_name, species == spp_name, year  >2030, rcp %in% c("RCP26", "RCP60"))
   
   dat$scenario <- factor (dat$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
@@ -42,7 +48,20 @@ print(
 )
 dev.off()
 
+# Indonesia
+indo_spp <- c(pri_spp_indo$species, "Epinephelus tauvina", "Engraulis japonicus", "Encrasicholina punctifer")
+# clip to species in ds
+indo_spp <- indo_spp[which (indo_spp %in% ds_spp$species)]
 
+
+indo_input_ls <- list (country_name = "Indonesia", spp_name = indo_spp)
+
+pdf (file = "Figures/Indo_Pri_spp_Nutricast_timeseries_26_60.pdf", width = 12, height = 8)
+
+  lapply (indo_spp, plot_nutricast_proj, country_name = "Indonesia") #indo_input_ls$country_name, indo_input_ls$spp_name)
+
+dev.off()
+# print doesn't work with lapply (or really mapply) and it does that weird doubling thing...
 
 
 # John also requested biomass, profits
