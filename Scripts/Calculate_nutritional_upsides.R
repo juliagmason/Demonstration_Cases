@@ -4,6 +4,45 @@
 
 library (tidyverse)
 
+# smaller, just rcp 60 and 85. now has mexico
+ds_spp <- readRDS("Data/Free_etal_proj_smaller.Rds")
+
+# 2/1/23 moving code from regional team priority spp
+
+# upside in terms of relation to baseline catch----
+# to be able to use with our updated landings data, instead I want to calculate what the catch in 2050 is relative to baseline under the different scenarios. 
+
+catch_upside_relative <-  ds_spp %>%
+  filter (scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), catch_mt > 0) %>%
+  mutate (
+    # baseline and mid century and end century
+    period = case_when (
+      year %in% c(2012:2021) ~ "2012-2021",
+      year %in% c(2051:2060) ~ "2051-2060",
+      year %in% c(2091:2100) ~ "2091-2100")) %>%
+  filter (!is.na (period)) %>%
+  group_by (country, rcp, scenario, period, species) %>%
+  summarise (catch_mt = mean (catch_mt, na.rm = TRUE)) %>%
+  ungroup() %>%
+  group_by (country, rcp, species) %>%
+  summarize (bau_ratio_midcentury = catch_mt[scenario == "No Adaptation" & period == "2051-2060"]/ catch_mt[scenario == "No Adaptation" & period == "2012-2021"],
+             bau_ratio_endcentury = catch_mt[scenario == "No Adaptation" & period == "2091-2100"]/ catch_mt[scenario == "No Adaptation" & period == "2012-2021"],
+             mey_ratio_midcentury = catch_mt[scenario == "Productivity Only" & period == "2051-2060"]/ catch_mt[scenario == "No Adaptation" & period == "2012-2021"],
+             mey_ratio_endcentury = catch_mt[scenario == "Productivity Only" & period == "2091-2100"]/ catch_mt[scenario == "No Adaptation" & period == "2012-2021"],
+             adapt_ratio_midcentury = catch_mt[scenario == "Full Adaptation" & period == "2051-2060"]/ catch_mt[scenario == "No Adaptation" & period == "2012-2021"],
+             adapt_ratio_endcentury = catch_mt[scenario == "Full Adaptation" & period == "2091-2100"]/ catch_mt[scenario == "No Adaptation" & period == "2012-2021"]
+  )
+
+save (catch_upside_relative, file = "Data/nutricast_upside_relative_by_period.Rds")
+
+catch_upside_relative %>%
+  filter (rcp == "RCP60") %>%
+  right_join (priority_spp, by = c("country", "species")) %>%
+  filter (!country == "Indonesia") %>%
+  arrange (country, rank) %>%
+  write.excel()
+
+
 # updated 3/25/22 to use rda data
 # projected nutrient yield from FishNutrients for fish, GENuS for nonfish. in mt (per year) and servings (native units per day)
 # made this in Convert_catch_to_nutrients.R
