@@ -463,7 +463,7 @@ plot_priority_spp_nutr_bar <- function (country_name, n_spp) {
 }
 
 plot_priority_spp_nutr_bar(country_name = "Chile", n_spp = 5)
-plot_priority_spp_nutr_bar(country_name = "Peru", n_spp = 5)
+plot_priority_spp_nutr_bar(country_name = "Indonesia", n_spp = 8)
 
 # Dodged colorful bars all on one axis ----
 # order by overall nutrient density 
@@ -531,6 +531,19 @@ pri_spp_nutr %>%
          axis.text = element_text (size = 16))
 dev.off()
 
+# compare species across one nutrient----
+
+png ("Figures/Indo_pri_spp_compare_Ca.png", width = 5, height = 5, units = "in", res = 300)
+pri_spp_nutr %>%
+  filter (nutrient == "Calcium", 
+          country == "Indonesia") %>%
+  ggplot (aes (x = reorder(species, -perc_rni), y = perc_rni)) +
+  geom_col() +
+  labs (x = "", y = "") +
+  theme_bw() +
+  theme (axis.text = element_text (size = 12))
+  dev.off()
+
 # SAU landings to show overall bank ----
 
 # Peru 
@@ -588,7 +601,6 @@ pri_spp_per <- pri_spp_nutr %>%
   dev.off()
   
 # Indonesia
-
   
   mack_catch <- sau_2019 %>%
     filter (country == "Indonesia", 
@@ -614,7 +626,7 @@ pri_spp_per <- pri_spp_nutr %>%
   #or snapper was their #1
   snap_catch <- sau_2019 %>%
     filter (country == "Indonesia", 
-            species == "Lutjanus")%>%
+            species == "Lutjanus gibbus")%>%
     group_by (species) %>% summarise (tonnes = sum (tonnes))
   
   snap_2019_children_fed <- calc_children_fed_func(taxa = "Finfish", species = "Lutjanus gibbus", amount =  snap_catch$tonnes)
@@ -630,6 +642,40 @@ pri_spp_per <- pri_spp_nutr %>%
            axis.text.y = element_text (size = 15),
            legend.position = "none")
   dev.off()
+  
+  
+  # fully walk through, start with tonnes of nutrients
+  library (measurements) # for converting units
+  
+  
+  png ("Figures/Indo_SAU_2019_Lutjanus_nutrient_tonnes.png", res = 300, width = 5.5, height = 5, units = "in")  
+fishnutr_long %>%
+    filter (species == "Lutjanus gibbus") %>%
+    mutate (tonnes = amount * 0.87 * snap_catch$tonnes, 
+            # specify units in terms that conv_unit can use
+            dens_units = 
+                      case_when (
+                        nutrient %in% c("Protein", "Omega_3") ~ "g",
+                        nutrient %in% c("Vitamin_A", "Selenium") ~ "ug",
+                        TRUE ~ "mg"
+                      ),
+            meat_g = measurements::conv_unit(tonnes, "Mg", "g"),
+            
+            # Calculate amount of nutrient in density units. divide by 100 because density units are per 100g
+            nutrient_q = meat_g *  amount / 100,
+            
+            # Calculate amount of nutrient in metric tons
+            nutrient_mt = mapply (measurements::conv_unit, nutrient_q, from = dens_units, to = "Mg")
+            ) %>%
+    filter (!nutrient %in% c("Protein", "Selenium")) %>% 
+    ggplot (aes (x = nutrient, y = nutrient_mt , fill = nutrient)) +
+    geom_col() +
+    theme_bw() +
+    labs (x = "", y = "") +
+    theme (axis.text.x = element_blank (),
+           axis.text.y = element_text (size = 15),
+           legend.position = "none")
+    dev.off()
 
 
 # categorize SAU catch as bank with foreign, non dhc, export withdrawals ----
@@ -1035,7 +1081,100 @@ ds_spp %>%
   )
 dev.off()
 
-# this one is super small, better to scale to catch
+# plot all of them for indonesia ----
+# special ds for indo spp to match nutricast
+indo_spp_ds <- c(pri_spp_indo$species, "Epinephelus tauvina", "Engraulis japonicus", "Encrasicholina punctifer")
+
+# sau baseline catch
+# current catch tons and match species. Just find overall tons for priority species and then append those values to the nutricast species
+sau_tonnes_indo <- sau_2019 %>%
+  filter(country == "Indonesia", 
+         species %in% pri_spp_indo$species) %>%
+  group_by (species) %>%
+  summarise (total_tonnes = sum (tonnes))
+
+sau_match_nutricast <- data.frame (
+  species = c("Epinephelus tauvina", "Engraulis japonicus", "Encrasicholina punctifer"), 
+  total_tonnes = c(sau_tonnes_indo$total_tonnes[which(sau_tonnes_indo$species == "Epinephelus coioides")],
+                   sau_tonnes_indo$total_tonnes[which(sau_tonnes_indo$species == "Stolephorus")],
+                   sau_tonnes_indo$total_tonnes[which(sau_tonnes_indo$species == "Stolephorus")]
+  )
+)  
+
+sau_tonnes_indo <- sau_tonnes_indo %>%
+  rbind (sau_match_nutricast)
+
+# ds_spp baseline for each one
+indo_ds_baseline <- ds_spp %>%
+  filter (country == "Indonesia", 
+          species %in% indo_spp_ds, 
+          between (year, 2012, 2021),
+          scenario == "No Adaptation") %>%
+  group_by (species, rcp) %>%
+  summarize (baseline_catch = mean (catch_mt))
+
+# annual relative catch projection ----
+indo_upside_relative <- ds_spp %>%
+  filter (country == "Indonesia", 
+          species %in% indo_spp_ds, 
+          scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"),
+          rcp %in% c ("RCP26", "RCP60")) %>%
+  left_join (indo_ds_baseline, by = c("species", "rcp")) %>%
+  left_join (sau_tonnes_indo, by = "species") %>%
+  mutate (ratio = catch_mt / baseline_catch, 
+          relative_catch = ratio * total_tonnes) %>%
+  select (species, scenario, rcp, year, ratio, relative_catch) 
+
+# plot small versions for each indo spp ----
+plot_simple_nutricast_ts_indo <- function (species) {
+  p <- indo_upside_relative %>%
+    filter (year > 2030,
+      species == "Scylla serrata",
+      scenario %in% c("No Adaptation", "Full Adaptation")
+    ) %>% 
+    ggplot (aes (x = year, y = relative_catch, col = scenario)) +
+    facet_wrap (~rcp) +
+    geom_line(linewidth = 1.5) +
+    theme_bw() +
+    labs (x = "", y = "") +
+    ggtitle(species) +
+    scale_color_manual(values = c ("dodgerblue3", "darkred")) +
+    theme (
+      axis.text = element_text (size = 10),
+      plot.title = element_text (size = 12),
+      legend.title = element_blank(),
+      legend.position = "none"
+    )
+  
+  png (file = paste0("Figures/indo_pri_spp_nutricast_ts_small_", species, ".png"), width = 3, height = 3, units = "in", res = 300)
+print(p)
+dev.off() 
+}
+
+plot_simple_nutricast_ts_indo(indo_spp_ds[7]) # works for plot but not png
+
+png (file = paste0("Figures/indo_pri_spp_nutricast_ts_small_Scylla serrata.png"), width = 3.5, height = 2.5, units = "in", res = 300)
+indo_upside_relative %>%
+  filter (year > 2030,
+          species == "Scylla serrata",
+          scenario %in% c("No Adaptation", "Full Adaptation")
+  ) %>% 
+  ggplot (aes (x = year, y = relative_catch, col = scenario)) +
+  facet_wrap (~rcp) +
+  geom_line(linewidth = 1.5) +
+  theme_bw() +
+  labs (y = "Catch, tonnes", x = "") +
+  scale_color_manual(values = c ("dodgerblue3", "darkred")) +
+  theme (
+    axis.text = element_text (size = 9),
+    plot.title = element_text (size = 11),
+    legend.title = element_blank(),
+    legend.position = "none"
+  )
+dev.off()
+
+# collapse code here----
+# this one is super small, better to scale to catch 
 png ("Figures/Indo_nutricast_ts_lutjanus.png", width = 7, height = 7, units = "in", bg = "transparent", res = 300)
 ds_spp %>%
   filter (country == "Indonesia", species == "Lutjanus gibbus", 
@@ -1056,33 +1195,6 @@ ds_spp %>%
   )
 dev.off()
 
-# calculate annual ratio....
-
-# L gibbus for indo. has a huge crossover, plummets under no adaptation
-L_gibbus_baseline <- ds_spp %>%
-  filter (country == "Indonesia", 
-          species == "Lutjanus gibbus", 
-          between (year, 2012, 2021),
-          scenario == "No Adaptation") %>%
-  group_by (rcp) %>%
-  summarize (baseline_catch = mean (catch_mt))
-
-sau_l_gibbus_baseline <- sau_2019 %>%
-  filter (country == "Indonesia", species == "Lutjanus gibbus") %>%
-  group_by (species) %>%
-  summarise (total_tonnes = sum (tonnes))
-
-
-upside_relative_L_gibbus <- ds_spp %>%
-  filter (country == "Indonesia", 
-          species == "Lutjanus gibbus", 
-          scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"),
-          rcp %in% c ("RCP26", "RCP60")) %>%
-  left_join (L_gibbus_baseline, by = "rcp") %>%
-  left_join (sau_l_gibbus_baseline, by = "species") %>%
-  mutate (ratio = catch_mt / baseline_catch, 
-          relative_catch = ratio * total_tonnes) %>%
-  select (species, scenario, rcp, year, ratio, relative_catch) 
 
 png ("Figures/Indo_nutricast_ts_lutjanus_relative.png", width = 7, height = 7, units = "in", bg = "transparent", res = 300)
 upside_relative_L_gibbus %>%
@@ -1102,6 +1214,9 @@ upside_relative_L_gibbus %>%
     legend.position = "none"
   )
 dev.off()
+
+
+
 
 # plot nutrient upsides MEY and BEY bar graphs ----
 
@@ -1160,9 +1275,7 @@ calcium_amts <-fishnutr_long %>%
   )
 
 
-# special ds for indo
-indo_spp_ds <- c(pri_spp_indo$species, "Epinephelus tauvina", "Engraulis japonicus", "Encrasicholina punctifer")
-
+# for indonesia, make special data frame
 calcium_s_serrata <- data.frame (
   species = "Scylla serrata",
   nutrient = "Calcium",
@@ -1172,27 +1285,10 @@ calcium_s_serrata <- data.frame (
 )
 
 calcium_indo <- fishnutr_long %>%
-  filter (nutrient == "Calcium", species %in% indo_spp) %>%
+  filter (nutrient == "Calcium", species %in% indo_spp_ds) %>%
   mutate (p_edible = 0.87) %>%
   rbind (calcium_s_serrata)
 
-# current catch tons and match species. Just find overall tons for priority species and then append those values to the nutricast species
-sau_tonnes_indo <- sau_2019 %>%
-  filter(country == "Indonesia", 
-         species %in% pri_spp_indo$species) %>%
-  group_by (species) %>%
-  summarise (total_tonnes = sum (tonnes))
-  
-sau_match_nutricast <- data.frame (
-  species = c("Epinephelus tauvina", "Engraulis japonicus", "Encrasicholina punctifer"), 
-  total_tonnes = c(sau_tonnes_indo$total_tonnes[which(sau_tonnes_indo$species == "Epinephelus coioides")],
-                   sau_tonnes_indo$total_tonnes[which(sau_tonnes_indo$species == "Stolephorus")],
-                   sau_tonnes_indo$total_tonnes[which(sau_tonnes_indo$species == "Stolephorus")]
-  )
-  )  
-
-sau_tonnes_indo <- sau_tonnes_indo %>%
-  rbind (sau_match_nutricast)
 
 upside_ratios_indo <- catch_upside_relative %>%
   filter (country == "Indonesia", species %in% sau_tonnes_indo$species) %>%
@@ -1235,6 +1331,23 @@ upside_ratios_indo %>%
          #axis.text.x = element_text (angle = 60, hjust = 1),
          strip.text.x =  element_text (size = 16),
          axis.title = element_text (size = 18)) 
+dev.off()
+
+
+# plot individual spp for indo presentation ----
+png ("Figures/Indo_calcium_upside_Engraulis japonicus.png", width = 2.5, height = 2.5, units= "in", res = 300)
+upside_ratios_indo %>%
+  filter (rcp %in% c("RCP26", "RCP60"), upside == "adapt_midcentury", species == "Engraulis japonicus" ) %>%
+  left_join(filter (priority_spp, country == "Indonesia"), by = c("country", "species")) %>%
+  filter (!is.na(rcp)) %>%
+  ggplot (aes (x = rcp, y = child_rni/1000)) +
+  geom_col () +
+  #facet_wrap (~species, scales = "free_y") +
+  theme_bw() +
+  geom_hline (yintercept = 0, lty = 2) +
+  labs (y = "Add'l child RNIs met, 1000s", x = "") +
+  theme (axis.text = element_text (size = 9),
+         axis.title = element_text (size = 11)) 
 dev.off()
 
 
