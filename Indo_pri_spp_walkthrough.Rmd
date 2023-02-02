@@ -104,3 +104,11 @@ sau_indo_2019 %>%
     
 ```
 
+write out nutrition facts for L. gibbus
+```{r}
+fishnutr_long %>%
+  filter (species == "Lutjanus gibbus") %>%
+  left_join(rni_child, by = "nutrient") %>%
+  mutate (perc_rni = amount/RNI * 100)
+```
+
