@@ -10,7 +10,24 @@ priority_spp <- read_csv ("Data/regional_teams_priority_spp.csv") %>%
   mutate (species = case_when (species == "Scomber japonicus peruanus" ~ "Scomber japonicus",
                                TRUE ~ species)
   ) # 
-# Add E. 
+
+
+dat <- ds_spp%>% 
+  filter (country == "Indonesia", species == "Lutjanus gibbus", rcp %in% c("RCP26", "RCP60"))
+
+dat$scenario <- factor (dat$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
+
+p <- dat %>% ggplot (aes (x = year, y = catch_mt, col = scenario)) +
+  geom_line() +
+  theme_bw() +
+  facet_wrap ( ~ rcp, scales = "free_y", ncol = 2) +
+  labs (x = "", y = "Catch, metric tons", col = "Mgmt scenario") +
+  #ggtitle (paste0 ("Free et al. (2020) projections for ", spp_name, ", ", country_name)) +
+  theme (plot.title = element_text (size = 14),
+         axis.text = element_text (size = 12),
+         legend.position = "none")
+
+print (p)
 
 # plot nutricast projections for all priority spp ----
 
