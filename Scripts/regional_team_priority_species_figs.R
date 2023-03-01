@@ -2,7 +2,7 @@
 
 # 5/27/22, updated 7/26/22, jan 23
 library (tidyverse)
-#library (stringr)
+library (stringr)
 
 # function for copying R output tables into word/excel----
 #https://stackoverflow.com/questions/24704344/copy-an-r-data-frame-to-an-excel-spreadsheet
@@ -25,90 +25,6 @@ priority_spp <- read_csv ("Data/regional_teams_priority_spp.csv") %>%
   mutate (species = case_when (species == "Scomber japonicus peruanus" ~ "Scomber japonicus",
                                TRUE ~ species)
           )
-
-
-# join priority spp to nutrient data ----
-# should put this in calculate children fed function? not sure I need this?? redo nutrient bar graphs....
-
-# macgyver pota data for chile/peru
-d_gigas_rbind <- data.frame (
-  species = d_gigas_nutr$species,
-  country = "Peru",
-  comm_name = "Pota",
-  rank = 1,
-  taxa = "Cephalopod",
-  nutrient = d_gigas_nutr$nutrient,
-  amount = d_gigas_nutr$amount)
-
-
-# also grab crab nutrients from afcd for indo
-# picking somewhat randomly. note that there's a separate dha + epa for omegas, and different vitamin As
-library (AFCD)
-
-scylla_nutr <- afcd_sci %>% 
-  filter (sciname == "Scylla serrata",
-          nutrient_code_fao %in% c(
-            "CA", "ZN", "FE", "SE", "Protein", "FAPU", "VITA")) %>%
-  group_by(nutrient_code_fao) %>%
-  summarise (amount = mean (value, na.rm = TRUE)) %>%
-  mutate (nutrient =
-            case_when (nutrient_code_fao == "CA" ~ "Calcium",
-                       nutrient_code_fao == "FE" ~ "Iron",
-                       nutrient_code_fao == "SE" ~ "Selenium", 
-                       nutrient_code_fao == "ZN" ~ "Zinc",
-                       nutrient_code_fao == "FAPU" ~ "Omega_3",
-                       nutrient_code_fao == "VITA" ~ "Vitamin_A"),
-          # make columns to match other df
-          country = "Indonesia",
-          comm_name = "Kepiting bakau",
-          rank = 7,
-          taxa = "Crustacean",
-          species = "Scylla serrata"
-          ) %>%
-  # reorder
-  select (species, country, comm_name, rank, taxa, nutrient, amount)
-          
-  
-# and take composite nutrients for Indo stolephorus
-stoleph_nutr <- fishnutr_long %>%
-  filter (species %in% indo_stolephorus) %>%
-  group_by (nutrient) %>%
-  summarise (amount = mean (amount)) %>%
-  # make columns to match other df
-  mutate (
-    country = "Indonesia",
-    comm_name = "Teri",
-    rank = 6,
-    taxa = "Finfish",
-    species = "Stolephorus"
-  ) %>%
-  # reorder
-  select (species, country, comm_name, rank, taxa, nutrient, amount)
-
-
-# join *Do I not need this?? does this get covered in function convert catch?? Use it for nutrition colorful bar graph...
-pri_spp_nutr <- fishnutr_long %>%
-  right_join (priority_spp, by = "species")  %>% 
- 
-  # join d_gigas
-  filter (!species %in% c("Dosidicus gigas", "Scylla serrata", "Stolephorus")) %>%
-  rbind (d_gigas_rbind) %>%
-  rbind (scylla_nutr) %>%
-  rbind (stoleph_nutr) %>%
-
-  
-  # join to rni data
-  left_join (rni_child, by = "nutrient") %>%
-  
-  # this would be the percentage of your daily requirement you could get from a 100g serving of each species. cap at 100%
-  mutate (perc_rni = amount/RNI * 100,
-          perc_rni = ifelse (perc_rni > 100, 100, perc_rni),
-          nutrient = 
-            case_when (nutrient == "Vitamin_A" ~ "Vit A",
-                       nutrient == "Omega_3" ~ "Omega 3",
-                       TRUE ~ nutrient)) %>%
-  ungroup()
-
 
 # Landings data ----
 
@@ -431,8 +347,96 @@ p <- pmap_dfr (chl_landings_input_ls, calc_children_fed_func)
 # figure this out, can I get around the pri_spp_nutr thing??
 # Priority species nutrient content ----
 
+pri_spp
+
+# join priority spp to nutrient data ----
+# should put this in calculate children fed function? not sure I need this?? redo nutrient bar graphs....
+
+# macgyver pota data for chile/peru
+d_gigas_rbind <- data.frame (
+  species = d_gigas_nutr$species,
+  country = "Peru",
+  comm_name = "Pota",
+  rank = 1,
+  taxa = "Cephalopod",
+  nutrient = d_gigas_nutr$nutrient,
+  amount = d_gigas_nutr$amount)
+
+
+# also grab crab nutrients from afcd for indo
+# picking somewhat randomly. note that there's a separate dha + epa for omegas, and different vitamin As
+library (AFCD)
+
+scylla_nutr <- afcd_sci %>% 
+  filter (sciname == "Scylla serrata",
+          nutrient_code_fao %in% c(
+            "CA", "ZN", "FE", "SE", "Protein", "FAPU", "VITA")) %>%
+  group_by(nutrient_code_fao) %>%
+  summarise (amount = mean (value, na.rm = TRUE)) %>%
+  mutate (nutrient =
+            case_when (nutrient_code_fao == "CA" ~ "Calcium",
+                       nutrient_code_fao == "FE" ~ "Iron",
+                       nutrient_code_fao == "SE" ~ "Selenium", 
+                       nutrient_code_fao == "ZN" ~ "Zinc",
+                       nutrient_code_fao == "FAPU" ~ "Omega_3",
+                       nutrient_code_fao == "VITA" ~ "Vitamin_A"),
+          # make columns to match other df
+          country = "Indonesia",
+          comm_name = "Kepiting bakau",
+          rank = 7,
+          taxa = "Crustacean",
+          species = "Scylla serrata"
+  ) %>%
+  # reorder
+  select (species, country, comm_name, rank, taxa, nutrient, amount)
+
+
+# and take composite nutrients for Indo stolephorus
+stoleph_nutr <- fishnutr_long %>%
+  filter (species %in% indo_stolephorus) %>%
+  group_by (nutrient) %>%
+  summarise (amount = mean (amount)) %>%
+  # make columns to match other df
+  mutate (
+    country = "Indonesia",
+    comm_name = "Teri",
+    rank = 6,
+    taxa = "Finfish",
+    species = "Stolephorus"
+  ) %>%
+  # reorder
+  select (species, country, comm_name, rank, taxa, nutrient, amount)
+
+
+# join *Do I not need this?? does this get covered in function convert catch?? Use it for nutrition colorful bar graph...
+# still have to figure out how and where to add the other species. 
+
+pri_spp_nutr <- fishnutr_long %>%
+  right_join (priority_spp, by = "species")  %>% 
+  
+  # join d_gigas
+  filter (!species %in% c("Dosidicus gigas", "Scylla serrata", "Stolephorus")) %>%
+  rbind (d_gigas_rbind) %>%
+  rbind (scylla_nutr) %>%
+  rbind (stoleph_nutr) %>%
+  
+  
+  # join to rni data
+  left_join (rni_child, by = "nutrient") %>%
+  
+  # this would be the percentage of your daily requirement you could get from a 100g serving of each species. cap at 100%
+  mutate (perc_rni = amount/RNI * 100,
+          perc_rni = ifelse (perc_rni > 100, 100, perc_rni),
+          nutrient = 
+            case_when (nutrient == "Vitamin_A" ~ "Vit A",
+                       nutrient == "Omega_3" ~ "Omega 3",
+                       TRUE ~ nutrient)) %>%
+  ungroup()
+
+
 # show nutr content as bar graph ----
 # nutrient as x axis, % RNI as y axis
+# this doesn't solve problem of nonfish
 plot_priority_spp_nutr_bar <- function (country_name, n_spp) {
   
   # filter priority species
@@ -440,10 +444,11 @@ plot_priority_spp_nutr_bar <- function (country_name, n_spp) {
     filter (country == country_name, rank <= n_spp)
   
   
-  p <- pri_spp_nutr %>%
-    # bring back common names, filter to country
-    #right_join (country_spp, by = "species") %>%
-    filter (country == country_name, species %in% country_spp$species, !nutrient %in% c("Protein", "Selenium")) %>%
+  p <- country_spp %>%
+    inner_join (fishnutr_long, by = "species") %>%
+    filter (!nutrient %in% c("Protein", "Selenium")) %>%
+    left_join (rni_child, by = "nutrient") %>%
+    mutate (perc_rni = amount / RNI * 100) %>%
     ggplot () +
     geom_bar (aes (x = nutrient, y = perc_rni), stat = "identity") +
     facet_wrap (~comm_name) +
@@ -459,77 +464,96 @@ plot_priority_spp_nutr_bar <- function (country_name, n_spp) {
   print (p)
   #dev.off()
   
-  
 }
 
 plot_priority_spp_nutr_bar(country_name = "Chile", n_spp = 5)
 plot_priority_spp_nutr_bar(country_name = "Indonesia", n_spp = 8)
 
+
 # Dodged colorful bars all on one axis ----
 # order by overall nutrient density 
-png ("Figures/Chl_pri_spp_nutr_dodge_bar.png", width = 10, height = 5, units = "in", res = 300)
-pri_spp_nutr %>%
-  filter (nutrient != "Protein") %>%
-  group_by (country, species) %>%
-  mutate (micronutrient_density = sum (perc_rni)) %>%
-  ungroup() %>%
-  filter (country == "Chile") %>%
-  ggplot (aes (x = reorder(comm_name, -micronutrient_density), fill = nutrient, y = perc_rni)) +
-  geom_col (position = "dodge") +
-  #geom_text (aes(label = round(micronutrient_density, 1))) +
-  theme_bw() +
-  labs (x = "", y = "") +
-  theme (legend.position = "none", 
-         axis.text = element_text (size = 16))
+
+# shorten spp names
+# https://stackoverflow.com/questions/8299978/splitting-a-string-on-the-first-space
+
+
+plot_colorful_spp_nutr_dodge_bar <- function (country_name) {
+  pri_spp_nutr %>%
+    filter (!nutrient %in% c("Protein", "Selenium"), 
+            country == country_name) %>%
+    group_by (species) %>%
+    mutate (micronutrient_density = sum (perc_rni),
+            spp_short = ifelse (
+              species != "Stolephorus",
+              paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
+              species)
+            ) %>%
+    ungroup() %>%
+    
+    ggplot (aes (x = reorder(spp_short, -micronutrient_density), fill = nutrient, y = perc_rni)) +
+    geom_col (position = "dodge") +
+    theme_bw() +
+    labs (x = "", y = "% Child RNI met per 100g serving", fill = "Nutrient") +
+    ylim (c(0,100)) +
+    ggtitle (country_name)+
+    theme ( 
+           axis.text.y = element_text (size = 14),
+           axis.text.x = element_text (size = 10),
+           axis.title = element_text (size = 14),
+           plot.title = element_text (size = 18))
+}
+
+png ("Figures/SL_pri_spp_nutr_dodge_bar.png", width = 10, height = 5, units = "in", res = 300)
+print (
+  plot_colorful_spp_nutr_dodge_bar("Sierra Leone")
+)
 dev.off()
 
-png ("Figures/Peru_pri_spp_nutr_dodge_bar.png", width = 10, height = 5, units = "in", res = 300)
-pri_spp_nutr %>%
-  filter (nutrient != "Protein") %>%
-  group_by (country, species) %>%
-  mutate (micronutrient_density = sum (perc_rni)) %>%
-  ungroup() %>%
-  filter (country == "Peru") %>%
-  ggplot (aes (x = reorder(comm_name, -micronutrient_density), fill = nutrient, y = perc_rni)) +
-  geom_col (position = "dodge") +
-  #geom_text (aes(label = round(micronutrient_density, 1))) +
-  theme_bw() +
-  labs (x = "", y = "") +
-  theme (legend.position = "none", 
-         axis.text = element_text (size = 16))
+png ("Figures/CHL_pri_spp_nutr_dodge_bar.png", width = 10, height = 5, units = "in", res = 300)
+print (
+  plot_colorful_spp_nutr_dodge_bar("Chile")
+)
 dev.off()
 
-
-png ("Figures/Mex_pri_spp_nutr_dodge_bar.png", width = 10, height = 5, units = "in", res = 300)
-pri_spp_nutr %>%
-  filter (nutrient != "Protein") %>%
-  group_by (country, species) %>%
-  mutate (micronutrient_density = sum (perc_rni)) %>%
-  ungroup() %>%
-  filter (country == "Mexico") %>%
-  ggplot (aes (x = reorder(comm_name, -micronutrient_density), fill = nutrient, y = perc_rni)) +
-  geom_col (position = "dodge") +
-  theme_bw() +
-  labs (x = "", y = "") +
-  theme (legend.position = "none", 
-         axis.text = element_text (size = 16))
+png ("Figures/PER_pri_spp_nutr_dodge_bar.png", width = 10, height = 5, units = "in", res = 300)
+print (
+  plot_colorful_spp_nutr_dodge_bar("Peru")
+)
 dev.off()
 
-png ("Figures/Indo_pri_spp_nutr_dodge_bar.png", width = 10, height = 5, units = "in", res = 300)
+png ("Figures/IDN_pri_spp_nutr_dodge_bar.png", width = 10, height = 5, units = "in", res = 300)
+print (
+  plot_colorful_spp_nutr_dodge_bar("Indonesia")
+)
+dev.off()
+
+# facet?
+png ("Figures/Facet_pri_spp_nutr_dodge_bar.png", width = 10, height = 12, units = "in", res = 300)
 pri_spp_nutr %>%
-  filter (!nutrient %in% c("Protein", "Selenium"), 
-          country == "Indonesia") %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
   group_by (species) %>%
-  mutate (micronutrient_density = sum (perc_rni)) %>%
+  mutate (micronutrient_density = sum (perc_rni),
+          spp_short = ifelse (
+            species != "Stolephorus",
+            paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
+            species)
+  ) %>%
   ungroup() %>%
-  
-  ggplot (aes (x = reorder(comm_name, -micronutrient_density), fill = nutrient, y = perc_rni)) +
+  filter (!country == "Mexico", !is.na(nutrient)) %>%
+  ggplot (aes (x = reorder(spp_short, -micronutrient_density), fill = nutrient, y = perc_rni)) +
   geom_col (position = "dodge") +
   theme_bw() +
-  labs (x = "", y = "") +
-  theme (legend.position = "none", 
-         axis.text = element_text (size = 16))
+  facet_wrap (~country, ncol = 1, scales = "free_x") +
+  labs (x = "", y = "% Child RNI met per 100g serving", fill = "Nutrient") +
+  ylim (c(0,100)) +
+  #ggtitle (country_name)+
+  theme ( 
+    axis.text.y = element_text (size = 14),
+    axis.text.x = element_text (size = 10),
+    axis.title = element_text (size = 14),
+    plot.title = element_text (size = 18))
 dev.off()
+
 
 # compare species across one nutrient----
 
