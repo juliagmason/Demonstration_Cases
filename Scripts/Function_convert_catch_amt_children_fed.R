@@ -127,7 +127,8 @@ calc_children_fed_func <- function (species_name, taxa, amount_mt) {
             edible_servings = catch_mt * p_edible * 1000 * 1000 /100 / 365,
             nutrient_servings = edible_servings * amount) %>%
     left_join (rni_child, by = "nutrient") %>%
-    mutate (children_fed = nutrient_servings / RNI)
+    mutate (children_fed = nutrient_servings / RNI) %>%
+    select (nutrient, children_fed)
   
 
 }
