@@ -257,3 +257,175 @@ upside_ratios_SL %>%
          legend.title = element_text (size = 14),
          legend.text = element_text (size = 12)) 
 dev.off()
+
+##########################################################################33
+# plot in terms of RNIs ----
+# function for converting catch in mt to children fed ----
+# this will also bring in fishnutr data and RNI data
+source ("Scripts/Function_convert_catch_amt_children_fed.R")
+
+plot_nutricast_upside_rni_sau_countries_function <- function (country_name, nutrient_name, divide_value) {
+  divide_label <- case_when (
+    divide_value ==1 ~ "",
+    divide_value == 1000 ~ "(thousands)",
+    divide_value == 1000000 ~ "(millions)"
+  )
+  
+upsides <- sau_2019 %>%
+  filter(country == country_name) %>%
+  inner_join (priority_spp, by = c ("country", "species")) %>%
+  group_by (country, species, taxa) %>%
+  summarise (total_tonnes = sum (tonnes)) %>%
+  ungroup() %>%
+  left_join (catch_upside_relative, by = c("country", "species")) %>%
+  mutate (# multiply ratio by current landings
+    across(bau_ratio_midcentury:adapt_ratio_endcentury, ~.x * total_tonnes),
+    #convert to upside, subtract 
+    mey_2050 = mey_ratio_midcentury - bau_ratio_midcentury,
+    mey_2100 = mey_ratio_endcentury - bau_ratio_endcentury,
+    adapt_2050 = adapt_ratio_midcentury - bau_ratio_midcentury,
+    adapt_2100 = adapt_ratio_endcentury - bau_ratio_endcentury) %>%
+  
+  select (country, rcp, species, taxa, mey_2050:adapt_2100) %>%
+  pivot_longer(mey_2050:adapt_2100, 
+               names_to = "upside",
+               values_to = "tonnes") %>%
+  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = tonnes), calc_children_fed_func)) %>%
+  unnest(cols = c(children_fed),  names_repair = "check_unique") 
+
+upsides$upside <- factor(upsides$upside, levels = c ("mey_2050", "mey_2100", "adapt_2050", "adapt_2100"))
+    
+upsides %>%
+    filter (nutrient == nutrient_name, rcp %in% c("RCP26", "RCP85")) %>%
+    mutate(
+      spp_short = ifelse (
+        species != "Stolephorus",
+        paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
+        species)
+    ) %>%
+    ggplot (aes (x = upside, y = children_fed/divide_value, fill = rcp)) +
+    geom_col (position = "dodge") +
+    facet_wrap (~spp_short, scales = "free_y", ncol = 2) +
+    geom_hline (yintercept = 0, lty = 2) +
+    theme_bw() +
+    labs (y = paste0("Additional child RNIs met ", divide_label), x = "", fill = "RCP") +
+    ggtitle (paste0(nutrient_name, " upside from climate-adaptive management,\n", country_name)) +
+    theme (plot.title = element_text (size = 18),
+           axis.text = element_text (size = 12),
+           axis.text.x = element_text (angle = 60, hjust = 1),
+           axis.title = element_text (size = 14),
+           legend.title = element_text (size = 14),
+           legend.text = element_text (size = 12)) 
+    
+  
+  
+}
+
+png ("Figures/Peru_nutricast_upside_Cal.png", width = 10, height = 8, units= "in", res = 300)
+plot_nutricast_upside_rni_sau_countries_function (country_name = "Peru", nutrient_name = "Calcium", divide_value = 1000)
+dev.off()
+
+png ("Figures/SL_nutricast_upside_Cal.png", width = 10, height = 8, units= "in", res = 300)
+plot_nutricast_upside_rni_sau_countries_function (country_name = "Sierra Leone", nutrient_name = "Calcium", divide_value = 1)
+dev.off()
+
+# indonesia ----
+# have to do different indo anyway...
+upside_ratios_indo_nutr <- catch_upside_relative %>%
+  left_join (priority_spp, by = c ("country", "species")) %>%
+  filter (country == "Indonesia", species %in% indo_spp_ds) %>%
+  replace_na(list(taxa = "Finfish")) %>%
+  left_join (sau_tonnes_indo, by = "species") %>% 
+  mutate (# multiply ratio by current landings
+    across(bau_ratio_midcentury:adapt_ratio_endcentury, ~.x * total_tonnes),
+    #convert to upside, subtract 
+    mey_2050 = mey_ratio_midcentury - bau_ratio_midcentury,
+    mey_2100 = mey_ratio_endcentury - bau_ratio_endcentury,
+    adapt_2050 = adapt_ratio_midcentury - bau_ratio_midcentury,
+    adapt_2100 = adapt_ratio_endcentury - bau_ratio_endcentury) %>%
+  
+  select (rcp, species, taxa, mey_2050:adapt_2100) %>%
+  pivot_longer(mey_2050:adapt_2100, 
+               names_to = "upside",
+               values_to = "tonnes") %>%
+  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = tonnes), calc_children_fed_func)) %>%
+  unnest(cols = c(children_fed),  names_repair = "check_unique") 
+
+upside_ratios_indo_nutr$upside <- factor(upside_ratios_indo_nutr$upside, levels = c ("mey_2050", "mey_2100", "adapt_2050", "adapt_2100"))
+
+png ("Figures/Indo_nutricast_upside_Cal.png", width = 10, height = 8, units= "in", res = 300)
+upside_ratios_indo_nutr %>%
+  filter (nutrient == "Calcium", rcp %in% c("RCP26", "RCP85")) %>%
+  mutate(
+    spp_short = ifelse (
+      species != "Stolephorus",
+      paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
+      species)
+  ) %>%
+  ggplot (aes (x = upside, y = children_fed/1000, fill = rcp)) +
+  geom_col (position = "dodge") +
+  facet_wrap (~spp_short, scales = "free_y", ncol = 3) +
+  geom_hline (yintercept = 0, lty = 2) +
+  theme_bw() +
+  labs (y = "Additional child RNIs met (thousands)", x = "", fill = "RCP") +
+  ggtitle ("Calcium upside from climate-adaptive management,\nIndonesia") +
+  theme (plot.title = element_text (size = 18),
+         axis.text = element_text (size = 12),
+         axis.text.x = element_text (angle = 60, hjust = 1),
+         axis.title = element_text (size = 14),
+         legend.title = element_text (size = 14),
+         legend.text = element_text (size = 12)) 
+
+dev.off()
+
+# chile ----
+upside_ratios_chl_nutr <- chl_landings %>%
+  filter (year == 2021) %>%
+  group_by (species) %>%
+  summarise (total_tonnes = sum (catch_mt)) %>%
+  mutate (country = "Chile") %>%
+  inner_join(priority_spp, by = c ("country", "species")) %>%
+  left_join(catch_upside_relative, by = c ("country", "species")) %>%
+  mutate (# multiply ratio by current landings
+    across(bau_ratio_midcentury:adapt_ratio_endcentury, ~.x * total_tonnes),
+    #convert to upside, subtract 
+    mey_2050 = mey_ratio_midcentury - bau_ratio_midcentury,
+    mey_2100 = mey_ratio_endcentury - bau_ratio_endcentury,
+    adapt_2050 = adapt_ratio_midcentury - bau_ratio_midcentury,
+    adapt_2100 = adapt_ratio_endcentury - bau_ratio_endcentury) %>%
+  
+  select (rcp, species, taxa, mey_2050:adapt_2100) %>%
+  pivot_longer(mey_2050:adapt_2100, 
+               names_to = "upside",
+               values_to = "tonnes") %>%
+  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = tonnes), calc_children_fed_func)) %>%
+  unnest(cols = c(children_fed),  names_repair = "check_unique") 
+
+upside_ratios_chl_nutr$upside <- factor(upside_ratios_chl_nutr$upside, levels = c ("mey_2050", "mey_2100", "adapt_2050", "adapt_2100"))
+
+png ("Figures/Chile_nutricast_upside_Cal.png", width = 10, height = 8, units= "in", res = 300)
+
+upside_ratios_chl_nutr %>%
+  filter (nutrient == "Calcium", rcp %in% c("RCP26", "RCP85")) %>%
+  mutate(
+    spp_short = ifelse (
+      species != "Stolephorus",
+      paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
+      species)
+  ) %>%
+  ggplot (aes (x = upside, y = children_fed/1000, fill = rcp)) +
+  geom_col (position = "dodge") +
+  facet_wrap (~spp_short, scales = "free_y", ncol = 2) +
+  geom_hline (yintercept = 0, lty = 2) +
+  theme_bw() +
+  labs (y = "Additional child RNIs met (thousands)", x = "", fill = "RCP") +
+  ggtitle ("Calcium upside from climate-adaptive management,\nChile") +
+  theme (plot.title = element_text (size = 18),
+         axis.text = element_text (size = 12),
+         axis.text.x = element_text (angle = 60, hjust = 1),
+         axis.title = element_text (size = 14),
+         legend.title = element_text (size = 14),
+         legend.text = element_text (size = 12)) 
+
+dev.off()
+
