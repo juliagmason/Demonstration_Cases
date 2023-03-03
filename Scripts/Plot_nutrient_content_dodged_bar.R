@@ -152,7 +152,7 @@ plot_colorful_spp_nutr_dodge_bar <- function (country_name) {
     theme_bw() +
     labs (x = "", y = "% Child RNI met per 100g serving", fill = "Nutrient") +
     ylim (c(0,100)) +
-    ggtitle (country_name)+
+    ggtitle (paste0("Nutrient content of selected species, ", country_name)) +
     theme ( 
       axis.text.y = element_text (size = 14),
       axis.text.x = element_text (size = 10),

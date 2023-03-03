@@ -344,43 +344,6 @@ p <- pmap_dfr (chl_landings_input_ls, calc_children_fed_func)
 # figure this out, can I get around the pri_spp_nutr thing??
 
 
-# show nutr content as bar graph ----
-# nutrient as x axis, % RNI as y axis
-# this doesn't solve problem of nonfish
-plot_priority_spp_nutr_bar <- function (country_name, n_spp) {
-  
-  # filter priority species
-  country_spp <- priority_spp %>%
-    filter (country == country_name, rank <= n_spp)
-  
-  
-  p <- country_spp %>%
-    inner_join (fishnutr_long, by = "species") %>%
-    filter (!nutrient %in% c("Protein", "Selenium")) %>%
-    left_join (rni_child, by = "nutrient") %>%
-    mutate (perc_rni = amount / RNI * 100) %>%
-    ggplot () +
-    geom_bar (aes (x = nutrient, y = perc_rni), stat = "identity") +
-    facet_wrap (~comm_name) +
-    ggtitle (paste0("Daily recommended nutrient intake for children met from 100g serving \n", country_name, " priority species")) +
-    theme_bw() +
-    labs (x = "", y = "Percent daily needs met") +
-    theme (axis.title = element_text (size = 14),
-           axis.text = element_text(size =10),
-           strip.text = element_text (size = 14),
-           plot.title = element_text (size = 14))
-  
-  # png (paste0("Figures/", country_name, "_pri_spp_nutr_bar.png"), res = 300, width = 8, height = 5, units = "in")
-  print (p)
-  #dev.off()
-  
-}
-
-plot_priority_spp_nutr_bar(country_name = "Chile", n_spp = 5)
-plot_priority_spp_nutr_bar(country_name = "Indonesia", n_spp = 8)
-
-
-
 
 # compare species across one nutrient----
 
@@ -1128,7 +1091,7 @@ calcium_indo <- fishnutr_long %>%
 upside_ratios_indo <- catch_upside_relative %>%
   filter (country == "Indonesia", species %in% sau_tonnes_indo$species) %>%
   left_join (calcium_indo, by = "species") %>%
-  left_join (sau_tonnes_indo, by = "species") %>% View()
+  left_join (sau_tonnes_indo, by = "species") %>% 
   mutate (# multiply ratio by current landings
     across(bau_ratio_midcentury:adapt_ratio_endcentury, ~.x * total_tonnes),
     #convert to upside, subtract 
@@ -1452,14 +1415,6 @@ x <- catch_upside %>%
            strip.text = element_text (size = 14))
   dev.off()
   
-  # chile use landings data
-  chl_pri_spp_catch <- chl_landings %>%
-    filter (year == 2021) %>%
-    group_by (species) %>%
-    summarise (catch_mt = sum (catch_mt)) %>%
-    right_join (filter (priority_spp, country == "Chile")) %>%
-    mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt), calc_children_fed_func)) %>%
-    unnest(cols = c(children_fed),  names_repair = "check_unique") #throws error about names; works but gets warning about cols with just unnest()
   
   png ("Figures/Chile_pri_spp_nutr_bank.png", res = 300, width = 11, height = 6, units = "in") 
   chl_pri_spp_catch  %>%
@@ -1476,41 +1431,6 @@ x <- catch_upside %>%
   dev.off()
   
 
-  # integrate multicountry----
-  multicountry_nutr_bank_recent_yr <- sau_2019 %>%
-    filter (!country %in% c("Chile", "Mexico")) %>%
-    group_by (country, species) %>%
-    summarise (tonnes = sum (tonnes)) %>%
-    right_join (priority_spp, by = c("country", "species")) %>%
-    mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = tonnes), calc_children_fed_func)) %>%
-  
-    unnest(cols = c(children_fed)) %>%
-    rename (catch_mt = tonnes) %>%
-    rbind (chl_pri_spp_catch)
-
-png ("Figures/Facet_pri_spp_RNIs_met.png", width = 12, height = 12, units = "in", res = 300)  
-multicountry_nutr_bank_recent_yr %>%
-  mutate(
-  spp_short = ifelse (
-    species != "Stolephorus",
-    paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
-    species) 
-  ) %>%
-  filter (!country == "Mexico", !nutrient %in% c("Protein", "Selenium")) %>%
-  ggplot (aes (x = spp_short, y = children_fed/1000000, fill = nutrient)) +
-  geom_col(position = "dodge") +
-  facet_wrap (~country, scales = "free", ncol = 1) +
-  theme_bw() +
-  labs (x = "", y = "Child RNIs met, millions \nLandings, most recent year", fill = "Nutrient") +
-  theme ( 
-    axis.text.y = element_text (size = 12),
-    axis.text.x = element_text (size = 11),
-    axis.title = element_text (size = 16),
-    strip.text = element_text(size = 16),
-    legend.text = element_text (size = 12),
-    legend.title = element_text (size = 14),
-    plot.title = element_text (size = 18))
-dev.off()
  ################################## 
    
   nutr_needs <- sau_nutr %>%
