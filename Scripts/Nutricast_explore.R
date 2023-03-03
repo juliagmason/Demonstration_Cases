@@ -55,6 +55,9 @@ chl_spp <- ds_spp %>%
   summarise (tot_cat = sum (catch_mt)) %>%
   filter (tot_cat > 0) # 133 spp
 
+indo_ds <- ds_spp %>%
+  filter (country == "Indonesia", rcp == "RCP60", scenario == "Full Adaptation") 
+# indo, 227 spp
 # plot timeseries of total catch by rcp and management scenario
 ds_spp %>%
   filter (country == "Chile") %>%
