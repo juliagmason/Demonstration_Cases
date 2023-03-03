@@ -71,33 +71,6 @@ stoleph_nutr <- fishnutr_long %>%
   mutate (species = "Stolephorus") %>%
   select (species, nutrient, amount)
 
-# genus data for nonfish [eventually could use AFCD]
-spp_key <- read.csv(file.path ("Data/Gaines_species_nutrient_content_key.csv"), as.is=T)
-spp_key_long <- spp_key %>% 
-  select (species, major_group, genus_food_name, calcium_mg, iron_mg, polyunsaturated_fatty_acids_g, protein_g, vitamin_a_mcg_rae, zinc_mg) %>%
-  
-  pivot_longer (calcium_mg:zinc_mg,
-                names_to = "nutrient", 
-                values_to = "amount") %>%
-  # recode major_Group_ name from nutricast code
-  mutate (
-    taxa=recode(genus_food_name,
-                "Cephalopod"="Cephalopods",
-                "Crustacean"="Crustaceans",
-                "Demersal Fish"="Finfish",
-                "Marine Fish; Other"="Finfish",
-                "Mollusc; Other"="Molluscs",
-                "Pelagic Fish"="Finfish"),
-    nutrient = recode (nutrient, 
-                       "calcium_mg" = "Calcium",
-                       "iron_mg" = "Iron",
-                       "polyunsaturated_fatty_acids_g" = "Omega_3",
-                       "protein_g" = "Protein", 
-                       "vitamin_a_mcg_rae" = "Vitamin_A", 
-                       "zinc_mg" = "Zinc")
-    
-  )
-
 
 # RNI data ----
 # from RNI_explore; WHO
@@ -154,9 +127,12 @@ plot_colorful_spp_nutr_dodge_bar <- function (country_name) {
     ylim (c(0,100)) +
     ggtitle (paste0("Nutrient content of selected species, ", country_name)) +
     theme ( 
-      axis.text.y = element_text (size = 14),
-      axis.text.x = element_text (size = 10),
-      axis.title = element_text (size = 14),
+      axis.text.y = element_text (size = 13),
+      axis.text.x = element_text (size = 11),
+      axis.title = element_text (size = 16),
+      strip.text = element_text(size = 16),
+      legend.text = element_text (size = 12),
+      legend.title = element_text (size = 14),
       plot.title = element_text (size = 18))
 }
 
