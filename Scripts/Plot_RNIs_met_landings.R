@@ -60,7 +60,7 @@ chl_pri_spp_catch %>%
   ggtitle ("Child RNIs met from most recent year of landings, Chile") +
   labs (x = "", y = "Child RNIs met, millions", fill = "Nutrient") +
   theme ( 
-    axis.text.y = element_text (size = 12),
+    axis.text.y = element_text (size = 13),
     axis.text.x = element_text (size = 11),
     axis.title = element_text (size = 16),
     strip.text = element_text(size = 16),
@@ -92,7 +92,7 @@ plot_sau_rnis_met <- function (country_name) {
     ggtitle (paste0("Child RNIs met from most recent year of landings, ", country_name)) +
     labs (x = "", y = "Child RNIs met, millions", fill = "Nutrient") +
     theme ( 
-      axis.text.y = element_text (size = 12),
+      axis.text.y = element_text (size = 13),
       axis.text.x = element_text (size = 11),
       axis.title = element_text (size = 16),
       strip.text = element_text(size = 16),
