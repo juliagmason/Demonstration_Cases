@@ -18,6 +18,16 @@ priority_spp <- read_csv ("Data/regional_teams_priority_spp.csv") %>%
                                TRUE ~ species)
   )
 
+# for sierra leone, also add just "Sardinella
+priority_spp <- priority_spp %>%
+  rbind (data.frame (
+    country = "Sierra Leone",
+    comm_name = NA,
+    species = "Sardinella",
+    rank = NA,
+    taxa = "Finfish"
+  ))
+
 # as of 10/25/22 just 2019 data, suggested by Deng Palomares. Clipped in SAU_explore.R
 sau_2019 <- readRDS("Data/SAU_2019.Rds") %>%
   # alter species names for Indonesia. Assume Lutjanus is L. gibbus; Epinephelus is E. coioides
