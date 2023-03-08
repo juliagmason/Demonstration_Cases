@@ -32,6 +32,19 @@ chl_pri_spp_catch <- chl_landings %>%
   mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt), calc_children_fed_func)) %>%
   unnest(cols = c(children_fed),  names_repair = "check_unique") 
 
+# SLE country specific
+sle_landings <- readRDS("Data/SLE_landings_IHH.Rds")
+
+sle_pri_spp_catch <- sle_landings %>%
+  filter (year == 2017) %>%
+  group_by (species) %>%
+  summarise (catch_mt = sum (catch_mt)) %>%
+  mutate (taxa = "Finfish") %>%
+  #right_join (filter (priority_spp, country == "Chile")) %>%
+  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt), calc_children_fed_func)) %>%
+  unnest(cols = c(children_fed),  names_repair = "check_unique") 
+# convert to nutrients
+
 # SAU data ----
 
 # as of 10/25/22 just 2019 data, suggested by Deng Palomares. Clipped in SAU_explore.R
@@ -58,6 +71,104 @@ chl_pri_spp_catch %>%
   geom_col(position = "dodge") +
   theme_bw() +
   ggtitle ("Child RNIs met from most recent year of landings, Chile") +
+  labs (x = "", y = "Child RNIs met, millions", fill = "Nutrient") +
+  theme ( 
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 12),
+    legend.title = element_text (size = 14),
+    plot.title = element_text (size = 18))
+dev.off()
+
+# sierra leone IHH ----
+png ("Figures/SLE_IHH_pri_spp_landings_RNIs_met.png", width = 10, height = 5, units = "in", res = 300)  
+
+sle_pri_spp_catch %>%
+  mutate(
+    spp_short = ifelse (
+      species != "Sardinella",
+      paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
+      species) 
+  ) %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  ggplot (aes (x = reorder(spp_short, -catch_mt), y = children_fed/1000000, fill = nutrient)) +
+  geom_col(position = "dodge") +
+  theme_bw() +
+  ggtitle ("Child RNIs met from most recent year of landings, Sierra Leone") +
+  labs (x = "", y = "Child RNIs met, millions", fill = "Nutrient") +
+  theme ( 
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 12),
+    legend.title = element_text (size = 14),
+    plot.title = element_text (size = 18))
+dev.off()
+
+# split by sector
+png ("Figures/SLE_IHH_pri_spp_landings_RNIs_met_sector.png", width = 10, height = 5, units = "in", res = 300) 
+sle_landings %>%
+  filter (year == 2017) %>%
+  group_by (species, sector) %>%
+  summarise (catch_mt = sum (catch_mt)) %>%
+  mutate (taxa = "Finfish") %>%
+  #right_join (filter (priority_spp, country == "Chile")) %>%
+  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt), calc_children_fed_func)) %>%
+  unnest(cols = c(children_fed),  names_repair = "check_unique")  %>%
+  mutate(
+    spp_short = ifelse (
+      species != "Sardinella",
+      paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
+      species) 
+  ) %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  ggplot (aes (x = reorder(spp_short, -catch_mt), y = children_fed/1000000, fill = nutrient)) +
+  geom_col(position = "dodge") +
+  theme_bw() +
+  ggtitle ("Child RNIs met from most recent year of landings, Sierra Leone") +
+  labs (x = "", y = "Child RNIs met, millions", fill = "Nutrient") +
+  facet_wrap (~sector) +
+  theme ( 
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 12),
+    legend.title = element_text (size = 14),
+    plot.title = element_text (size = 18))
+dev.off()
+
+# Malawi values from google sheet ----
+mwi_nutr <- read.csv("Data/MWI_spp_nutr.csv") %>%
+  mutate (nutrient = gsub (" ", "_", nutrient),
+          nutrient = ifelse (nutrient == "Vit_A", "Vitamin_A", nutrient))
+
+mwi_catch <- data.frame (
+  species = c ("Oreochromis karongae", "Engraulicyprus sardella"),
+  catch_mt = c (3930.67, 156717.13),
+  taxa = "Finfish"
+) %>%
+  left_join(mwi_nutr, by = "species") %>%
+  mutate (    # convert tons per year to 100g /day, proportion edible is 0.87 for finfish
+    edible_servings = catch_mt * 0.87 * 1000 * 1000 /100 / 365,
+    nutrient_servings = edible_servings * amount) %>%
+   left_join (rni_child, by = "nutrient") %>%
+    mutate (children_fed = nutrient_servings / RNI) %>%
+    select (species, catch_mt, nutrient, children_fed)
+
+png ("Figures/MWI_pri_spp_landings_RNIs_met.png", width = 10, height = 5, units = "in", res = 300)  
+mwi_catch %>%
+  mutate(
+    spp_short =
+      paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2])) %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  ggplot (aes (x = reorder(spp_short, -catch_mt), y = children_fed/1000000, fill = nutrient)) +
+  geom_col(position = "dodge") +
+  theme_bw() +
+  ggtitle ("Child RNIs met from most recent year of landings, Malawi") +
   labs (x = "", y = "Child RNIs met, millions", fill = "Nutrient") +
   theme ( 
     axis.text.y = element_text (size = 13),
