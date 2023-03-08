@@ -62,6 +62,14 @@ stoleph_nutr <- fishnutr_long %>%
   mutate (species = "Stolephorus") %>%
   select (species, nutrient, amount)
 
+# composite sardinella spp for Sierra Leone instead of full sardinella 
+sardinella_nutr <- fishnutr_long %>%
+  filter (species %in% c("Sardinella aurita", "Sardinella maderensis")) %>%
+  group_by (nutrient) %>%
+  summarise (amount = mean (amount)) %>%
+  mutate (species = "Stolephorus") %>%
+  select (species, nutrient, amount)
+
 # genus data for nonfish [eventually could use AFCD]
 spp_key <- read.csv(file.path ("Data/Gaines_species_nutrient_content_key.csv"), as.is=T)
 spp_key_long <- spp_key %>% 
@@ -107,10 +115,12 @@ calc_children_fed_func <- function (species_name, taxa, amount_mt) {
     taxa == "Mollusc" ~ 0.17,
     taxa == "Cephalopod" ~ 0.67)
  # GENuS/nutricast is 0.21 for cephalopods. Using 0.67, Bianchi et al. 2022 value for D. gigas; only cephalopod in our priority species. They also have a blanket 0.7 value for cephalopods.  
-  if (taxa == "Finfish" & species_name != "Stolephorus") {
+  if (taxa == "Finfish" & !species_name %in% c("Stolephorus", "Sardinella")) {
     nutr_content <- fishnutr_long %>% filter (species == species_name)
   } else if (species_name == "Stolephorus") {
     nutr_content = stoleph_nutr
+  } else if (species_name == "Sardinella") {
+    nutr_content = sardinella_nutr
   }
     else if (species_name == "Dosidicus gigas") {
     nutr_content = d_gigas_nutr
