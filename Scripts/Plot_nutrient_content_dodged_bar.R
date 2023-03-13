@@ -114,7 +114,7 @@ plot_colorful_spp_nutr_dodge_bar <- function (country_name) {
     group_by (species) %>%
     mutate (micronutrient_density = sum (perc_rni),
             spp_short = ifelse (
-              species != "Stolephorus",
+              grepl(" ", species),
               paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
               species)
     ) %>%
