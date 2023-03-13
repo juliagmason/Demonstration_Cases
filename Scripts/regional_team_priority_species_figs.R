@@ -101,10 +101,18 @@ fishnutr_mu %>%
 
 # micronutrient density----
 
+# frame of alternate nutr
+alt_nutr <- rbind (d_gigas_nutr, s_serrata_nutr, sardinella_nutr, stoleph_nutr)
+pri_spp_nutr <- fishnutr_long %>%
+  rbind (alt_nutr) %>%
+  right_join (priority_spp, by = "species")
+
 print_micronutrient_density <- function (country_name, n_spp) {
-  <- <- %>%
+pri_spp_nutr %>%
     filter (country == country_name, rank <= n_spp, 
             !nutrient %in% c("Protein", "Selenium")) %>%
+    left_join (rni_child, by = "nutrient") %>%
+    mutate (perc_rni = amount/RNI * 100) %>% # not capping
     group_by (species) %>%
     summarise (micronutrient_density = sum (perc_rni)) 
 }
