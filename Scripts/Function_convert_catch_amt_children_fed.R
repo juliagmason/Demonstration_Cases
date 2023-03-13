@@ -67,7 +67,7 @@ sardinella_nutr <- fishnutr_long %>%
   filter (species %in% c("Sardinella aurita", "Sardinella maderensis")) %>%
   group_by (nutrient) %>%
   summarise (amount = mean (amount)) %>%
-  mutate (species = "Stolephorus") %>%
+  mutate (species = "Sardinella") %>%
   select (species, nutrient, amount)
 
 # genus data for nonfish [eventually could use AFCD]
@@ -147,4 +147,4 @@ calc_children_fed_func <- function (species_name, taxa, amount_mt) {
 # t <- calc_children_fed_func("Trachurus murphyi", "Finfish", 15429)
 # m <- calc_children_fed_func ("Crassostrea gigas", "Mollusc", 200)
 # s <- calc_children_fed_func ("Scylla serrata", "Crustacean", 55)
-a <- calc_children_fed_func("Stolephorus", "Finfish", 1000)
+#a <- calc_children_fed_func("Stolephorus", "Finfish", 1000)
