@@ -37,7 +37,8 @@ sau_2019 <- readRDS("Data/SAU_2019.Rds") %>%
     TRUE ~ species
   ))
 
-# or mean of most recent 5 years *doesn't currently include indonesia* 
+# mean of most recent 5 years *doesn't currently include indonesia* 
+# just using this for peru anchovy correction
 sau_2015_2019 <- readRDS("Data/SAU_2015_2019.Rds")
 
 
@@ -51,6 +52,11 @@ peru_anchov_dhc <- sau_2015_2019 %>%
 peru_anchov_total_2019 <- sau_2015_2019 %>%
   filter (country == "Peru", fishing_entity == "Peru", year == 2019, species == "Engraulis ringens") %>%
   pull (tonnes) %>% sum()
+
+# fyi, this gives a table of prop by sector and fishing entity
+sau_2015_2019 %>%
+  filter (country == "Peru",  year == 2018, species == "Engraulis ringens") %>%
+  summarise (prop_fishmeal = sum(tonnes[end_use_type ==  "Fishmeal and fish oil"])/sum(tonnes))
 
 # exports ARTIS ----
 # emailed 10 19 2022
@@ -111,7 +117,7 @@ plot_supply_chain_levers <- function (country_name) {
   q <- p %>%
     mutate(
       spp_short = ifelse (
-        species != "Stolephorus",
+        grepl(" ", species),
         paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
         species)
     ) %>%
