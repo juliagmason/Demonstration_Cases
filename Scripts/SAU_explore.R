@@ -7,6 +7,8 @@ library (tidyverse)
 # 10/25/22 updating with 2019 data. Did grab mexico but not indonesia (too big; timed out)
 # 1/31/23 grabbed into data for regional team presentation
 
+# make species to taxa conversion df
+
 
 # Function to plot time series of landings
 # plot initial landings figure function ----
@@ -70,6 +72,39 @@ sau_2019 <- read.csv("Data/SAU EEZ 2019.csv") %>%
 sau_2019 <- rbind (sau_2019, sau_indo)
 
 saveRDS (sau_2019, file = "Data/SAU_2019.Rds")
+
+# make species to taxa conversion df ----
+c <- read.csv("Data/SAU EEZ 2019.csv")
+indo <-  read.csv("Data/SAU EEZ indonesia.csv")
+
+c <- rbind (c, indo)
+
+# other fishes and inverts... fish except cephalopods, "other demersal invertebrates", jellyfish
+
+# remaining: urchins, echinoderms, sea cucumbers
+# Loxechinus albus
+# Pyura chilensis
+# Miscellaneous aquatic invertebrates
+# Athyonidium chilensis -- sea cucumber
+# Holothuriidae	
+# Echinodermata
+# Stichopus
+other_sau <- c %>% filter (functional_group == "Other demersal invertebrates" & commercial_group == "Other fishes & inverts") %>% pull (scientific_name) %>% unique()
+
+sau_2019_taxa <- c %>%
+  select (scientific_name, commercial_group, functional_group) %>%
+  distinct () %>%
+  mutate (taxa = case_when (
+    commercial_group == "Molluscs" & !functional_group %in% c("Cephalopods", "Jellyfish") ~ "Mollusc",
+    functional_group == "Cephalopods" ~ "Cephalopod",
+    commercial_group == "Crustaceans" ~ "Crustacean",
+    functional_group == "Jellyfish" ~ "Other",
+    scientific_name %in% other_sau   ~ "Other",
+    TRUE ~ "Finfish"
+  )) %>%
+  rename (species = scientific_name)
+
+saveRDS (sau_2019_taxa, file = "Data/SAU_2019_taxa.Rds")
 
 sau_2015_2019 <- read.csv("Data/SAU EEZ 2019.csv") %>%
   filter (between(year,2015,2019)) %>%
