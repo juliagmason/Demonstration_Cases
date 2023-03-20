@@ -223,24 +223,6 @@ dev.off()
 
 # Sau data ----
 
-# wrapper for species not in nutrient databases
-#https://www.r-bloggers.com/2020/08/handling-errors-using-purrrs-possibly-and-safely/
-poss_nutr <- possibly (.f = calc_children_fed_func, otherwise = NULL)
-poss_nutr (calc_children_fed_func, t[4,])
-
-calc_children_fed_func(test)
-
-test_set <- t[1:4,]
-
-w <- test_set %>%
-  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt), calc_children_fed_func)) %>%
-  unnest(cols = c(children_fed),  names_repair = "check_unique")
-
-mods = map(test_set , ~poss_nutr(species = species, taxa = taxa, amount = catch_mt, data = .x) )
-
-pmap_dfr (t[1:15,], poss_nutr)
-
-
 # plot aggregate landings ----
 plot_sau_rnis_met <- function (country_name) {
   
