@@ -21,13 +21,20 @@ priority_spp <- read_csv ("Data/regional_teams_priority_spp.csv") %>%
 # SAU landings data ----
 
 # as of 10/25/22 just 2019 data, suggested by Deng Palomares. Clipped in SAU_explore.R
-sau_2019 <- readRDS("Data/SAU_2019.Rds") %>%
-  # alter species names for Indonesia. Assume Lutjanus is L. gibbus; Epinephelus is E. coioides
-  mutate (species = case_when (
-    country == "Indonesia" & species == "Lutjanus" ~ "Lutjanus gibbus",
-    country == "Indonesia" & species == "Epinephelus" ~ "Epinephelus coioides",
-    TRUE ~ species
-  ))
+
+# IF using priority species:
+# sau_2019 <- readRDS("Data/SAU_2019.Rds") %>%
+#   # alter species names for Indonesia. Assume Lutjanus is L. gibbus; Epinephelus is E. coioides
+#   mutate (species = case_when (
+#     country == "Indonesia" & species == "Lutjanus" ~ "Lutjanus gibbus",
+#     country == "Indonesia" & species == "Epinephelus" ~ "Epinephelus coioides",
+#     TRUE ~ species
+#   ))
+
+# if using aggregate:
+sau_2019 <- readRDS("Data/SAU_2019.Rds")
+
+sau_2019_taxa <- readRDS ("Data/sau_2019_taxa.Rds")
 
 ######################################
 # Chile ----
@@ -36,6 +43,34 @@ sau_2019 <- readRDS("Data/SAU_2019.Rds") %>%
 
 #Clean_Chile_Sernapesca_landings.R
 chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
+
+# aggregate landings
+chl_landings %>%
+  filter (year == 2021) %>%
+  group_by (species) %>%
+  summarise (catch_mt = sum (catch_mt)) %>%
+  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt), calc_children_fed_func)) %>%
+  unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
+  mutate(
+    spp_short = ifelse (
+      grepl(" ", species),
+      paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
+      species) 
+  ) %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  ggplot (aes (x = reorder(spp_short, -catch_mt), y = children_fed/1000000, fill = nutrient)) +
+  geom_col(position = "dodge") +
+  theme_bw() +
+  ggtitle ("Child RNIs met from most recent year of landings, Chile") +
+  labs (x = "", y = "Child RNIs met, millions", fill = "Nutrient") +
+  theme ( 
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 12),
+    legend.title = element_text (size = 14),
+    plot.title = element_text (size = 18))
 
 # take most recent year and convert to children fed, priority species
 chl_pri_spp_catch <- chl_landings %>%
@@ -187,9 +222,80 @@ mwi_catch %>%
 dev.off()
 
 # Sau data ----
+
+# wrapper for species not in nutrient databases
+#https://www.r-bloggers.com/2020/08/handling-errors-using-purrrs-possibly-and-safely/
+poss_nutr <- possibly (.f = calc_children_fed_func, otherwise = NULL)
+poss_nutr (calc_children_fed_func, t[4,])
+
+calc_children_fed_func(test)
+
+test_set <- t[1:4,]
+
+w <- test_set %>%
+  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt), calc_children_fed_func)) %>%
+  unnest(cols = c(children_fed),  names_repair = "check_unique")
+
+mods = map(test_set , ~poss_nutr(species = species, taxa = taxa, amount = catch_mt, data = .x) )
+
+pmap_dfr (t[1:15,], poss_nutr)
+
+
+# plot aggregate landings ----
 plot_sau_rnis_met <- function (country_name) {
   
-  sau_2019 %>%
+sau_2019 %>%
+    filter(country == country_name) %>%
+    left_join(sau_2019_taxa, by = "species") %>%
+    group_by (species, taxa) %>%
+    summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
+    mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt), calc_children_fed_func)) %>%
+    unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
+   filter (!nutrient %in% c("Protein", "Selenium")) %>%
+    
+    ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000)) +
+    geom_col() +
+    theme_bw() +
+    ggtitle (paste0("Child RNIs met from most recent year of landings, ", country_name)) +
+    labs (x = "", y = "Child RNIs met, millions", fill = "Nutrient") +
+
+    theme ( 
+      axis.text.y = element_text (size = 13),
+      axis.text.x = element_text (size = 11),
+      axis.title = element_text (size = 16),
+      strip.text = element_text(size = 16),
+      legend.text = element_text (size = 12),
+      legend.title = element_text (size = 14),
+      plot.title = element_text (size = 18),
+      legend.position = "none")
+  
+}
+
+png ("Figures/Indo_aggregate_landings_RNIs_met.png", width = 10, height = 5, units = "in", res = 300)  
+print(
+  plot_sau_rnis_met("Indonesia")
+)
+dev.off()
+
+# Peru  ----
+png ("Figures/Peru_aggregate_landings_RNIs_met.png", width = 10, height = 5, units = "in", res = 300)  
+print(
+  plot_sau_rnis_met("Peru")
+)
+dev.off()
+
+# Sierra Leone  ----
+png ("Figures/SL_aggregate_landings_RNIs_met.png", width = 10, height = 5, units = "in", res = 300)  
+print(
+  plot_sau_rnis_met("Sierra Leone")
+)
+dev.off()
+
+# plot species specific ----
+
+plot_sau_rnis_met_spp <- function (country_name) {
+  
+ sau_2019 %>%
     filter(country == country_name) %>%
     inner_join (priority_spp, by = c ("country", "species")) %>%
     group_by (species, taxa) %>%
@@ -220,9 +326,11 @@ plot_sau_rnis_met <- function (country_name) {
 }
 
 # Indo  ----
+
+
 png ("Figures/Indo_pri_spp_landings_RNIs_met.png", width = 10, height = 5, units = "in", res = 300)  
 print(
-plot_sau_rnis_met("Indonesia")
+plot_sau_rnis_met_spp("Indonesia")
 )
 dev.off()
 
