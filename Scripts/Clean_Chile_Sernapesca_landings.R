@@ -2,6 +2,10 @@
 # 9 26 22
 # JGM
 
+# species names:
+# chrome-extension://efaidnbmnnnibpcajpcglclefindmkaj/http://www.sernapesca.cl/sites/default/files/2021_0104_nomina_de_especies.pdf
+
+
 # 2017 and earlier: http://www.sernapesca.cl/informes/estadisticas
 # 2018-2021: http://www.sernapesca.cl/informacion-utilidad/anuarios-estadisticos-de-pesca-y-acuicultura
 
@@ -47,16 +51,20 @@ clean_chl_data <- function (filename) {
             ESPECIE = tolower (ESPECIE),
             year = year,
             sector = sector) %>% 
-    filter (!is.na (ESPECIE))
+    filter (!is.na (ESPECIE)) %>%
+    # get rid of rows with totals
+    filter (!grepl("total", ESPECIE))
     
   
 }
 
 t <- map_dfr (chl_files, clean_chl_data)
 
+# got all of the 2021 species. still 53 that don't match, some due to typos/small differences. 
+
 chl_landings  <- t %>%
   left_join (chl_spp, by = "ESPECIE") %>%
-  select (species, catch_mt, year, sector) %>%
+  select (species, catch_mt, year, sector, taxa) %>%
   filter (!is.na (species)) %>%
   # fix some species names
   mutate (species = 
@@ -64,3 +72,5 @@ chl_landings  <- t %>%
                        TRUE ~ species))
 
 saveRDS (chl_landings, file = "Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
+
+
