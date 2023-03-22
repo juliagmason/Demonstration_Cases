@@ -33,7 +33,7 @@ catch_upside_relative <-  ds_spp %>%
              adapt_ratio_endcentury = catch_mt[scenario == "Full Adaptation" & period == "2091-2100"]/ catch_mt[scenario == "No Adaptation" & period == "2012-2021"]
   )
 
-save (catch_upside_relative, file = "Data/nutricast_upside_relative.Rds")
+saveRDS (catch_upside_relative, file = "Data/nutricast_upside_relative.Rds")
 
 catch_upside_relative %>%
   filter (rcp == "RCP60") %>%
