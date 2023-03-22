@@ -284,13 +284,41 @@ sau_2019 %>%
   summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
   mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt), calc_children_fed_func)) %>%
   unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
-  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  filter (!nutrient %in% c("Protein")) %>%
   
   ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000, fill = commercial_group)) +
   geom_col() +
   theme_bw() +
   ggtitle ("Child RNIs met from 2019 landings, Peru") +
   labs (x = "", y = "Child RNIs met, millions", fill = "Group") +
+  
+  theme ( 
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11, angle = 60, hjust =1),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 11),
+    legend.title = element_text (size = 14),
+    plot.title = element_text (size = 18))
+dev.off()
+
+# plot RNI provision by sector ----
+png ("Figures/Peru_aggregate_landings_RNIs_met_sector.png", width = 5, height = 5, units = "in", res = 300)
+
+sau_2019 %>%
+  filter(country == "Peru", fishing_sector %in% c("Artisanal", "Industrial")) %>%
+  left_join(sau_2019_taxa, by = "species") %>%
+  group_by (species, taxa, fishing_sector) %>%
+  summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
+  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt), calc_children_fed_func)) %>%
+  unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  
+  ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000, fill = fishing_sector)) +
+  geom_col(position = "dodge") +
+  theme_bw() +
+  ggtitle ("Child RNIs met from 2019 landings, Peru") +
+  labs (x = "", y = "Child RNIs met, millions", fill = "Fishing\nsector") +
   
   theme ( 
     axis.text.y = element_text (size = 13),
@@ -302,6 +330,54 @@ sau_2019 %>%
     plot.title = element_text (size = 18))
 dev.off()
 
+# compare with just dhc
+# have to do weird hack situation
+# fix peru 2019 anchovy issue
+# messy hack, but replace Peru anchovy dhc value with 2018 value. in 2018, all artisanal was dhc and all industrial is fmfo
+peru_anchov_dhc <- sau_2015_2019 %>%
+  filter (country == "Peru", fishing_entity == "Peru", year == 2018, species == "Engraulis ringens") %>%
+  group_by (country, species, year) %>%
+  summarise (prop_non_dhc = sum(tonnes[end_use_type == "Fishmeal and fish oil" & fishing_entity == "Peru"])/sum(tonnes[fishing_entity == "Peru"])) # 0.955
+
+peru_anchov_total_2019 <- sau_2015_2019 %>%
+  filter (country == "Peru", fishing_entity == "Peru", year == 2019, species == "Engraulis ringens") %>%
+  pull (tonnes) %>% sum()
+
+png ("Figures/Peru_aggregate_landings_RNIs_met_sector_DHC.png", width = 5, height = 5, units = "in", res = 300)
+
+sau_2019 %>%
+  filter(country == "Peru", fishing_sector %in% c("Artisanal", "Industrial")) %>%
+  left_join(sau_2019_taxa, by = "species") %>%
+  group_by (species, taxa, fishing_sector, end_use_type) %>%
+  summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
+  mutate (catch_mt = case_when (
+    country_name == "Peru" & species == "Engraulis ringens" & end_use_type == "Fishmeal and fish oil" ~ peru_anchov_dhc$prop_non_dhc * peru_anchov_total_2019,
+    country_name == "Peru" & species == "Engraulis ringens" & end_use_type == "Direct human consumption" ~ (1 - peru_anchov_dhc$prop_non_dhc) * peru_anchov_total_2019,
+    TRUE ~ catch_mt )
+  ) %>%
+  filter (end_use_type == "Direct human consumption") %>%
+  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt), calc_children_fed_func)) %>%
+  unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  
+  ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000, fill = fishing_sector)) +
+  geom_col(position = "dodge") +
+  theme_bw() +
+  ggtitle ("Child RNIs met from 2019 landings, Peru\nDirect human consumption") +
+  labs (x = "", y = "Child RNIs met, millions", fill = "Fishing\nsector") +
+  
+  theme ( 
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 11),
+    legend.title = element_text (size = 14),
+    plot.title = element_text (size = 18))
+dev.off()
+
+
+# plot overall catch by comm_group ----
 png ("Figures/Peru_SAU_catch_commgroup.png", width = 5, height = 5, units = "in", res = 300)
 sau_2019 %>%
   filter(country == "Peru") %>%
@@ -324,6 +400,8 @@ sau_2019 %>%
     plot.title = element_text (size = 18),
     legend.position = "none")
 dev.off ()
+
+
 
 # Sierra Leone  ----
 png ("Figures/SL_aggregate_landings_RNIs_met.png", width = 10, height = 5, units = "in", res = 300)  
