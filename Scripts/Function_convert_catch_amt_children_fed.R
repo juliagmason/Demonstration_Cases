@@ -113,7 +113,8 @@ calc_children_fed_func <- function (species_name, taxa, amount_mt) {
     taxa == "Finfish" ~ 0.87,
     taxa == "Crustacean" ~ 0.36,
     taxa == "Mollusc" ~ 0.17,
-    taxa == "Cephalopod" ~ 0.67)
+    taxa == "Cephalopod" ~ 0.67,
+    taxa == "Other" ~ 1)
  # GENuS/nutricast is 0.21 for cephalopods. Using 0.67, Bianchi et al. 2022 value for D. gigas; only cephalopod in our priority species. They also have a blanket 0.7 value for cephalopods.  
   if (taxa == "Finfish" & !species_name %in% c("Stolephorus", "Sardinella")) {
     nutr_content <- fishnutr_long %>% filter (species == species_name)
