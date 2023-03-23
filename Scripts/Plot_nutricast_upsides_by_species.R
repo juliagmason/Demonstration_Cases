@@ -235,7 +235,8 @@ upside_ratios_SL$upside <- factor(upside_ratios_SL$upside, levels = c ("mey_2050
 png ("Figures/SL_nutricast_upside_overall.png", width = 9, height = 8, units= "in", res = 300)
 
 upside_ratios_SL %>%
-  filter (rcp %in% c("RCP26", "RCP85")) %>%
+  #filter (rcp %in% c("RCP26", "RCP85")) %>%
+  filter (upside %in% c("mey_2050", "adapt_2050")) %>%
   mutate(
     spp_short = ifelse (
       species != "Stolephorus",

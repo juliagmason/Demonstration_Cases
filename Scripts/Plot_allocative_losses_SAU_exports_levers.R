@@ -37,6 +37,7 @@ sau_2019 <- readRDS("Data/SAU_2019.Rds") %>%
     TRUE ~ species
   ))
 
+
 # mean of most recent 5 years *doesn't currently include indonesia* 
 # just using this for peru anchovy correction
 sau_2015_2019 <- readRDS("Data/SAU_2015_2019.Rds")

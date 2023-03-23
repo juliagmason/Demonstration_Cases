@@ -14,13 +14,145 @@
 #devtools::install_github("cfree14/AFCD", force=T)
 library(AFCD)
 library (tidyverse)
+library (stringr)
 
 # cleaned version from zach, 5/31/22
 #https://github.com/Aquatic-Food-Composition-Database/AFCD
 devtools::install_github("Aquatic-Food-Composition-Database/AFCD", force=T)
 library(AFCD)
 
+?species_nutrients
+View(afcd_nutrients)
+View(afcd_prep)
+View (afcd_parts)
 
+# I think we want: DHA_EPA for omega 3, Calcium, "Iron, total", Selenium, Zinc, Vitamin_a_combined
+# for prep, maybe raw and na?
+# parts--	muscle tissue and whole
+
+# grab nutricast species
+# species key to cut fish
+spp_key <- read.csv(file.path ("Data/Gaines_species_nutrient_content_key.csv"), as.is=T)
+nutricast_spp <- readRDS("Data/Free_etal_proj_smaller.Rds") %>%
+  left_join (spp_key, by = "species") %>%
+  filter (major_group != "Pisces") %>%
+  pull (species ) %>%
+  unique()
+  
+
+nutricast_spp_afcd_nutr <- species_nutrients (nutricast_spp,
+                                              prep = c ("raw", NA),
+                                              part = c("muscle tissue", "whole"),
+                                              nut = c("DHA_EPA", "Calcium", "Iron, total", "Selenium", "Zinc", "Vitamin_a_combined")
+                                              )
+
+View (nutricast_spp_afcd_nutr)
+# did really well! only totally missing data for fenneropenaeus penicillatus and limulus polyphemus, plus selenium for loxechinus albus
+# must be averaging parts or not accounting for them, but that's fine
+
+
+# check values
+nutricast_spp_afcd_nutr %>%
+  ggplot (aes (x = value)) +
+  geom_histogram() +
+  facet_wrap (~nutrient, scales = "free") +
+  theme_bw()
+
+# crazy zinc
+nutricast_spp_afcd_nutr %>% filter (value > 6000) # Pharus legumen, zinc. Family is Pharidae. 3 values, two are in the 8000s for a razor clam, and one is 6.32. Use 6.32. 
+nutricast_spp_afcd_nutr %>% filter (value > 60, nutrient == "Zinc") # this is C. virginica, which are supposedly extremely high in zinc. 
+
+afcd_sci %>% filter (family == "pharidae", nutrient_code_fao == "ZN")
+afcd_sci %>% filter (common_name == "razor clam", nutrient_code_fao == "ZN")
+
+afcd_sci %>% filter (class == "bivalvia", nutrient_code_fao == "ZN") %>% ggplot (aes (x = value)) + geom_histogram() + xlim (c(0, 200))
+
+# relatively high omega
+nutricast_spp_afcd_nutr %>% filter (nutrient == "Omega_3", value > 30) # family Aristeidae, from one study
+afcd_sci %>% filter (family == "aristeidae", nutrient == "DHA_EPA")
+afcd_sci %>% filter (order == "decapoda", nutrient == "DHA_EPA") %>% filter (value < 5) %>% ggplot (aes (x = value)) + geom_histogram() 
+# take median decapod value (having the high outliers doesn't change)
+decapod_dha_avg <- afcd_sci %>% filter (order == "decapoda", nutrient == "DHA_EPA") %>% pull (value) %>% median()
+
+# manually fix crazy values
+# harmonize nutrient names and species
+# https://stackoverflow.com/questions/18509527/first-letter-to-upper-case
+firstup <- function(x) {
+  substr(x, 1, 1) <- toupper(substr(x, 1, 1))
+  x
+}
+
+nutricast_spp_afcd_nutr <- nutricast_spp_afcd_nutr %>%
+  mutate (species = firstup (species),
+          nutrient = case_when (
+            nutrient == "DHA_EPA" ~ "Omega_3",
+            nutrient =="Iron, total" ~ "Iron",
+            nutrient == "Vitamin_a_combined" ~ "Vitamin_A",
+            TRUE ~ nutrient
+          ),
+          value = case_when (
+            species == "Pharus legumen" & nutrient == "Zinc" ~ 6.32,
+            species %in% c("Aristeus antennatus", "Aristeus varidens", "Plesiopenaeus edwardsianus", "Aristaeomorpha foliacea") & nutrient == "Omega_3" ~ decapod_dha_avg,
+            TRUE ~ value
+            
+          )
+  )
+saveRDS(nutricast_spp_afcd_nutr, file = "Data/nutricast_spp_nonfish_afcd_nutrients.Rds")
+
+# grab SAU nonfish ----
+sau_2019_taxa <- readRDS("Data/SAU_2019_taxa.Rds")
+
+sau_2019_nonfish <- sau_2019_taxa %>% filter (taxa != "Finfish") %>% pull (species)
+
+sau_2019_afcd_nutr <- species_nutrients (sau_2019_nonfish,
+                                              prep = c ("raw", NA),
+                                              part = c("muscle tissue", "whole"),
+                                              nut = c("DHA_EPA", "Calcium", "Iron, total", "Selenium", "Zinc", "Vitamin_a_combined")
+)
+
+
+
+
+View (sau_2019_afcd_nutr)
+
+# check values
+sau_2019_afcd_nutr %>%
+  ggplot (aes (x = value)) +
+  geom_histogram() +
+  facet_wrap (~nutrient, scales = "free") +
+  theme_bw()
+
+sau_2019_afcd_nutr %>% filter (value > 10000) # lobatus gigas, selenium is 88500. order level
+afcd_sci %>% filter (order == "littorinimorpha", nutrient == "Selenium"). # One is 1.770e+05, 1.770e-01; most other gastropods with a value are in the +01 range. 
+t <- afcd_sci %>% filter (class == "gastropoda", nutrient == "Selenium")
+length (which (t$value < 1))
+
+sau_2019_afcd_nutr %>% filter (value > 2000, nutrient == "Calcium") # pseudograpsus setosus and hemigrapsus crenulatus; family is Varunidae
+afcd_sci %>% filter (family == "varunidae", nutrient == "Calcium") # 359, 67, 183, 4668.
+
+sau_2019_afcd_nutr %>% filter (nutrient == "DHA_EPA", value > 30)
+sau_2019_afcd_nutr %>% filter (nutrient == "Omega_3", value > 3) # ARgopecten purpuratus...could be
+
+sau_2019_afcd_nutr <- sau_2019_afcd_nutr %>%
+  mutate (species = firstup (species),
+          nutrient = case_when (
+            nutrient == "DHA_EPA" ~ "Omega_3",
+            nutrient =="Iron, total" ~ "Iron",
+            nutrient == "Vitamin_a_combined" ~ "Vitamin_A",
+            TRUE ~ nutrient
+          ),
+          value = case_when (
+            species == "Lobatus gigas" & nutrient == "Selenium" ~ 1.770e+1,
+            species %in% c("Pseudograpsus setosus", "Hemigrapsus crenulatus") & nutrient == "Calcium" ~ mean(c(359, 67, 183, 468)),
+            species %in% c("Aristeus antennatus", "Aristeus varidens", "Plesiopenaeus edwardsianus", "Aristaeopsis edwardsiana", "Aristaeomorpha foliacea") & nutrient == "Omega_3" ~ decapod_dha_avg,
+            TRUE ~ value
+            
+          )
+  )
+
+saveRDS(sau_2019_afcd_nutr, file = "Data/SAU_2019_nonfish_afcd_nutrients.Rds")
+
+#############################################################################################
 # regional team priority spp--check inverts 7/27/22
 afcd %>% filter (sciname == "Dosidicus gigas") %>% View()
 
