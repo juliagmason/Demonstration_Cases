@@ -12,7 +12,7 @@
 # https://github.com/cfree14/AFCD
 #library (devtools)
 #devtools::install_github("cfree14/AFCD", force=T)
-library(AFCD)
+#library(AFCD)
 library (tidyverse)
 library (stringr)
 
@@ -20,6 +20,14 @@ library (stringr)
 #https://github.com/Aquatic-Food-Composition-Database/AFCD
 devtools::install_github("Aquatic-Food-Composition-Database/AFCD", force=T)
 library(AFCD)
+
+# function for harmonizing species name capitalization
+# https://stackoverflow.com/questions/18509527/first-letter-to-upper-case
+firstup <- function(x) {
+  substr(x, 1, 1) <- toupper(substr(x, 1, 1))
+  x
+}
+
 
 ?species_nutrients
 View(afcd_nutrients)
@@ -76,11 +84,6 @@ decapod_dha_avg <- afcd_sci %>% filter (order == "decapoda", nutrient == "DHA_EP
 
 # manually fix crazy values
 # harmonize nutrient names and species
-# https://stackoverflow.com/questions/18509527/first-letter-to-upper-case
-firstup <- function(x) {
-  substr(x, 1, 1) <- toupper(substr(x, 1, 1))
-  x
-}
 
 nutricast_spp_afcd_nutr <- nutricast_spp_afcd_nutr %>%
   mutate (species = firstup (species),
@@ -151,6 +154,65 @@ sau_2019_afcd_nutr <- sau_2019_afcd_nutr %>%
   )
 
 saveRDS(sau_2019_afcd_nutr, file = "Data/SAU_2019_nonfish_afcd_nutrients.Rds")
+
+# Chile nonfish----
+chl_landings <- readRDS("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
+
+chl_nonfish <- chl_landings %>% filter (taxa != "Finfish") %>% pull (species) %>% unique()
+
+chl_nutr <- species_nutrients (chl_nonfish,
+                                         prep = c ("raw", NA),
+                                         part = c("muscle tissue", "whole"),
+                                         nut = c("DHA_EPA", "Calcium", "Iron, total", "Selenium", "Zinc", "Vitamin_a_combined")
+)
+
+# check values
+chl_nutr %>%
+  ggplot (aes (x = value)) +
+  geom_histogram() +
+  facet_wrap (~nutrient, scales = "free") +
+  theme_bw()
+
+chl_nutr %>% filter (value > 10000) # argobuccinum spp., same as with sau
+chl_nutr %>% filter (value > 10, nutrient == "DHA_EPA")
+
+fucales_dha <- afcd_sci %>% filter (order == "fucales", nutrient == "DHA_EPA") %>% pull (value)
+fucales_dha[which (fucales_dha > 100)] <- 11
+fucales_dha_avg <- mean (fucales_dha)
+
+afcd_sci %>% filter (genus == "gelidium", nutrient == "DHA_EPA") # both very high, 77 and 58
+afcd_sci %>% filter (family == "gelidiaceae", nutrient == "DHA_EPA") # not sure, maybe keep
+
+chl_nutr %>% filter (value > 1000, nutrient == "Calcium") # all seaweeds
+chl_nutr %>% filter (value > 30, nutrient == "Zinc") # also seawees
+
+chl_nutr <- chl_nutr %>%
+  mutate (species = firstup (species),
+          nutrient = case_when (
+            nutrient == "DHA_EPA" ~ "Omega_3",
+            nutrient =="Iron, total" ~ "Iron",
+            nutrient == "Vitamin_a_combined" ~ "Vitamin_A",
+            TRUE ~ nutrient
+          ),
+          value = case_when (
+            species == "Argobuccinum spp." & nutrient == "Selenium" ~ 1.770e+1,
+            species == "Durvillaea incurvata" & nutrient == "DHA_EPA" ~ fucales_dha_avg,
+            TRUE ~ value
+            
+          )
+  )
+
+saveRDS(chl_nutr, file = "Data/chl_nonfish_afcd_nutrients.Rds")
+
+# compile in one dataframe----
+sau_2019_afcd_nutr <- readRDS("Data/SAU_2019_nonfish_afcd_nutrients.Rds")
+nutricast_spp_afcd_nutr <- readRDS("Data/nutricast_spp_nonfish_afcd_nutrients.Rds")
+
+nonfish_afcd_nutr <- rbind (sau_2019_afcd_nutr, nutricast_spp_afcd_nutr, chl_nutr) %>%
+  rename (amount = value) %>%
+  distinct()
+
+saveRDS(nonfish_afcd_nutr, file = "Data/nonfish_afcd_nutr_compiled.Rds")
 
 #############################################################################################
 # regional team priority spp--check inverts 7/27/22
