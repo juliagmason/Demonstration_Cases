@@ -123,3 +123,25 @@ i + theme (plot.title = element_text (size = 17),
            legend.title = element_text (size = 14),
            legend.text = element_text (size = 11)) 
 dev.off()
+
+s <- plot_nutr_upside_ratios("Sierra Leone")
+png ("Figures/SL_nutricast_upside_overall_repaired.png", width = 6, height = 5, units= "in", res = 300)
+s + theme (plot.title = element_text (size = 17),
+           axis.text = element_text (size = 11),
+           axis.text.x = element_text (angle = 60, hjust = 1),
+           strip.text.x =  element_text (size = 12),
+           axis.title = element_text (size = 16),
+           legend.title = element_text (size = 14),
+           legend.text = element_text (size = 11)) 
+dev.off()
+
+c <- plot_nutr_upside_ratios("Chile")
+png ("Figures/Chile_nutricast_upside_overall_repaired.png", width = 6, height = 5, units= "in", res = 300)
+c + theme (plot.title = element_text (size = 17),
+           axis.text = element_text (size = 11),
+           axis.text.x = element_text (angle = 60, hjust = 1),
+           strip.text.x =  element_text (size = 12),
+           axis.title = element_text (size = 16),
+           legend.title = element_text (size = 14),
+           legend.text = element_text (size = 11)) 
+dev.off()
