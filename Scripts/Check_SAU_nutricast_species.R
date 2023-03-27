@@ -3,6 +3,16 @@
 # 4/22/22
 # JGM
 
+library (tidyverse)
+library (stringr)
+
+
+# function for copying R output tables into word/excel----
+#https://stackoverflow.com/questions/24704344/copy-an-r-data-frame-to-an-excel-spreadsheet
+write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
+  write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
+}
+
 # updating 3/21/23 since we decided on aggregate data. 
 #alter nutricast to match landings data where possible.
 # if landings has just genus and nutricast has several species, take average for nutricast
@@ -13,15 +23,9 @@
 
 # the problem is, nutricast data is fully species specific, whereas SAU is more likely to have genus/family level, especially for indonesia. 
 # so if we change nutricast to higher-level genus or family, we lose the nutrient data anyway. 
-# could change SAU data based on ratios in nutricast baseline
-# Do I first match nut
+# could change SAU data based on ratios in nutricast baseline?
 
 
-# function for copying R output tables into word/excel----
-#https://stackoverflow.com/questions/24704344/copy-an-r-data-frame-to-an-excel-spreadsheet
-write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
-  write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
-}
 
 # nutricast
 # already filtered for catch_mt > 0
@@ -30,8 +34,44 @@ write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
 catch_upside_relative <- readRDS("Data/nutricast_upside_relative.Rds")
 
 # as of 10/25/22 just 2019 data, suggested by Deng Palomares. Clipped in SAU_explore.R
-sau_2019 <- readRDS("Data/SAU_2019.Rds") 
+# just grab species names
+sau_2019_taxa <- readRDS("Data/SAU_2019_taxa.Rds")
 
+# actually do need country?
+sau_2019_country_spp <- readRDS("Data/SAU_2019.Rds") %>%
+  ungroup() %>%
+  select (country, species) %>%
+  distinct()
+
+sau_2019 <- readRDS("Data/SAU_2019.Rds")
+
+
+# nutrient data ----
+fishnutr <- read_csv ("Data/Species_Nutrient_Predictions.csv")
+
+
+
+
+
+# which sau_2019 fish are not in fishnutr?
+
+sau_missing_fish <- sau_2019_taxa %>%
+  filter (taxa == "Finfish", !species %in% fishnutr$species) %>%
+  left_join (sau_2019_country_spp, by = "species") %>%
+  select (species, country) %>%
+  mutate (level = case_when (
+    grepl ("ae", strsub(species, -2, -1))
+  ))
+
+# somehow have NA countries????
+
+View (sau_missing_fish)
+
+# Peru look at country-specific fishnutrients ----
+
+
+
+#######################################################################################
 
 # Peru, SAU ----
 # no merluccius at all in nutricast. 
@@ -63,6 +103,7 @@ sau_peru_match %>%
   # can just take the sum because I'm combining species?
   summarise (tot_catch = sum (tonnes, na.rm = TRUE)) %>%
   write.excel()
+
   
 
 nutricast_peru_match <- catch_upside_relative %>%
