@@ -5,21 +5,6 @@
 library (tidyverse)
 library (stringr)
 
-# match to family, get family info from fb?
-remotes::install_github("ropensci/rfishbase")
-library (rfishbase)
-
-aux <- fb_tbl("species") %>%
-  filter (Genus == "Auxis")
-
-famcodes <- fb_tbl("families") %>%
-  select ("FamCode", "Family")
-
-nutricast_fams <- fb_tbl ("species") %>%
-  mutate(sci_name = paste(Genus, Species)) %>%
-  filter (sci_name %in% catch_upside_relative$species) %>%
-  left_join (famcodes, by = "FamCode") %>%
-  select (sci_name, Genus, Family)
 
 # For SAU data at genus or family level, take country-appropriate means from fishnutr data
 
