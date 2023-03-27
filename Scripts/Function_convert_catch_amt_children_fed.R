@@ -6,7 +6,7 @@
 
 
 library (tidyverse)
-library (AFCD)
+#library (AFCD)
 
 # using code from Species_level_nutrient_content.R
 
@@ -33,81 +33,66 @@ d_gigas_nutr <- data.frame (
   amount = c(37.5, 3.3, 0.6, 16.4, 50.9, 0, 2.8)
 )
 
-# scylla serrata for indonesia
-s_serrata_nutr <- afcd_sci %>% 
-  filter (sciname == "Scylla serrata",
-          nutrient_code_fao %in% c(
-            "CA", "ZN", "FE", "SE", "Protein", "FAPU", "VITA")) %>%
-  group_by(nutrient_code_fao) %>%
-  summarise (amount = mean (value, na.rm = TRUE)) %>%
-  mutate (nutrient =
-            case_when (nutrient_code_fao == "CA" ~ "Calcium",
-                       nutrient_code_fao == "FE" ~ "Iron",
-                       nutrient_code_fao == "SE" ~ "Selenium", 
-                       nutrient_code_fao == "ZN" ~ "Zinc",
-                       nutrient_code_fao == "FAPU" ~ "Omega_3",
-                       nutrient_code_fao == "VITA" ~ "Vitamin_A"),
-          species = "Scylla serrata"
-  ) %>%
-  # reorder to match
+# # scylla serrata for indonesia
+# s_serrata_nutr <- afcd_sci %>% 
+#   filter (sciname == "Scylla serrata",
+#           nutrient_code_fao %in% c(
+#             "CA", "ZN", "FE", "SE", "Protein", "FAPU", "VITA")) %>%
+#   group_by(nutrient_code_fao) %>%
+#   summarise (amount = mean (value, na.rm = TRUE)) %>%
+#   mutate (nutrient =
+#             case_when (nutrient_code_fao == "CA" ~ "Calcium",
+#                        nutrient_code_fao == "FE" ~ "Iron",
+#                        nutrient_code_fao == "SE" ~ "Selenium", 
+#                        nutrient_code_fao == "ZN" ~ "Zinc",
+#                        nutrient_code_fao == "FAPU" ~ "Omega_3",
+#                        nutrient_code_fao == "VITA" ~ "Vitamin_A"),
+#           species = "Scylla serrata"
+#   ) %>%
+#   # reorder to match
+#   select (species, nutrient, amount)
+
+# # composite Stolephorus spp for Indonesia
+# indo_stolephorus <- readRDS("Data/indo_stolephorus.Rds")
+# # this is slightly different from the genus match bc brought in other anchovies. just use for species_specific
+# 
+# stoleph_nutr <- fishnutr_long %>%
+#   filter (species %in% indo_stolephorus) %>%
+#   group_by (nutrient) %>%
+#   summarise (amount = mean (amount)) %>%
+#   mutate (species = "Stolephorus") %>%
+#   select (species, nutrient, amount)
+# 
+# # composite sardinella spp for Sierra Leone instead of full sardinella 
+# sardinella_nutr <- fishnutr_long %>%
+#   filter (species %in% c("Sardinella aurita", "Sardinella maderensis")) %>%
+#   group_by (nutrient) %>%
+#   summarise (amount = mean (amount)) %>%
+#   mutate (species = "Sardinella") %>%
+#   select (species, nutrient, amount)
+
+# matched fishnutr data for missing species ----
+# depends on country
+fish_taxamatch_nutr <- readRDS("Data/Matched_finfish_nutr.Rds") 
+
+# afcd data for nonfish ----
+
+nonfish_afcd_nutr <- readRDS("Data/nonfish_afcd_nutr_compiled.Rds") %>%
   select (species, nutrient, amount)
 
-# composite Stolephorus spp for Indonesia
-indo_stolephorus <- readRDS("Data/indo_stolephorus.Rds")
+# match back to taxa
+sau_2019_taxa <- readRDS("Data/SAU_2019_taxa.Rds")
 
-stoleph_nutr <- fishnutr_long %>%
-  filter (species %in% indo_stolephorus) %>%
-  group_by (nutrient) %>%
-  summarise (amount = mean (amount)) %>%
-  mutate (species = "Stolephorus") %>%
-  select (species, nutrient, amount)
+nonfish_afcd_nutr <- nonfish_afcd_nutr %>%
+  left_join (sau_2019_taxa, by = "species")
 
-# composite sardinella spp for Sierra Leone instead of full sardinella 
-sardinella_nutr <- fishnutr_long %>%
-  filter (species %in% c("Sardinella aurita", "Sardinella maderensis")) %>%
-  group_by (nutrient) %>%
-  summarise (amount = mean (amount)) %>%
-  mutate (species = "Sardinella") %>%
-  select (species, nutrient, amount)
-
-# genus data for nonfish [eventually could use AFCD]
-spp_key <- read.csv(file.path ("Data/Gaines_species_nutrient_content_key.csv"), as.is=T)
-spp_key_long <- spp_key %>% 
-  select (species, major_group, genus_food_name, calcium_mg, iron_mg, polyunsaturated_fatty_acids_g, protein_g, vitamin_a_mcg_rae, zinc_mg) %>%
- 
-  pivot_longer (calcium_mg:zinc_mg,
-                names_to = "nutrient", 
-                values_to = "amount") %>%
-  # recode major_Group_ name from nutricast code
-mutate (
-  taxa=recode(genus_food_name,
-              "Cephalopod"="Cephalopods",
-              "Crustacean"="Crustaceans",
-              "Demersal Fish"="Finfish",
-              "Marine Fish; Other"="Finfish",
-              "Mollusc; Other"="Molluscs",
-              "Pelagic Fish"="Finfish"),
-  nutrient = recode (nutrient, 
-                    "calcium_mg" = "Calcium",
-                     "iron_mg" = "Iron",
-                     "polyunsaturated_fatty_acids_g" = "Omega_3",
-                     "protein_g" = "Protein", 
-                     "vitamin_a_mcg_rae" = "Vitamin_A", 
-                     "zinc_mg" = "Zinc")
-  
-)
-  
-
-
-# rda_groups <- readRDS("Data/RDAs_5groups.Rds")
-# rda_child <- rda_groups %>% filter (group == "Child")
 
 # use WHO RNI
 rni_child <- readRDS("Data/RNI_child.Rds") 
 
 
 
-calc_children_fed_func <- function (species_name, taxa, amount_mt) {
+calc_children_fed_func <- function (species_name, taxa, amount_mt, country_name) {
   
   p_edible <- case_when (
     taxa == "Finfish" ~ 0.87,
@@ -116,20 +101,24 @@ calc_children_fed_func <- function (species_name, taxa, amount_mt) {
     taxa == "Cephalopod" ~ 0.67,
     taxa == "Other" ~ 1)
  # GENuS/nutricast is 0.21 for cephalopods. Using 0.67, Bianchi et al. 2022 value for D. gigas; only cephalopod in our priority species. They also have a blanket 0.7 value for cephalopods.  
-  if (taxa == "Finfish" & !species_name %in% c("Stolephorus", "Sardinella")) {
+  #if (taxa == "Finfish" & !species_name %in% c("Stolephorus", "Sardinella")) { # for pri_spp
+  if (taxa == "Finfish" & species_name %in% fishnutr_long$species) {
     nutr_content <- fishnutr_long %>% filter (species == species_name)
-  } else if (species_name == "Stolephorus") {
-    nutr_content = stoleph_nutr
-  } else if (species_name == "Sardinella") {
-    nutr_content = sardinella_nutr
+  # } else if (species_name == "Stolephorus") {
+  #   nutr_content = stoleph_nutr
+  # } else if (species_name == "Sardinella") {
+  #   nutr_content = sardinella_nutr
+} else if (taxa == "Finfish" & !species_name %in% fishnutr_long$species) {
+  nutr_content <- fish_taxamatch_nutr %>% filter (species == species_name, country == country_name)
   }
     else if (species_name == "Dosidicus gigas") {
     nutr_content = d_gigas_nutr
-  } else if (species_name == "Scylla serrata") {
-    nutr_content = s_serrata_nutr
-  }
-  else {
-    nutr_content <- spp_key_long %>% filter (species == species_name)
+    }
+  # } else if (species_name == "Scylla serrata") {
+  #   nutr_content = s_serrata_nutr
+  # }
+  else if (taxa != "Finfish" & species_name != "Dosdicicus gigas") {
+    nutr_content <- nonfish_afcd_nutr %>% filter (species == species_name)
   }   
   
   catch_nutrients <- nutr_content %>%
