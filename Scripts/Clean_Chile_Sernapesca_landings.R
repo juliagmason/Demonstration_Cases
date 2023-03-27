@@ -69,7 +69,8 @@ chl_landings  <- t %>%
   # fix some species names
   mutate (species = 
             case_when (species == "Mujil cephalus" ~ "Mugil cephalus", 
-                       TRUE ~ species))
+                       # trim white spaces
+                       TRUE ~ trimws(species)))
 
 saveRDS (chl_landings, file = "Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
 
