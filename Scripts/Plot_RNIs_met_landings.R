@@ -8,15 +8,11 @@ library (stringr)
 # this will also bring in fishnutr data and RNI data
 source ("Scripts/Function_convert_catch_amt_children_fed.R")
 
-# Priority species ----
 
-# top 5-7 priority species identified by regional teams
-# as of 8/4/22  have peru and chile, mexico (limited data avail). took indo spp from willow spreadsheet, but don't know where they came from
-priority_spp <- read_csv ("Data/regional_teams_priority_spp.csv") %>%
-  # just change S. japonicus peruanus to S. japonicus; no nutrient or SAU or nutricast data
-  mutate (species = case_when (species == "Scomber japonicus peruanus" ~ "Scomber japonicus",
-                               TRUE ~ species)
-  )
+# country-specific landings data ----
+
+#Clean_Chile_Sernapesca_landings.R
+chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
 
 # SAU landings data ----
 
@@ -36,15 +32,202 @@ sau_2019 <- readRDS("Data/SAU_2019.Rds")
 
 sau_2019_taxa <- readRDS ("Data/sau_2019_taxa.Rds")
 
+# Priority species ----
+
+# # top 5-7 priority species identified by regional teams
+# # as of 8/4/22  have peru and chile, mexico (limited data avail). took indo spp from willow spreadsheet, but don't know where they came from
+# priority_spp <- read_csv ("Data/regional_teams_priority_spp.csv") %>%
+#   # just change S. japonicus peruanus to S. japonicus; no nutrient or SAU or nutricast data
+#   mutate (species = case_when (species == "Scomber japonicus peruanus" ~ "Scomber japonicus",
+#                                TRUE ~ species)
+#   )
+# 
+
+
 ######################################
-# Chile ----
 
-# country specific landings data ----
 
-#Clean_Chile_Sernapesca_landings.R
-chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
+# plot aggregate landings ----
+plot_sau_rnis_met <- function (country_name, Selenium = FALSE) {
+  
+  if (country_name == "Chile") {
+    
+    landings <- chl_landings %>%
+      filter (year == 2021) %>%
+      group_by (species, taxa) %>%
+      summarise (catch_mt = sum (catch_mt)) %>%
+      mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Chile"), calc_children_fed_func)) %>%
+      unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
+      # rename to match sau just for now
+      rename (commercial_group = taxa)
+    
+  } else {
+    
+    landings <- sau_2019 %>%
+      filter(country == country_name) %>%
+      left_join(sau_2019_taxa, by = "species") %>%
+      group_by (species, taxa, commercial_group) %>%
+      summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
+      mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = country_name), calc_children_fed_func)) %>%
+      unnest(cols = c(children_fed),  names_repair = "check_unique")
+    
+  }
+  
+  # not working?? omit_nutrients <- ifelse (Selenium == TRUE, c("Protein", "Selenium"), "Protein")
+  if (Selenium == TRUE) {omit_nutrients <- "Protein"} else {omit_nutrients <- c("Protein", "Selenium")}
+  
+  landings %>%
+    
+    filter (!nutrient %in% omit_nutrients) %>%
+    
+    ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000, fill = commercial_group)) +
+    geom_col() +
+    theme_bw() +
+    ggtitle (paste0("Child RNIs met, ", country_name, "\nMost recent year of landings")) +
+    labs (x = "", y = "Child RNIs met, millions", fill = "Comm. group") 
+  
+}
 
-# plot landings volume by taxa?
+i <-  plot_sau_rnis_met("Indonesia")
+png ("Figures/Indo_aggregate_landings_RNIs_met.png", width = 5, height = 4, units = "in", res = 300)  
+print(
+  i +
+    theme ( 
+      axis.text.y = element_text (size = 13),
+      axis.text.x = element_text (size = 11),
+      axis.title = element_text (size = 16),
+      strip.text = element_text(size = 16),
+      legend.text = element_text (size = 10),
+      legend.title = element_text (size = 12),
+      plot.title = element_text (size = 18),
+      legend.position = "none"
+      #legend.position = c(0.8, 0.6))
+    ))
+dev.off()
+
+# Peru  ----
+png ("Figures/Peru_aggregate_landings_RNIs_met.png", width = 5, height = 4, units = "in", res = 300)  
+print(
+  plot_sau_rnis_met("Peru") +
+    theme ( 
+      axis.text.y = element_text (size = 13),
+      axis.text.x = element_text (size = 11),
+      axis.title = element_text (size = 16),
+      strip.text = element_text(size = 16),
+      legend.text = element_text (size = 10),
+      legend.title = element_text (size = 12),
+      plot.title = element_text (size = 18),
+      legend.position = "none"
+    )
+)
+dev.off()
+
+
+# Sierra Leone  ----
+png ("Figures/SL_aggregate_landings_RNIs_met.png", width = 5, height = 4, units = "in", res = 300)  
+print(
+  plot_sau_rnis_met("Sierra Leone")  +
+    theme ( 
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 10),
+    legend.title = element_text (size = 12),
+    plot.title = element_text (size = 18),
+    legend.position = "none"
+  )
+)
+dev.off()
+
+# Chl  ----
+png ("Figures/Chl_aggregate_landings_RNIs_met.png", width = 5, height = 4, units = "in", res = 300)  
+print(
+  plot_sau_rnis_met("Chile")  +
+    theme ( 
+      axis.text.y = element_text (size = 13),
+      axis.text.x = element_text (size = 11),
+      axis.title = element_text (size = 16),
+      strip.text = element_text(size = 16),
+      legend.text = element_text (size = 10),
+      legend.title = element_text (size = 12),
+      plot.title = element_text (size = 18),
+      legend.position = "none"
+    )
+)
+dev.off()
+
+# plot overall catch by comm_group ----
+png ("Figures/Peru_SAU_catch_commgroup.png", width = 5, height = 5, units = "in", res = 300)
+sau_2019 %>%
+  filter(country == "Peru") %>%
+  left_join(sau_2019_taxa, by = "species") %>%
+  group_by (commercial_group) %>%
+  summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  ggplot (aes (y = tonnes/1000000, x = reorder(commercial_group, -tonnes, na.rm = TRUE), fill = commercial_group)) +
+  geom_col() +
+  theme_bw() +
+  ggtitle ("Peru aggregate catch, 2019, SAU") +
+  labs (x = "", y = "Catch, million metric tonnes", fill = "Group") +
+  
+  theme ( 
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11, angle = 60, hjust = 1),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 12),
+    legend.title = element_text (size = 14),
+    plot.title = element_text (size = 18),
+    legend.position = "none")
+dev.off ()
+
+png ("Figures/Indo_SAU_catch_commgroup.png", width = 5, height = 5, units = "in", res = 300)
+sau_2019 %>%
+  filter(country == "Indonesia") %>%
+  left_join(sau_2019_taxa, by = "species") %>%
+  group_by (commercial_group) %>%
+  summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  ggplot (aes (y = tonnes/1000000, x = reorder(commercial_group, -tonnes, na.rm = TRUE), fill = commercial_group)) +
+  geom_col() +
+  theme_bw() +
+  ggtitle ("Indonesia aggregate catch, 2019, SAU") +
+  labs (x = "", y = "Catch, million metric tonnes", fill = "Group") +
+  
+  theme ( 
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11, angle = 60, hjust = 1),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 12),
+    legend.title = element_text (size = 14),
+    plot.title = element_text (size = 18),
+    legend.position = "none")
+dev.off ()
+
+png ("Figures/SL_SAU_catch_commgroup.png", width = 5, height = 5, units = "in", res = 300)
+sau_2019 %>%
+  filter(country == "Sierra Leone") %>%
+  left_join(sau_2019_taxa, by = "species") %>%
+  group_by (commercial_group) %>%
+  summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  ggplot (aes (y = tonnes/1000000, x = reorder(commercial_group, -tonnes, na.rm = TRUE), fill = commercial_group)) +
+  geom_col() +
+  theme_bw() +
+  ggtitle ("Sierra Leone aggregate catch, 2019, SAU") +
+  labs (x = "", y = "Catch, million metric tonnes", fill = "Group") +
+  
+  theme ( 
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11, angle = 60, hjust = 1),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 12),
+    legend.title = element_text (size = 14),
+    plot.title = element_text (size = 18),
+    legend.position = "none")
+dev.off ()
+
+
 png ("Figures/Chl_aggregate_catch_taxa.png", width = 5, height = 4, units = "in", res = 300)
 chl_landings %>%
   filter (year == 2021) %>%
@@ -66,32 +249,147 @@ chl_landings %>%
     legend.position = "none")
 dev.off()
 
-# aggregate landings chl ----
-png ("Figures/Chl_aggregate_catch_RNIs_taxa.png", width = 5, height = 4, units = "in", res = 300)
-chl_landings %>%
-  filter (year == 2021) %>%
-  group_by (species, taxa) %>%
-  summarise (catch_mt = sum (catch_mt)) %>%
-  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Chile"), calc_children_fed_func)) %>%
+
+# plot RNI provision by sector ----
+png ("Figures/Peru_aggregate_landings_RNIs_met_sector.png", width = 6, height = 5, units = "in", res = 300)
+
+sau_2019 %>%
+  filter(country == "Peru", fishing_sector %in% c("Artisanal", "Industrial")) %>%
+  left_join(sau_2019_taxa, by = "species") %>%
+  group_by (species, taxa, fishing_sector) %>%
+  summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
+  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Peru"), calc_children_fed_func)) %>%
   unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
-  filter (!nutrient %in% c("Protein")) %>%
-  ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000, fill = taxa)) +
-  geom_col() +
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  
+  ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000, fill = fishing_sector)) +
+  geom_col(position = "dodge") +
   theme_bw() +
-  ggtitle ("Child RNIs met, 2021 official landings, Chile") +
-  labs (x = "", y = "Child RNIs met, millions", fill = "Taxa") +
+  ggtitle ("Child RNIs met from 2019 landings, Peru") +
+  labs (x = "", y = "Child RNIs met, millions", fill = "Fishing\nsector") +
+  
   theme ( 
     axis.text.y = element_text (size = 13),
     axis.text.x = element_text (size = 11),
     axis.title = element_text (size = 16),
     strip.text = element_text(size = 16),
-    legend.text = element_text (size = 12),
+    legend.text = element_text (size = 11),
     legend.title = element_text (size = 14),
-    plot.title = element_text (size = 18),
-    legend.position = c(0.8, 0.7))
+    plot.title = element_text (size = 18))
 dev.off()
 
-# priority species ----
+# compare with just dhc
+# have to do weird hack situation
+# fix peru 2019 anchovy issue
+# messy hack, but replace Peru anchovy dhc value with 2018 value. in 2018, all artisanal was dhc and all industrial is fmfo
+peru_anchov_dhc <- sau_2015_2019 %>%
+  filter (country == "Peru", fishing_entity == "Peru", year == 2018, species == "Engraulis ringens") %>%
+  group_by (country, species, year) %>%
+  summarise (prop_non_dhc = sum(tonnes[end_use_type == "Fishmeal and fish oil" & fishing_entity == "Peru"])/sum(tonnes[fishing_entity == "Peru"])) # 0.955
+
+peru_anchov_total_2019 <- sau_2015_2019 %>%
+  filter (country == "Peru", fishing_entity == "Peru", year == 2019, species == "Engraulis ringens") %>%
+  pull (tonnes) %>% sum()
+
+png ("Figures/Peru_aggregate_landings_RNIs_met_sector_DHC.png", width = 6, height = 5, units = "in", res = 300)
+
+sau_2019 %>%
+  filter(country == "Peru", fishing_sector %in% c("Artisanal", "Industrial")) %>%
+  left_join(sau_2019_taxa, by = "species") %>%
+  group_by (species, taxa, fishing_sector, end_use_type) %>%
+  summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
+  mutate (catch_mt = case_when (
+    country_name == "Peru" & species == "Engraulis ringens" & end_use_type == "Fishmeal and fish oil" ~ peru_anchov_dhc$prop_non_dhc * peru_anchov_total_2019,
+    country_name == "Peru" & species == "Engraulis ringens" & end_use_type == "Direct human consumption" ~ (1 - peru_anchov_dhc$prop_non_dhc) * peru_anchov_total_2019,
+    TRUE ~ catch_mt )
+  ) %>%
+  filter (end_use_type == "Direct human consumption") %>%
+  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Peru"), calc_children_fed_func)) %>%
+  unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  
+  ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000, fill = fishing_sector)) +
+  geom_col(position = "dodge") +
+  theme_bw() +
+  ggtitle ("Child RNIs met from 2019 landings, Peru\nDirect human consumption") +
+  labs (x = "", y = "Child RNIs met, millions", fill = "Fishing\nsector") +
+  
+  theme ( 
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 11),
+    legend.title = element_text (size = 14),
+    plot.title = element_text (size = 18))
+dev.off()
+
+
+
+
+
+
+##############################################################
+# plot species specific, priority species ----
+
+plot_sau_rnis_met_spp <- function (country_name) {
+  
+  sau_2019 %>%
+    filter(country == country_name) %>%
+    inner_join (priority_spp, by = c ("country", "species")) %>%
+    group_by (species, taxa) %>%
+    summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
+    mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Sierra Leone"), calc_children_fed_func)) %>%
+    unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
+    mutate(
+      spp_short = ifelse (
+        grepl(" ", species),
+        paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
+        species) 
+    ) %>%
+    filter (!nutrient %in% c("Protein", "Selenium")) %>%
+    ggplot (aes (x = reorder(spp_short, -catch_mt), y = children_fed/1000000, fill = nutrient)) +
+    geom_col(position = "dodge") +
+    theme_bw() +
+    ggtitle (paste0("Child RNIs met from most recent year of landings, ", country_name)) +
+    labs (x = "", y = "Child RNIs met, millions", fill = "Nutrient") +
+    theme ( 
+      axis.text.y = element_text (size = 13),
+      axis.text.x = element_text (size = 11),
+      axis.title = element_text (size = 16),
+      strip.text = element_text(size = 16),
+      legend.text = element_text (size = 12),
+      legend.title = element_text (size = 14),
+      plot.title = element_text (size = 18))
+  
+}
+
+# Indo  ----
+
+
+png ("Figures/Indo_pri_spp_landings_RNIs_met.png", width = 10, height = 5, units = "in", res = 300)  
+print(
+  plot_sau_rnis_met_spp("Indonesia")
+)
+dev.off()
+
+# Peru  ----
+png ("Figures/Peru_pri_spp_landings_RNIs_met.png", width = 10, height = 5, units = "in", res = 300)  
+print(
+  plot_sau_rnis_met("Peru")
+)
+dev.off()
+
+# Sierra Leone  ----
+png ("Figures/SL_pri_spp_landings_RNIs_met.png", width = 10, height = 5, units = "in", res = 300)  
+print(
+  plot_sau_rnis_met("Sierra Leone")
+)
+dev.off()
+
+
+
+# chl priority species ----
 chl_pri_spp_catch <- chl_landings %>%
   filter (year == 2021) %>%
   group_by (species) %>%
@@ -123,6 +421,8 @@ chl_pri_spp_catch %>%
     legend.title = element_text (size = 14),
     plot.title = element_text (size = 18))
 dev.off()
+
+
 
 ####################################
 # sierra leone IHH ----
@@ -239,316 +539,9 @@ mwi_catch %>%
     plot.title = element_text (size = 18))
 dev.off()
 
-# Sau data ----
-
-# plot aggregate landings ----
-plot_sau_rnis_met <- function (country_name, Selenium = FALSE) {
-  
-  if (country_name == "Chile") {
-    
-    chl_landings %>%
-      filter (year == 2021) %>%
-      group_by (species, taxa) %>%
-      summarise (catch_mt = sum (catch_mt)) %>%
-      mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Chile"), calc_children_fed_func)) %>%
-      unnest(cols = c(children_fed),  names_repair = "check_unique")
-    
-  } else {
-    
-    landings <- sau_2019 %>%
-      filter(country == country_name) %>%
-      left_join(sau_2019_taxa, by = "species") %>%
-      group_by (species, taxa, commercial_group) %>%
-      summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
-      mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = country_name), calc_children_fed_func)) %>%
-      unnest(cols = c(children_fed),  names_repair = "check_unique")
-    
-  }
-    
-  
-sau_2019 %>%
-    filter(country == country_name) %>%
-    left_join(sau_2019_taxa, by = "species") %>%
-    group_by (species, taxa, commercial_group) %>%
-    summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
-    mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = country_name), calc_children_fed_func)) %>%
-    unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
-   #filter (!nutrient %in% c("Protein", "Selenium")) %>%
-    filter (!nutrient %in% c("Protein")) %>%
-    
-    ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000, fill = commercial_group)) +
-    geom_col() +
-    theme_bw() +
-    ggtitle (paste0("Child RNIs met, 2019 SAU landings, ", country_name)) +
-    labs (x = "", y = "Child RNIs met, millions", fill = "Comm. group") 
-  
-}
-
-i <-  plot_sau_rnis_met("Indonesia")
-png ("Figures/Indo_aggregate_landings_RNIs_met_Selenium.png", width = 5, height = 4, units = "in", res = 300)  
-print(
- 
-  i +
-    theme ( 
-      axis.text.y = element_text (size = 13),
-      axis.text.x = element_text (size = 11),
-      axis.title = element_text (size = 16),
-      strip.text = element_text(size = 16),
-      legend.text = element_text (size = 10),
-      legend.title = element_text (size = 12),
-      plot.title = element_text (size = 18),
-      legend.position = "none"
-      #legend.position = c(0.8, 0.6))
-))
-dev.off()
-
-# Peru  ----
-png ("Figures/Peru_aggregate_landings_RNIs_met_Selenium.png", width = 10, height = 5, units = "in", res = 300)  
-print(
-  plot_sau_rnis_met("Peru")
-)
-dev.off()
-
-png ("Figures/Peru_aggregate_landings_RNIs_met_commgroup.png", width = 6, height = 4, units = "in", res = 300) 
-sau_2019 %>%
-  filter(country == "Peru") %>%
-  left_join(sau_2019_taxa, by = "species") %>%
-  group_by (species, taxa, commercial_group) %>%
-  summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
-  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Peru"), calc_children_fed_func)) %>%
-  unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
-  filter (!nutrient %in% c("Protein")) %>%
-  
-  ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000, fill = commercial_group)) +
-  geom_col() +
-  theme_bw() +
-  ggtitle ("Child RNIs met from 2019 catch, Peru") +
-  labs (x = "", y = "Child RNIs met, millions", fill = "Group") +
-  
-  theme ( 
-    axis.text.y = element_text (size = 13),
-    axis.text.x = element_text (size = 11, angle = 60, hjust =1),
-    axis.title = element_text (size = 16),
-    strip.text = element_text(size = 16),
-    legend.text = element_text (size = 11),
-    legend.title = element_text (size = 14),
-    plot.title = element_text (size = 18))
-dev.off()
-
-# Sierra Leone  ----
-png ("Figures/SL_aggregate_landings_RNIs_met_Selenium.png", width = 10, height = 5, units = "in", res = 300)  
-print(
-  plot_sau_rnis_met("Sierra Leone")
-)
-dev.off()
-
-# plot overall catch by comm_group ----
-png ("Figures/Peru_SAU_catch_commgroup.png", width = 5, height = 5, units = "in", res = 300)
-sau_2019 %>%
-  filter(country == "Peru") %>%
-  left_join(sau_2019_taxa, by = "species") %>%
-  group_by (commercial_group) %>%
-  summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
-  ggplot (aes (y = tonnes/1000000, x = reorder(commercial_group, -tonnes, na.rm = TRUE), fill = commercial_group)) +
-  geom_col() +
-  theme_bw() +
-  ggtitle ("Peru aggregate catch, 2019, SAU") +
-  labs (x = "", y = "Catch, million metric tonnes", fill = "Group") +
-  
-  theme ( 
-    axis.text.y = element_text (size = 13),
-    axis.text.x = element_text (size = 11, angle = 60, hjust = 1),
-    axis.title = element_text (size = 16),
-    strip.text = element_text(size = 16),
-    legend.text = element_text (size = 12),
-    legend.title = element_text (size = 14),
-    plot.title = element_text (size = 18),
-    legend.position = "none")
-dev.off ()
-
-png ("Figures/Indo_SAU_catch_commgroup.png", width = 5, height = 5, units = "in", res = 300)
-sau_2019 %>%
-  filter(country == "Indonesia") %>%
-  left_join(sau_2019_taxa, by = "species") %>%
-  group_by (commercial_group) %>%
-  summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
-  ggplot (aes (y = tonnes/1000000, x = reorder(commercial_group, -tonnes, na.rm = TRUE), fill = commercial_group)) +
-  geom_col() +
-  theme_bw() +
-  ggtitle ("Indonesia aggregate catch, 2019, SAU") +
-  labs (x = "", y = "Catch, million metric tonnes", fill = "Group") +
-  
-  theme ( 
-    axis.text.y = element_text (size = 13),
-    axis.text.x = element_text (size = 11, angle = 60, hjust = 1),
-    axis.title = element_text (size = 16),
-    strip.text = element_text(size = 16),
-    legend.text = element_text (size = 12),
-    legend.title = element_text (size = 14),
-    plot.title = element_text (size = 18),
-    legend.position = "none")
-dev.off ()
-
-png ("Figures/SL_SAU_catch_commgroup.png", width = 5, height = 5, units = "in", res = 300)
-sau_2019 %>%
-  filter(country == "Sierra Leone") %>%
-  left_join(sau_2019_taxa, by = "species") %>%
-  group_by (commercial_group) %>%
-  summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
-  ggplot (aes (y = tonnes/1000000, x = reorder(commercial_group, -tonnes, na.rm = TRUE), fill = commercial_group)) +
-  geom_col() +
-  theme_bw() +
-  ggtitle ("Sierra Leone aggregate catch, 2019, SAU") +
-  labs (x = "", y = "Catch, million metric tonnes", fill = "Group") +
-  
-  theme ( 
-    axis.text.y = element_text (size = 13),
-    axis.text.x = element_text (size = 11, angle = 60, hjust = 1),
-    axis.title = element_text (size = 16),
-    strip.text = element_text(size = 16),
-    legend.text = element_text (size = 12),
-    legend.title = element_text (size = 14),
-    plot.title = element_text (size = 18),
-    legend.position = "none")
-dev.off ()
 
 
 
-
-
-# plot RNI provision by sector ----
-png ("Figures/Peru_aggregate_landings_RNIs_met_sector.png", width = 6, height = 5, units = "in", res = 300)
-
-sau_2019 %>%
-  filter(country == "Peru", fishing_sector %in% c("Artisanal", "Industrial")) %>%
-  left_join(sau_2019_taxa, by = "species") %>%
-  group_by (species, taxa, fishing_sector) %>%
-  summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
-  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Peru"), calc_children_fed_func)) %>%
-  unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
-  filter (!nutrient %in% c("Protein", "Selenium")) %>%
-  
-  ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000, fill = fishing_sector)) +
-  geom_col(position = "dodge") +
-  theme_bw() +
-  ggtitle ("Child RNIs met from 2019 landings, Peru") +
-  labs (x = "", y = "Child RNIs met, millions", fill = "Fishing\nsector") +
-  
-  theme ( 
-    axis.text.y = element_text (size = 13),
-    axis.text.x = element_text (size = 11),
-    axis.title = element_text (size = 16),
-    strip.text = element_text(size = 16),
-    legend.text = element_text (size = 11),
-    legend.title = element_text (size = 14),
-    plot.title = element_text (size = 18))
-dev.off()
-
-# compare with just dhc
-# have to do weird hack situation
-# fix peru 2019 anchovy issue
-# messy hack, but replace Peru anchovy dhc value with 2018 value. in 2018, all artisanal was dhc and all industrial is fmfo
-peru_anchov_dhc <- sau_2015_2019 %>%
-  filter (country == "Peru", fishing_entity == "Peru", year == 2018, species == "Engraulis ringens") %>%
-  group_by (country, species, year) %>%
-  summarise (prop_non_dhc = sum(tonnes[end_use_type == "Fishmeal and fish oil" & fishing_entity == "Peru"])/sum(tonnes[fishing_entity == "Peru"])) # 0.955
-
-peru_anchov_total_2019 <- sau_2015_2019 %>%
-  filter (country == "Peru", fishing_entity == "Peru", year == 2019, species == "Engraulis ringens") %>%
-  pull (tonnes) %>% sum()
-
-png ("Figures/Peru_aggregate_landings_RNIs_met_sector_DHC.png", width = 6, height = 5, units = "in", res = 300)
-
-sau_2019 %>%
-  filter(country == "Peru", fishing_sector %in% c("Artisanal", "Industrial")) %>%
-  left_join(sau_2019_taxa, by = "species") %>%
-  group_by (species, taxa, fishing_sector, end_use_type) %>%
-  summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
-  mutate (catch_mt = case_when (
-    country_name == "Peru" & species == "Engraulis ringens" & end_use_type == "Fishmeal and fish oil" ~ peru_anchov_dhc$prop_non_dhc * peru_anchov_total_2019,
-    country_name == "Peru" & species == "Engraulis ringens" & end_use_type == "Direct human consumption" ~ (1 - peru_anchov_dhc$prop_non_dhc) * peru_anchov_total_2019,
-    TRUE ~ catch_mt )
-  ) %>%
-  filter (end_use_type == "Direct human consumption") %>%
-  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Peru"), calc_children_fed_func)) %>%
-  unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
-  filter (!nutrient %in% c("Protein", "Selenium")) %>%
-  
-  ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000, fill = fishing_sector)) +
-  geom_col(position = "dodge") +
-  theme_bw() +
-  ggtitle ("Child RNIs met from 2019 landings, Peru\nDirect human consumption") +
-  labs (x = "", y = "Child RNIs met, millions", fill = "Fishing\nsector") +
-  
-  theme ( 
-    axis.text.y = element_text (size = 13),
-    axis.text.x = element_text (size = 11),
-    axis.title = element_text (size = 16),
-    strip.text = element_text(size = 16),
-    legend.text = element_text (size = 11),
-    legend.title = element_text (size = 14),
-    plot.title = element_text (size = 18))
-dev.off()
-
-
-
-##############################################################
-# plot species specific, priority species ----
-
-plot_sau_rnis_met_spp <- function (country_name) {
-  
- sau_2019 %>%
-    filter(country == country_name) %>%
-    inner_join (priority_spp, by = c ("country", "species")) %>%
-    group_by (species, taxa) %>%
-    summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
-    mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Sierra Leone"), calc_children_fed_func)) %>%
-    unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
-    mutate(
-      spp_short = ifelse (
-        grepl(" ", species),
-        paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
-        species) 
-    ) %>%
-    filter (!nutrient %in% c("Protein", "Selenium")) %>%
-    ggplot (aes (x = reorder(spp_short, -catch_mt), y = children_fed/1000000, fill = nutrient)) +
-    geom_col(position = "dodge") +
-    theme_bw() +
-    ggtitle (paste0("Child RNIs met from most recent year of landings, ", country_name)) +
-    labs (x = "", y = "Child RNIs met, millions", fill = "Nutrient") +
-    theme ( 
-      axis.text.y = element_text (size = 13),
-      axis.text.x = element_text (size = 11),
-      axis.title = element_text (size = 16),
-      strip.text = element_text(size = 16),
-      legend.text = element_text (size = 12),
-      legend.title = element_text (size = 14),
-      plot.title = element_text (size = 18))
-  
-}
-
-# Indo  ----
-
-
-png ("Figures/Indo_pri_spp_landings_RNIs_met.png", width = 10, height = 5, units = "in", res = 300)  
-print(
-plot_sau_rnis_met_spp("Indonesia")
-)
-dev.off()
-
-# Peru  ----
-png ("Figures/Peru_pri_spp_landings_RNIs_met.png", width = 10, height = 5, units = "in", res = 300)  
-print(
-  plot_sau_rnis_met("Peru")
-)
-dev.off()
-
-# Sierra Leone  ----
-png ("Figures/SL_pri_spp_landings_RNIs_met.png", width = 10, height = 5, units = "in", res = 300)  
-print(
-  plot_sau_rnis_met("Sierra Leone")
-)
-dev.off()
 
 # facet all SAU countries ----
 
