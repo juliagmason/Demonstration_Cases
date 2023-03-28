@@ -61,7 +61,7 @@ exports_5yr_mean <- exports %>%
 
 # assume foreign catch is separate from exports. that is, export proportions are for domestic catch
 
-plot_trade_levers_aggregate <- function (country_name) {
+plot_trade_levers_aggregate <- function (country_name, Selenium = FALSE) {
  
    z <- sau_2019 %>%
     filter (country == country_name) %>%
@@ -73,20 +73,22 @@ plot_trade_levers_aggregate <- function (country_name) {
                domestic_catch = sum (tonnes[fishing_entity == country_name]) * (1-mn_prop_exp),
                exported = sum (tonnes[fishing_entity == country_name]) * mn_prop_exp) %>%
     # creating many repeats, not sure why
+     # warning about reframe()
     distinct () %>%
     # pivot longer
     pivot_longer (foreign_catch:exported,
                   names_to = "lever",
                   values_to = "catch_mt") %>%
-    mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt), calc_children_fed_func)) %>%
+    mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = country_name), calc_children_fed_func)) %>%
     unnest (cols = c(children_fed)) %>%
     rename (mt = catch_mt)
   
   z$lever <- factor (z$lever, levels = c ("exported", "foreign_catch", "domestic_catch"))
   
+  if (Selenium == TRUE) {omit_nutrients <- "Protein"} else {omit_nutrients <- c("Protein", "Selenium")}
   
   w <- z %>%
-    filter (!nutrient %in% c("Protein")) %>%
+    filter (!nutrient %in% omit_nutrients) %>%
     group_by (nutrient, lever) %>%
     summarise (children_fed = sum (children_fed, na.rm = TRUE)) %>%
     ggplot (aes (y = children_fed/1000000, x = reorder(nutrient, -children_fed), fill = lever)) +
@@ -94,32 +96,80 @@ plot_trade_levers_aggregate <- function (country_name) {
     theme_bw()+
     scale_fill_grey(start = 0.8, end = 0.2) +
     labs (y = "Child RNIs met, millions", x = "", fill = "Policy lever") +
-    ggtitle (paste0("Allocative losses,\ntrade and foreign catch, ", country_name)) 
+    ggtitle (paste0("Allocative losses, trade/foreign catch, ", country_name)) 
   
   
   
 }
 
-x <- plot_trade_levers_aggregate("Peru")
 
-png ("Figures/Peru_trade_levers_aggregate.png", width = 5, height = 5, unit = "in", res = 300)
+png ("Figures/Peru_trade_levers_aggregate.png", width = 5, height = 4, unit = "in", res = 300)
 
-x +    theme ( 
+plot_trade_levers_aggregate("Peru") +    
+  theme ( 
   axis.text.y = element_text (size = 11),
-  axis.text.x = element_text (size = 11, angle = 60, hjust = 1),
+  axis.text.x = element_text (size = 11),
   axis.title = element_text (size = 16),
   legend.text = element_text (size = 11),
-  legend.title = element_text (size = 14),
+  legend.title = element_text (size = 13),
+  plot.title = element_text (size = 18),
+  legend.position = c(0.8, 0.8))
+
+dev.off()
+
+
+png ("Figures/Indo_trade_levers_aggregate.png", width = 5, height = 4, unit = "in", res = 300)
+
+ plot_trade_levers_aggregate("Indonesia") +    
+  theme ( 
+  axis.text.y = element_text (size = 11),
+  axis.text.x = element_text (size = 11),
+  axis.title = element_text (size = 16),
+  legend.text = element_text (size = 11),
+  legend.title = element_text (size = 13),
+  plot.title = element_text (size = 18),
+  legend.position = "none")
+dev.off()
+
+png ("Figures/SL_trade_levers_aggregate.png", width = 5, height = 4, unit = "in", res = 300)
+
+plot_trade_levers_aggregate("Sierra Leone") +    
+  theme ( 
+  axis.text.y = element_text (size = 11),
+  axis.text.x = element_text (size = 11),
+  axis.title = element_text (size = 16),
+  legend.text = element_text (size = 11),
+  legend.title = element_text (size = 13),
+  plot.title = element_text (size = 18),
+  legend.position = c(0.8, 0.8))
+
+dev.off()
+
+
+png ("Figures/Chl_trade_levers_aggregate.png", width = 5, height = 4, unit = "in", res = 300)
+
+plot_trade_levers_aggregate("Chile")  +   
+  theme ( 
+  axis.text.y = element_text (size = 11),
+  axis.text.x = element_text (size = 11),
+  axis.title = element_text (size = 16),
+  legend.text = element_text (size = 11),
+  legend.title = element_text (size = 13),
   plot.title = element_text (size = 18),
   legend.position = c(0.8, 0.8))
 dev.off()
 
+
 # Plot end use types ----
-plot_end_use_levers_aggregate <- function (country_name) {
+# NOTE: 2019 SAU reconstruction no longer has discards, for any year. Discards were present in my previous download.
+
+plot_end_use_levers_aggregate <- function (country_name, Selenium = FALSE) {
 c <- sau_2019 %>%
   filter (country == country_name) %>%
   left_join (sau_2019_taxa, by = "species") %>%
- 
+  # mutate(case_when (is.nan(end_use_type) ~ "Discards",
+  #                   TRUE ~ end_use_type)) %>%
+  # 
   group_by (species, taxa, end_use_type) %>%
   summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
   
@@ -131,14 +181,16 @@ c <- sau_2019 %>%
     ) %>%
   
   
-  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt), calc_children_fed_func)) %>%
+  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = country_name), calc_children_fed_func)) %>%
   unnest (cols = c(children_fed)) %>%
   rename (mt = catch_mt)
 
-c$end_use_type <- factor (c$end_use_type, levels = c ("Discards", "Fishmeal and fish oil", "Other", "Direct human consumption"))
+c$end_use_type <- factor (c$end_use_type, levels = c ("Fishmeal and fish oil", "Other", "Direct human consumption"))
+
+if (Selenium == TRUE) {omit_nutrients <- "Protein"} else {omit_nutrients <- c("Protein", "Selenium")}
 
 c %>%
-  filter (!nutrient %in% c("Protein")) %>%
+  filter (!nutrient %in% omit_nutrients, !is.na (end_use_type)) %>%
   group_by (nutrient, end_use_type) %>%
   summarise (children_fed = sum (children_fed, na.rm = TRUE)) %>%
   ggplot (aes (x = reorder(nutrient, -children_fed), y = children_fed/1000000, fill = end_use_type)) +
@@ -150,16 +202,60 @@ c %>%
 
 }
 
-d <- plot_end_use_levers_aggregate("Peru")
+#, Selenium = TRUE
 
-png ("Figures/Peru_end_use_levers_aggregate.png", width = 5, height = 5, unit = "in", res = 300)
+png ("Figures/Peru_end_use_levers_aggregate.png", width = 5, height = 4, unit = "in", res = 300)
 
-d +    theme ( 
+plot_end_use_levers_aggregate("Peru") +    
+  theme ( 
   axis.text.y = element_text (size = 11),
-  axis.text.x = element_text (size = 11, angle = 60, hjust = 1),
+  axis.text.x = element_text (size = 11),
   axis.title = element_text (size = 16),
   legend.text = element_text (size = 11),
-  legend.title = element_text (size = 14),
+  legend.title = element_text (size = 13),
   plot.title = element_text (size = 18),
-  legend.position = c(0.8, 0.8))
+  legend.position = c(0.7, 0.7))
 dev.off()
+
+
+png ("Figures/Indo_end_use_levers_aggregate.png", width = 5, height = 4, unit = "in", res = 300)
+
+plot_end_use_levers_aggregate("Indonesia") +    
+  theme ( 
+  axis.text.y = element_text (size = 11),
+  axis.text.x = element_text (size = 11),
+  axis.title = element_text (size = 16),
+  legend.text = element_text (size = 11),
+  legend.title = element_text (size = 13),
+  plot.title = element_text (size = 18),
+  legend.position = "none")
+dev.off()
+
+
+png ("Figures/SL_end_use_levers_aggregate.png", width = 5, height = 4, unit = "in", res = 300)
+
+plot_end_use_levers_aggregate("Sierra Leone") +   
+  theme ( 
+  axis.text.y = element_text (size = 11),
+  axis.text.x = element_text (size = 11),
+  axis.title = element_text (size = 16),
+  legend.text = element_text (size = 11),
+  legend.title = element_text (size = 13),
+  plot.title = element_text (size = 18),
+  legend.position = "none")
+dev.off()
+
+
+png ("Figures/Chl_end_use_levers_aggregate.png", width = 5, height = 4, unit = "in", res = 300)
+
+plot_end_use_levers_aggregate("Chile") +    
+  theme ( 
+  axis.text.y = element_text (size = 11),
+  axis.text.x = element_text (size = 11),
+  axis.title = element_text (size = 16),
+  legend.text = element_text (size = 11),
+  legend.title = element_text (size = 13),
+  plot.title = element_text (size = 18),
+  legend.position = c(0.7, 0.7))
+dev.off()
+
