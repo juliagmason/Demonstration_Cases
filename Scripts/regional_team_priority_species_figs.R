@@ -226,6 +226,7 @@ sau_2019 %>%
   write.excel()
 
 # sau industrial vs artisanal----
+
 # domestic only
 # try 2015-2019 mean and 2019 only. Values are similar. However, for chile anchovy values are very different from 2011-2015, way more artisanal catch. this does match up with official landings though. 
 sau_2015_2019 %>%
@@ -260,6 +261,8 @@ chl_landings %>%
              prop_ind = sum (catch_mt[sector == "Industrial"]) / sum (catch_mt)) %>%
   arrange ( rank) %>%
   write.excel()
+
+
 
 # end use SAU ----
 #discards only show up in indonesia data
@@ -732,6 +735,73 @@ dev.off()
 
 
 ## plot dhc industrial vs. artisanal ----
+
+# try again with stacked bar vs dodge, was getting inconsistencies----
+chl_rnis_pri <- chl_landings %>%
+  filter (year == 2021) %>%
+  right_join (filter (priority_spp, country == "Chile"), by = "species") %>%
+  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt), calc_children_fed_func)) %>%
+  unnest(cols = c(children_fed),  names_repair = "check_unique") 
+
+
+chl_rnis_pri %>%
+  filter (!nutrient %in% c("Selenium", "Protein")) %>%
+  ggplot () +
+  geom_col (aes (y = children_fed, x = nutrient, fill = sector), position = "stack") +
+  facet_wrap (~species, scales = "free") +
+  theme_bw()
+
+chl_rnis_pri %>%
+  filter (!nutrient %in% c("Selenium", "Protein")) %>%
+  ggplot () +
+  geom_col (aes (y = children_fed, x = nutrient, fill = sector), position = "dodge") +
+  facet_wrap (~species, scales = "free") +
+  theme_bw()
+
+# check amts
+chl_rnis_pri %>%
+  filter (!nutrient %in% c("Selenium", "Protein")) %>%
+  group_by(species, nutrient) %>%
+  summarise (sum = sum(children_fed)) %>%
+  arrange (desc(sum))
+
+# these look okay, these look consistent.
+
+#SAU try stack
+peru_rni_test <- sau_2019 %>%
+  filter (country == "Peru") %>%
+  right_join (filter (priority_spp, country == "Peru"), by = "species") %>%
+  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = tonnes), calc_children_fed_func)) %>%
+  unnest(cols = c(children_fed),  names_repair = "check_unique")
+
+peru_rni_test %>%
+  filter (!nutrient %in% c("Selenium", "Protein")) %>%
+  ggplot () +
+  geom_col (aes (y = children_fed, x = nutrient, fill = fishing_sector), position = "stack") +
+  facet_wrap (~species, scales = "free") +
+  theme_bw()
+# these look ok
+
+peru_rni_test %>%
+  filter (!nutrient %in% c("Selenium", "Protein")) %>%
+  ggplot () +
+  geom_col (aes (y = children_fed, x = nutrient, fill = fishing_sector), position = "dodge") +
+  facet_wrap (~species, scales = "free") +
+  theme_bw()
+# these are wrong, y axis is too low, and artisanal vs industrial looks reversed sometimes?
+
+peru_rni_test %>%
+  filter (!nutrient %in% c("Selenium", "Protein")) %>%
+  group_by (species, nutrient) %>%
+  summarize (sum = sum (children_fed)) %>%
+  arrange (desc (sum))
+
+peru_rni_test %>%
+  filter (!nutrient %in% c("Selenium", "Protein")) %>%
+  group_by (species, nutrient, fishing_sector) %>%
+  summarize (sum = sum (children_fed)) %>%
+  arrange (desc (sum))
+  
 
 # hack peru again --> all years all artisanal is 0 and all industrial is 1
 # so need industrial catch 2019
@@ -2220,65 +2290,6 @@ sau_chl <- sau %>%
   
   write.excel (chl_landings_data_compare)
   
-  # radar plots of their desired species nutrient content----
-  library (ggradar)
-  
-  
-  # filter nutrient content data
-  nutr_radar_plot <- chl_pri_nutr %>%
-    filter (!nutrient %in% c("Protein", "Selenium")) %>%
-    select (species, nutrient, perc_rda) %>%
-    pivot_wider (
-      names_from = nutrient,
-      values_from = perc_rda) %>%
-    # radar plot can't deal with NA and non-fish don't have selenium
-    replace_na (list (Selenium = 0)) 
-  
-  # set levels so colors stay the same
-  nutr_radar_plot$species <- factor (nutr_radar_plot$species, levels = c("Merluccius gayi gayi", "Merluccius australis", "Genypterus maculatus"))
-  
-  
-  png ("Figures/Chl_radar_reg_tm_spp.png", res = 300, width = 8, height = 5, units = "in")  
-  ggradar(nutr_radar_plot,
-          grid.min = 0, grid.max = 100, 
-          group.point.size = 2,
-          group.line.width = 1,
-          legend.text.size = 8,
-          axis.label.size = 4,
-          grid.label.size = 4,
-          legend.position = "right") +
-    ggtitle ("Child's daily nutrition needs from one serving") +
-    theme (plot.title = element_text (size = 14))
-  dev.off()
-  
-  # compare to anchovy and jurel
-  
-  # filter nutrient content data
-  nutr_radar_plot_anchov <- chl_spp_nutr %>%
-    filter (species %in% c("Merluccius gayi gayi", "Merluccius australis", "Genypterus maculatus", "Engraulis ringens", "Trachurus murphyi"), !nutrient %in% c("Protein", "Selenium")) %>%
-    select (species, nutrient, perc_rda) %>%
-    pivot_wider (
-      names_from = nutrient,
-      values_from = perc_rda) %>%
-    # radar plot can't deal with NA and non-fish don't have selenium
-    replace_na (list (Selenium = 0)) 
-  
-  # set levels so colors stay the same
-  nutr_radar_plot_anchov$species <- factor (nutr_radar_plot_anchov$species, levels = c ("Merluccius gayi gayi", "Merluccius australis", "Genypterus maculatus", "Engraulis ringens", "Trachurus murphyi"))
-  
-  
-  png ("Figures/Chl_radar_reg_tm_spp_anchov_ref.png", res = 300, width = 8, height = 5, units = "in")  
-  ggradar(nutr_radar_plot_anchov,
-          grid.min = 0, grid.max = 100, 
-          group.point.size = 2,
-          group.line.width = 1,
-          legend.text.size = 8,
-          axis.label.size = 4,
-          grid.label.size = 4,
-          legend.position = "right") +
-    ggtitle ("Child's daily nutrition needs from one serving") +
-    theme (plot.title = element_text (size = 14))
-  dev.off()
   
   # display nutr density
   chl_spp_nutr %>%
