@@ -4,6 +4,63 @@
 
 library (tidyverse)
 
+# 3/28/23 quick update--discards mystery. older data I downloaded before 2019 update has discards, but 2019 data doesn't. 
+#BUT, at least for indonesia, 2019 download just has blanks. this is just in indonesia. 
+# skip discards for now
+
+download_2019_full <- read.csv("Data/SAU EEZ 2019.csv") # this doesn't have indonesia
+indo_2019_download_full <- read.csv("Data/SAU EEZ indonesia.csv") %>%
+  mutate (country = "Indonesia") %>%
+  rename (species = scientific_name) %>%
+  group_by (country, species, year, fishing_sector, fishing_entity, end_use_type) %>%
+  summarise (tonnes = sum(tonnes),
+             landed_value = sum(landed_value))
+
+
+download_older_full <- read.csv ("Data/SAU_EEZ_landings.csv")
+
+sau_2019 <- readRDS("DAta/SAU_2019.Rds")
+
+unique (download_2019_full$end_use_type)
+unique (download_older_full$end_use_type)
+unique (indo_2019_download_full$end_use_type)
+
+
+download_older_indo <- download_older_full %>%
+  mutate (country = case_when(
+    grepl("Indo", area_name) ~ "Indonesia",
+    grepl ("Mex", area_name) ~ "Mexico",
+    area_name == "Chile (mainland)" ~ "Chile",
+    TRUE ~ area_name)
+    )%>%
+  rename (species = scientific_name) %>%
+  group_by (country, species, year, fishing_sector, fishing_entity, end_use_type) %>%
+  summarise (tonnes = sum(tonnes),
+             landed_value = sum(landed_value)) %>%
+    filter (country == "Indonesia")
+
+  View (download_older_indo)
+  # yes, I think fair to say discards. 
+  
+  download_older_other <- download_older_full %>%
+    mutate (country = case_when(
+      grepl("Indo", area_name) ~ "Indonesia",
+      grepl ("Mex", area_name) ~ "Mexico",
+      area_name == "Chile (mainland)" ~ "Chile",
+      TRUE ~ area_name)
+    )%>%
+    rename (species = scientific_name) %>%
+    group_by (country, species, year, fishing_sector, fishing_entity, end_use_type) %>%
+    summarise (tonnes = sum(tonnes),
+               landed_value = sum(landed_value)) %>%
+    filter (country != "Indonesia")
+  
+  unique (download_older_other$end_use_type)
+  
+  table (download_older_other$country, download_older_other$end_use_type)
+  
+  table(sau_2019$country, sau_2019$end_use_type)
+
 # 10/25/22 updating with 2019 data. Did grab mexico but not indonesia (too big; timed out)
 # 1/31/23 grabbed into data for regional team presentation
 
