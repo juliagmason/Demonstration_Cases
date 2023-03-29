@@ -325,7 +325,31 @@ sau_2019 %>%
 dev.off()
 
 
+# chile by sector ----
+png ("Figures/Chile_aggregate_landings_RNIs_met_sector.png", width = 6, height = 5, units = "in", res = 300)
 
+chl_landings %>%
+  group_by (species, taxa, sector) %>%
+  summarise (catch_mt = sum (catch_mt, na.rm = TRUE)) %>%
+  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Peru"), calc_children_fed_func)) %>%
+  unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  
+  ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000, fill = sector)) +
+  geom_col(position = "dodge") +
+  theme_bw() +
+  ggtitle ("Child RNIs met from 2021 landings, Chile") +
+  labs (x = "", y = "Child RNIs met, millions", fill = "Fishing\nsector") +
+  
+  theme ( 
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 11),
+    legend.title = element_text (size = 14),
+    plot.title = element_text (size = 18))
+dev.off()
 
 
 
