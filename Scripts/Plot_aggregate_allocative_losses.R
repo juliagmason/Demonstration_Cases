@@ -8,11 +8,10 @@ library (tidyverse)
 library (stringr)
 
 # function for converting catch in mt to children fed ----
-# this will also bring in fishnutr data and RNI data
 source ("Scripts/Function_convert_catch_amt_children_fed.R")
 
 sau_2019 <- readRDS ("Data/SAU_2019.Rds")
-sau_2019_taxa <- readRDS ("Data/sau_2019_taxa.Rds")
+
 
 # mean of most recent 5 years *doesn't currently include indonesia* 
 # just using this for peru anchovy correction
@@ -65,10 +64,9 @@ plot_trade_levers_aggregate <- function (country_name, Selenium = FALSE) {
  
    z <- sau_2019 %>%
     filter (country == country_name) %>%
-    left_join (sau_2019_taxa, by = "species") %>%
     left_join (exports_5yr_mean, by = c("species", "country")) %>%
     replace_na (list(mn_prop_exp = 0)) %>%
-    group_by (species, taxa) %>%
+    group_by (species) %>%
     summarise (foreign_catch = sum (tonnes[fishing_entity != country_name]),
                domestic_catch = sum (tonnes[fishing_entity == country_name]) * (1-mn_prop_exp),
                exported = sum (tonnes[fishing_entity == country_name]) * mn_prop_exp) %>%
@@ -79,7 +77,7 @@ plot_trade_levers_aggregate <- function (country_name, Selenium = FALSE) {
     pivot_longer (foreign_catch:exported,
                   names_to = "lever",
                   values_to = "catch_mt") %>%
-    mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = country_name), calc_children_fed_func)) %>%
+    mutate (children_fed = pmap (list (species = species, amount = catch_mt, country_name = country_name), calc_children_fed_func)) %>%
     unnest (cols = c(children_fed)) %>%
     rename (mt = catch_mt)
   
@@ -97,8 +95,6 @@ plot_trade_levers_aggregate <- function (country_name, Selenium = FALSE) {
     scale_fill_grey(start = 0.8, end = 0.2) +
     labs (y = "Child RNIs met, millions", x = "", fill = "Policy lever") +
     ggtitle (paste0("Allocative losses, trade/foreign catch, ", country_name)) 
-  
-  
   
 }
 
@@ -181,7 +177,7 @@ c <- sau_2019 %>%
     ) %>%
   
   
-  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = country_name), calc_children_fed_func)) %>%
+  mutate (children_fed = pmap (list (species = species, amount = catch_mt, country_name = country_name), calc_children_fed_func)) %>%
   unnest (cols = c(children_fed)) %>%
   rename (mt = catch_mt)
 

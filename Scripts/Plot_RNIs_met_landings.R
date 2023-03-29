@@ -30,7 +30,6 @@ chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
 # if using aggregate:
 sau_2019 <- readRDS("Data/SAU_2019.Rds")
 
-sau_2019_taxa <- readRDS ("Data/sau_2019_taxa.Rds")
 
 # Priority species ----
 
@@ -54,21 +53,18 @@ plot_sau_rnis_met <- function (country_name, Selenium = FALSE) {
     
     landings <- chl_landings %>%
       filter (year == 2021) %>%
-      group_by (species, taxa) %>%
+      group_by (species) %>%
       summarise (catch_mt = sum (catch_mt)) %>%
-      mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Chile"), calc_children_fed_func)) %>%
-      unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
-      # rename to match sau just for now
-      rename (commercial_group = taxa)
+      mutate (children_fed = pmap (list (species = species, amount = catch_mt, country_name = "Chile"), calc_children_fed_func)) %>%
+      unnest(cols = c(children_fed),  names_repair = "check_unique") 
     
   } else {
     
     landings <- sau_2019 %>%
       filter(country == country_name) %>%
-      left_join(sau_2019_taxa, by = "species") %>%
-      group_by (species, taxa, commercial_group) %>%
+      group_by (species, commercial_group) %>%
       summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
-      mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = country_name), calc_children_fed_func)) %>%
+      mutate (children_fed = pmap (list (species = species, amount = catch_mt, country_name = country_name), calc_children_fed_func)) %>%
       unnest(cols = c(children_fed),  names_repair = "check_unique")
     
   }
@@ -258,7 +254,7 @@ sau_2019 %>%
   left_join(sau_2019_taxa, by = "species") %>%
   group_by (species, taxa, fishing_sector) %>%
   summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
-  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Peru"), calc_children_fed_func)) %>%
+  mutate (children_fed = pmap (list (species = species, amount = catch_mt, country_name = "Peru"), calc_children_fed_func)) %>%
   unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
   filter (!nutrient %in% c("Protein", "Selenium")) %>%
   
@@ -304,7 +300,7 @@ sau_2019 %>%
     TRUE ~ catch_mt )
   ) %>%
   filter (end_use_type == "Direct human consumption") %>%
-  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Peru"), calc_children_fed_func)) %>%
+  mutate (children_fed = pmap (list (species = species, amount = catch_mt, country_name = "Peru"), calc_children_fed_func)) %>%
   unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
   filter (!nutrient %in% c("Protein", "Selenium")) %>%
   
@@ -331,7 +327,7 @@ png ("Figures/Chile_aggregate_landings_RNIs_met_sector.png", width = 6, height =
 chl_landings %>%
   group_by (species, taxa, sector) %>%
   summarise (catch_mt = sum (catch_mt, na.rm = TRUE)) %>%
-  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Peru"), calc_children_fed_func)) %>%
+  mutate (children_fed = pmap (list (species = species, amount = catch_mt, country_name = "Peru"), calc_children_fed_func)) %>%
   unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
   filter (!nutrient %in% c("Protein", "Selenium")) %>%
   
@@ -363,7 +359,7 @@ plot_sau_rnis_met_spp <- function (country_name) {
     inner_join (priority_spp, by = c ("country", "species")) %>%
     group_by (species, taxa) %>%
     summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
-    mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Sierra Leone"), calc_children_fed_func)) %>%
+    mutate (children_fed = pmap (list (species = species, amount = catch_mt, country_name = "Sierra Leone"), calc_children_fed_func)) %>%
     unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
     mutate(
       spp_short = ifelse (
@@ -419,7 +415,7 @@ chl_pri_spp_catch <- chl_landings %>%
   group_by (species) %>%
   summarise (catch_mt = sum (catch_mt)) %>%
   right_join (filter (priority_spp, country == "Chile")) %>%
-  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Chile"), calc_children_fed_func)) %>%
+  mutate (children_fed = pmap (list (species = species, amount = catch_mt, country_name = "Chile"), calc_children_fed_func)) %>%
   unnest(cols = c(children_fed),  names_repair = "check_unique") 
 
 png ("Figures/Chile_pri_spp_landings_RNIs_met.png", width = 10, height = 5, units = "in", res = 300)  
@@ -462,7 +458,7 @@ sle_pri_spp_catch <- sle_landings %>%
   summarise (catch_mt = sum (catch_mt)) %>%
   mutate (taxa = "Finfish") %>%
   # convert to children fed
-  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Sierra Leone"), calc_children_fed_func)) %>%
+  mutate (children_fed = pmap (list (species = species, amount = catch_mt, country_name = "Sierra Leone"), calc_children_fed_func)) %>%
   unnest(cols = c(children_fed),  names_repair = "check_unique") 
 
 
@@ -499,7 +495,7 @@ sle_landings %>%
   summarise (catch_mt = sum (catch_mt)) %>%
   mutate (taxa = "Finfish") %>%
   #right_join (filter (priority_spp, country == "Chile")) %>%
-  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Sierra Leone"), calc_children_fed_func)) %>%
+  mutate (children_fed = pmap (list (species = species, amount = catch_mt, country_name = "Sierra Leone"), calc_children_fed_func)) %>%
   unnest(cols = c(children_fed),  names_repair = "check_unique")  %>%
   mutate(
     spp_short = ifelse (
@@ -574,7 +570,7 @@ multicountry_nutr_bank_recent_yr <- sau_2019 %>%
   group_by (country, species) %>%
   summarise (tonnes = sum (tonnes)) %>%
   right_join (priority_spp, by = c("country", "species")) %>%
-  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = tonnes), calc_children_fed_func)) %>%
+  mutate (children_fed = pmap (list (species = species, amount = tonnes, country_name = country), calc_children_fed_func)) %>%
   
   unnest(cols = c(children_fed)) %>%
   rename (catch_mt = tonnes) %>%
@@ -682,7 +678,7 @@ plot_sau_rnis_met_category <- function (country_name, category, restrict = FALSE
   }
   
    input_landings %>%
-    mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt), calc_children_fed_func)) %>%
+    mutate (children_fed = pmap (list (species = species, amount = catch_mt, country = country_name), calc_children_fed_func)) %>%
     unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
     mutate(
       spp_short = ifelse (

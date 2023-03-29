@@ -37,15 +37,14 @@ plot_nutr_upside_ratios <- function (country_name, Selenium = FALSE) {
   if (country_name == "Chile") {
     landings <- chl_landings %>%
       filter (year == 2021) %>%
-      group_by (species, taxa) %>%
+      group_by (species) %>%
       summarise (total_tonnes = sum (catch_mt)) %>%
       mutate (country = "Chile")
   } else {
     
     landings <- sau_2019 %>%
       filter (country == country_name) %>%
-      left_join(sau_2019_taxa, by = "species") %>%
-      group_by (country, species, taxa) %>%
+      group_by (country, species) %>%
       summarise (total_tonnes = sum (tonnes))
   }
   
@@ -58,14 +57,14 @@ plot_nutr_upside_ratios <- function (country_name, Selenium = FALSE) {
       adapt_2050 = adapt_ratio_midcentury - bau_ratio_midcentury,
       adapt_2100 = adapt_ratio_endcentury - bau_ratio_endcentury) %>%
     
-    select (country, rcp, species, taxa, mey_2050:adapt_2100) %>%
+    select (country, rcp, species, mey_2050:adapt_2100) %>%
     pivot_longer(mey_2050:adapt_2100, 
                  names_to = "upside",
                  values_to = "tonnes") %>%
     # get rid of non-matching species, NAs
     filter (!is.na (rcp)) %>%
     # convert to nutrients
-    mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = tonnes, country = "Peru"), calc_children_fed_func)) %>%
+    mutate (children_fed = pmap (list (species = species, amount = tonnes, country_name = country), calc_children_fed_func)) %>%
     unnest(cols = c(children_fed),  names_repair = "check_unique")
   
   # fix ratios
