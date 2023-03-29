@@ -35,16 +35,10 @@ d_gigas_nutr <- data.frame (
 # afcd data for nonfish ----
 
 nonfish_afcd_nutr <- readRDS("Data/nonfish_afcd_nutr_compiled.Rds") %>%
-  select (species, nutrient, amount)
-
-# match back to taxa
-sau_2019_taxa <- readRDS("Data/SAU_2019_taxa.Rds")
-
-nonfish_afcd_nutr <- nonfish_afcd_nutr %>%
-  left_join (sau_2019_taxa, by = "species") %>%
-  select (-c("commercial_group", "functional_group")) %>%
-  #use specific d gigas
+  select (species, nutrient, amount, taxa) %>%
   filter (species != "Dosidicus gigas")
+
+
 
 
 compiled_nutr <- rbind (fishnutr_long, d_gigas_nutr, nonfish_afcd_nutr)
