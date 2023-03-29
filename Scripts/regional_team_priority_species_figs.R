@@ -80,6 +80,227 @@ ds_spp <- readRDS("Data/Free_etal_proj_smaller.Rds")
 # expressed as catch ratios relative to base year for midcentury and end century, can multiply by landings
 catch_upside_relative <- readRDS("Data/nutricast_upside_relative.Rds")
 
+###########################################################################
+# I hate myself...quick copying code to just plot species specific for sciteam deep dive
+
+# anchovy allocative trade losses
+
+z <- sau_2019 %>%
+  filter (country == "Peru", species == "Engraulis ringens") %>%
+  left_join (sau_2019_taxa, by = "species") %>%
+  left_join (exports_5yr_mean, by = c("species", "country")) %>%
+  replace_na (list(mn_prop_exp = 0)) %>%
+  group_by (species, taxa) %>%
+  summarise (foreign_catch = sum (tonnes[fishing_entity != "Peru"]),
+             domestic_catch = sum (tonnes[fishing_entity == "Peru"]) * (1-mn_prop_exp),
+             exported = sum (tonnes[fishing_entity == "Peru"]) * mn_prop_exp) %>%
+  # creating many repeats, not sure why
+  # warning about reframe()
+  distinct () %>%
+  # pivot longer
+  pivot_longer (foreign_catch:exported,
+                names_to = "lever",
+                values_to = "catch_mt") %>%
+  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Peru"), calc_children_fed_func)) %>%
+  unnest (cols = c(children_fed)) %>%
+  rename (mt = catch_mt)
+
+z$lever <- factor (z$lever, levels = c ("exported", "foreign_catch", "domestic_catch"))
+
+if (Selenium == TRUE) {omit_nutrients <- "Protein"} else {omit_nutrients <- c("Protein", "Selenium")}
+png ("Figures/Peru_trade_levers_anchov.png", width = 5, height = 4, unit = "in", res = 300)
+ z %>%
+  filter (!nutrient %in% omit_nutrients) %>%
+  group_by (nutrient, lever) %>%
+  summarise (children_fed = sum (children_fed, na.rm = TRUE)) %>%
+  ggplot (aes (y = children_fed/1000000, x = reorder(nutrient, -children_fed), fill = lever)) +
+  geom_col () +
+  theme_bw()+
+  scale_fill_grey(start = 0.8, end = 0.2) +
+  labs (y = "Child RNIs met, millions", x = "", fill = "Policy lever") +
+  ggtitle ("Allocative losses, trade/foreign catch") +
+  theme ( 
+    axis.text.y = element_text (size = 11),
+    axis.text.x = element_text (size = 11),
+    axis.title = element_text (size = 16),
+    legend.text = element_text (size = 11),
+    legend.title = element_text (size = 13),
+    plot.title = element_text (size = 18),
+    legend.position = c(0.8, 0.8))
+ dev.off()
+ 
+ 
+ c <- sau_2019 %>%
+   filter (country == "Peru", species == "Engraulis ringens") %>%
+   left_join (sau_2019_taxa, by = "species") %>%
+   # mutate(case_when (is.nan(end_use_type) ~ "Discards",
+   #                   TRUE ~ end_use_type)) %>%
+   # 
+   group_by (species, taxa, end_use_type) %>%
+   summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
+   
+   # mutate hack, fix peru anchovy. multiply total domestic anchov production * proportion non dhc from 2018
+   mutate (catch_mt = case_when (
+     species == "Engraulis ringens" & end_use_type == "Fishmeal and fish oil" ~ peru_anchov_dhc$prop_non_dhc * peru_anchov_total_2019,
+     species == "Engraulis ringens" & end_use_type == "Direct human consumption" ~ (1 - peru_anchov_dhc$prop_non_dhc) * peru_anchov_total_2019,
+     TRUE ~ catch_mt )
+   ) %>%
+   
+   
+   mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Peru"), calc_children_fed_func)) %>%
+   unnest (cols = c(children_fed)) %>%
+   rename (mt = catch_mt)
+ 
+ c$end_use_type <- factor (c$end_use_type, levels = c ("Fishmeal and fish oil", "Other", "Direct human consumption"))
+ 
+ #if (Selenium == TRUE) {omit_nutrients <- "Protein"} else {omit_nutrients <- c("Protein", "Selenium")}
+ png ("Figures/Peru_enduse_levers_anchov.png", width = 5, height = 4, unit = "in", res = 300)
+ c %>%
+   filter (!nutrient %in% omit_nutrients, !is.na (end_use_type)) %>%
+   group_by (nutrient, end_use_type) %>%
+   summarise (children_fed = sum (children_fed, na.rm = TRUE)) %>%
+   ggplot (aes (x = reorder(nutrient, -children_fed), y = children_fed/1000000, fill = end_use_type)) +
+   geom_col () +
+   theme_bw()+
+   scale_fill_grey(start = 0.8, end = 0.2) +
+   labs (y = "Child RNIs met, millions", x = "", fill = "Policy lever") +
+   ggtitle ("Allocative losses, end uses") +
+   theme ( 
+     axis.text.y = element_text (size = 11),
+     axis.text.x = element_text (size = 11),
+     axis.title = element_text (size = 16),
+     legend.text = element_text (size = 11),
+     legend.title = element_text (size = 13),
+     plot.title = element_text (size = 18),
+     legend.position = c(0.7, 0.8))
+ 
+dev.off()
+
+
+
+
+# sector.....
+
+# ugh...just start with 2018 catch for now
+download_2019_full <- read.csv("Data/SAU EEZ 2019.csv") # this doesn't have indonesia
+
+peru_2018_anchov <- download_2019_full %>%
+  filter (area_name == "Peru", scientific_name == "Engraulis ringens", year == 2018)
+
+peru_2018_anchov$end_use_type <- factor (peru_2018_anchov$end_use_type, levels = c ("Fishmeal and fish oil", "Direct human consumption"))
+
+png ("Figures/Peru_anchov_end_use_sector.png", width = 5, height = 4, unit = "in", res = 300)
+peru_2018_anchov %>%
+  ggplot (aes (x = fishing_sector, y = tonnes/1000000, fill = end_use_type)) +
+  geom_col () +
+  theme_bw() +
+  labs (x = "", y = "Catch, million tonnes", fill = "End use") +
+  ggtitle ("End use by fishing sector") +
+  theme ( 
+    axis.text.y = element_text (size = 11),
+    axis.text.x = element_text (size = 11),
+    axis.title = element_text (size = 16),
+    legend.text = element_text (size = 11),
+    legend.title = element_text (size = 13),
+    plot.title = element_text (size = 18),
+    legend.position = "none")
+
+dev.off()
+
+png ("Figures/Peru_aggregate_landings_RNIs_met_sector.png", width = 6, height = 5, units = "in", res = 300)
+
+sau_2019 %>%
+  filter(country == "Peru", fishing_sector %in% c("Artisanal", "Industrial")) %>%
+  left_join(sau_2019_taxa, by = "species") %>%
+  group_by (species, taxa, fishing_sector) %>%
+  summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
+  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Peru"), calc_children_fed_func)) %>%
+  unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  
+  ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000, fill = fishing_sector)) +
+  geom_col(position = "dodge") +
+  theme_bw() +
+  ggtitle ("Child RNIs met from 2019 landings, Peru") +
+  labs (x = "", y = "Child RNIs met, millions", fill = "Fishing\nsector") +
+  
+  theme ( 
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 11),
+    legend.title = element_text (size = 14),
+    plot.title = element_text (size = 18))
+dev.off()
+
+# compare with just dhc
+# have to do weird hack situation
+# fix peru 2019 anchovy issue
+# messy hack, but replace Peru anchovy dhc value with 2018 value. in 2018, all artisanal was dhc and all industrial is fmfo
+peru_anchov_dhc <- sau_2015_2019 %>%
+  filter (country == "Peru", fishing_entity == "Peru", year == 2018, species == "Engraulis ringens") %>%
+  group_by (country, species, year) %>%
+  summarise (prop_non_dhc = sum(tonnes[end_use_type == "Fishmeal and fish oil" & fishing_entity == "Peru"])/sum(tonnes[fishing_entity == "Peru"])) # 0.955
+
+peru_anchov_total_2019 <- sau_2015_2019 %>%
+  filter (country == "Peru", fishing_entity == "Peru", year == 2019, species == "Engraulis ringens") %>%
+  pull (tonnes) %>% sum()
+
+png ("Figures/Peru_aggregate_landings_RNIs_met_sector_DHC.png", width = 6, height = 5, units = "in", res = 300)
+
+sau_2019 %>%
+  filter(country == "Peru", fishing_sector %in% c("Artisanal", "Industrial"), species == "Engraulis ringens") %>%
+  left_join(sau_2019_taxa, by = "species") %>%
+  group_by (species, taxa, fishing_sector, end_use_type) %>%
+  summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
+  mutate (catch_mt = case_when (
+    species == "Engraulis ringens" & end_use_type == "Fishmeal and fish oil" ~ peru_anchov_dhc$prop_non_dhc * peru_anchov_total_2019,
+    species == "Engraulis ringens" & end_use_type == "Direct human consumption" ~ (1 - peru_anchov_dhc$prop_non_dhc) * peru_anchov_total_2019,
+    TRUE ~ catch_mt )
+  ) %>% 
+  
+  ggplot (aes (x = fishing_sector, y = catch_mt, fill = end_use_type)) +
+  geom_col() +
+  theme_bw() +
+  ggtitle ("Child RNIs met from 2019 landings, Peru\nDirect human consumption") +
+  labs (x = "", y = "Child RNIs met, millions", fill = "Fishing\nsector") +
+  
+  theme ( 
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 11),
+    legend.title = element_text (size = 14),
+    plot.title = element_text (size = 18))
+  
+  
+  
+  
+  
+  
+  
+ # filter (end_use_type == "Direct human consumption") %>%
+  mutate (children_fed = pmap (list (species = species, taxa = taxa, amount = catch_mt, country_name = "Peru"), calc_children_fed_func)) %>%
+  unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  
+  ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000, fill = fishing_sector)) +
+  geom_col(position = "dodge") +
+  theme_bw() +
+  ggtitle ("Child RNIs met from 2019 landings, Peru\nDirect human consumption") +
+  labs (x = "", y = "Child RNIs met, millions", fill = "Fishing\nsector") +
+  
+  theme ( 
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 11),
+    legend.title = element_text (size = 14),
+    plot.title = element_text (size = 18))
+dev.off()
 
 ###########################################################################
 ## Print values----
