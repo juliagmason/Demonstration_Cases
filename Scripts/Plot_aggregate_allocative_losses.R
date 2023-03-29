@@ -204,9 +204,9 @@ c %>%
 
 #, Selenium = TRUE
 
-png ("Figures/Peru_end_use_levers_aggregate.png", width = 5, height = 4, unit = "in", res = 300)
+png ("Figures/Peru_end_use_levers_aggregate_Selenium.png", width = 5, height = 4, unit = "in", res = 300)
 
-plot_end_use_levers_aggregate("Peru") +    
+plot_end_use_levers_aggregate("Peru", Selenium = TRUE) +    
   theme ( 
   axis.text.y = element_text (size = 11),
   axis.text.x = element_text (size = 11),
@@ -214,27 +214,13 @@ plot_end_use_levers_aggregate("Peru") +
   legend.text = element_text (size = 11),
   legend.title = element_text (size = 13),
   plot.title = element_text (size = 18),
-  legend.position = c(0.7, 0.7))
+  legend.position = c(0.7, 0.8))
 dev.off()
 
 
-png ("Figures/Indo_end_use_levers_aggregate.png", width = 5, height = 4, unit = "in", res = 300)
+png ("Figures/Indo_end_use_levers_aggregate_Selenium.png", width = 5, height = 4, unit = "in", res = 300)
 
-plot_end_use_levers_aggregate("Indonesia") +    
-  theme ( 
-  axis.text.y = element_text (size = 11),
-  axis.text.x = element_text (size = 11),
-  axis.title = element_text (size = 16),
-  legend.text = element_text (size = 11),
-  legend.title = element_text (size = 13),
-  plot.title = element_text (size = 18),
-  legend.position = "none")
-dev.off()
-
-
-png ("Figures/SL_end_use_levers_aggregate.png", width = 5, height = 4, unit = "in", res = 300)
-
-plot_end_use_levers_aggregate("Sierra Leone") +   
+plot_end_use_levers_aggregate("Indonesia", Selenium = TRUE) +    
   theme ( 
   axis.text.y = element_text (size = 11),
   axis.text.x = element_text (size = 11),
@@ -246,9 +232,23 @@ plot_end_use_levers_aggregate("Sierra Leone") +
 dev.off()
 
 
-png ("Figures/Chl_end_use_levers_aggregate.png", width = 5, height = 4, unit = "in", res = 300)
+png ("Figures/SL_end_use_levers_aggregate_Selenium.png", width = 5, height = 4, unit = "in", res = 300)
 
-plot_end_use_levers_aggregate("Chile") +    
+plot_end_use_levers_aggregate("Sierra Leone", Selenium = TRUE) +   
+  theme ( 
+  axis.text.y = element_text (size = 11),
+  axis.text.x = element_text (size = 11),
+  axis.title = element_text (size = 16),
+  legend.text = element_text (size = 11),
+  legend.title = element_text (size = 13),
+  plot.title = element_text (size = 18),
+  legend.position = "none")
+dev.off()
+
+
+png ("Figures/Chl_end_use_levers_aggregate_Selenium.png", width = 5, height = 4, unit = "in", res = 300)
+
+plot_end_use_levers_aggregate("Chile", Selenium = TRUE) +    
   theme ( 
   axis.text.y = element_text (size = 11),
   axis.text.x = element_text (size = 11),
