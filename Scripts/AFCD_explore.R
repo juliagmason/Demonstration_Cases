@@ -40,10 +40,22 @@ View (afcd_parts)
 
 # grab nutricast species
 # species key to cut fish
-spp_key <- read.csv(file.path ("Data/Gaines_species_nutrient_content_key.csv"), as.is=T)
+spp_key <- read.csv(file.path ("Data/Gaines_species_nutrient_content_key.csv"), as.is=T)  %>%
+  # recode major_Group_ name from nutricast code
+mutate (
+  major_group=recode(genus_food_name,
+                     "Cephalopods"="Cephalopods",
+                     "Crustaceans"="Crustaceans",
+                     "Demersal Fish"="Finfish",
+                     "Marine Fish; Other"="Finfish",
+                     "Molluscs; Other"="Molluscs",
+                     "Pelagic Fish"="Finfish")
+  
+)
+
 nutricast_spp <- readRDS("Data/Free_etal_proj_smaller.Rds") %>%
   left_join (spp_key, by = "species") %>%
-  filter (major_group != "Pisces") %>%
+  filter (major_group != "Finfish") %>%
   pull (species ) %>%
   unique()
   
@@ -100,6 +112,15 @@ nutricast_spp_afcd_nutr <- nutricast_spp_afcd_nutr %>%
             
           )
   )
+
+# bring taxa back in
+gaines_taxa <- spp_key %>%
+  select (species, major_group) %>%
+  rename (taxa = major_group)
+
+nutricast_spp_afcd_nutr <- nutricast_spp_afcd_nutr %>%
+  left_join (gaines_taxa, by = "species")
+
 saveRDS(nutricast_spp_afcd_nutr, file = "Data/nutricast_spp_nonfish_afcd_nutrients.Rds")
 
 # grab SAU nonfish ----
@@ -151,7 +172,12 @@ sau_2019_afcd_nutr <- sau_2019_afcd_nutr %>%
             TRUE ~ value
             
           )
-  )
+  ) %>%
+  # bring back taxa
+  left_join (sau_2019_taxa, by = "species")
+
+sau_2019_afcd_nutr <- sau_2019_afcd_nutr %>%
+  left_join (sau_2019_taxa, by = "species")
 
 saveRDS(sau_2019_afcd_nutr, file = "Data/SAU_2019_nonfish_afcd_nutrients.Rds")
 
@@ -202,15 +228,31 @@ chl_nutr <- chl_nutr %>%
           )
   )
 
+chl_nutr <- readRDS("Data/chl_nonfish_afcd_nutrients.Rds")
+chl_taxa <- chl_landings %>%
+  select (species, taxa) %>% 
+  distinct()
+
+# bring back taxa
+chl_nutr <- chl_nutr %>%
+  mutate (species = 
+            case_when (species == "Mujil cephalus" ~ "Mugil cephalus", 
+                       # trim white spaces
+                       TRUE ~ trimws(species))) %>%
+  left_join (chl_taxa, by = "species")
+
 saveRDS(chl_nutr, file = "Data/chl_nonfish_afcd_nutrients.Rds")
 
 # compile in one dataframe----
 sau_2019_afcd_nutr <- readRDS("Data/SAU_2019_nonfish_afcd_nutrients.Rds")
 nutricast_spp_afcd_nutr <- readRDS("Data/nutricast_spp_nonfish_afcd_nutrients.Rds")
 
-nonfish_afcd_nutr <- rbind (sau_2019_afcd_nutr, nutricast_spp_afcd_nutr, chl_nutr) %>%
+nonfish_afcd_nutr <- sau_2019_afcd_nutr %>%
+  select (-c("commercial_group", "functional_group")) %>%
+  rbind (nutricast_spp_afcd_nutr, chl_nutr) %>%
   rename (amount = value) %>%
-  distinct()
+  distinct() %>%
+  replace_na (list (taxa = "Other"))
 
 saveRDS(nonfish_afcd_nutr, file = "Data/nonfish_afcd_nutr_compiled.Rds")
 
