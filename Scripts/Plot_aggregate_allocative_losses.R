@@ -173,11 +173,9 @@ c <- sau_2019 %>%
   mutate (catch_mt = case_when (
     country_name == "Peru" & species == "Engraulis ringens" & end_use_type == "Fishmeal and fish oil" ~ peru_anchov_dhc$prop_non_dhc * peru_anchov_total_2019,
     country_name == "Peru" & species == "Engraulis ringens" & end_use_type == "Direct human consumption" ~ (1 - peru_anchov_dhc$prop_non_dhc) * peru_anchov_total_2019,
-    TRUE ~ catch_mt )
+    TRUE ~ catch_mt),
+    children_fed = pmap (list (species = species, amount = catch_mt, country_name = country_name), calc_children_fed_func)
     ) %>%
-  
-  
-  mutate (children_fed = pmap (list (species = species, amount = catch_mt, country_name = country_name), calc_children_fed_func)) %>%
   unnest (cols = c(children_fed)) %>%
   rename (mt = catch_mt)
 
@@ -255,3 +253,124 @@ plot_end_use_levers_aggregate("Chile", Selenium = TRUE) +
   legend.position = c(0.7, 0.7))
 dev.off()
 
+# Chile use ratios to connect to landings----
+# take 5 yr mean of sau values
+# I'm sure there's a way to do this all at once but it's hurting my brain
+
+chl_sau_end_use_ratios <- 
+  sau_2015_2019 %>%
+  filter (country == "Chile") %>%
+  group_by (fishing_sector, species, year) %>%
+  summarise (prop_dhc = sum(tonnes[end_use_type == "Direct human consumption"])/sum (tonnes),
+                        prop_fmfo = sum(tonnes[end_use_type == "Fishmeal and fish oil"])/sum (tonnes),
+                        prop_other = sum(tonnes[end_use_type == "Other"])/sum (tonnes)
+             ) %>%
+  ungroup() %>%
+  group_by (fishing_sector, species) %>%
+  summarise (across(prop_dhc:prop_other, mean)) %>%
+  rename (sector = fishing_sector)
+
+chl_sau_foreign_ratios <- 
+  sau_2015_2019 %>%
+  filter (country == "Chile") %>%
+  group_by (fishing_sector, species, year) %>%
+  summarise (prop_foreign = sum(tonnes[fishing_entity != "Chile"])/sum(tonnes)) %>%
+  ungroup() %>%
+  group_by (fishing_sector, species) %>%
+  summarise (prop_foreign = mean (prop_foreign)) %>%
+  rename (sector = fishing_sector)
+
+chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
+
+x <- chl_landings %>%
+  filter (year == 2021) %>%
+  left_join (chl_sau_end_use_ratios, by = c ("species", "sector")) %>%
+  pivot_longer (prop_dhc:prop_other,
+                names_prefix = "prop_",
+                names_to = "end_use_type",
+                values_to = "prop") %>%
+  mutate (catch_end_use = catch_mt * prop) 
+
+x_nutr <- x %>%
+  mutate (children_fed = pmap (list (species = species, amount = catch_end_use, country_name = "Chile"), calc_children_fed_func)) %>%
+  unnest (cols = c(children_fed)) %>%
+  rename (mt = catch_end_use)
+
+x_nutr$end_use_type <- factor (x_nutr$end_use_type, levels = c ("fmfo", "other", "dhc"))
+
+x_nutr %>%
+  group_by (nutrient, end_use_type) %>%
+  summarise (children_fed = sum (children_fed, na.rm = TRUE)) %>%
+  ggplot (aes (x = reorder(nutrient, -children_fed), y = children_fed/1000000, fill = end_use_type)) +
+  geom_col () +
+  theme_bw()+
+  scale_fill_grey(start = 0.8, end = 0.2, labels = c ("Fishmeal and fish oil", "Other", "Direct human consumption")) +
+  labs (y = "Child RNIs met, millions", x = "", fill = "Policy lever") +
+  ggtitle ("Allocative losses, end uses, Chile") 
+
+png ("Figures/Chl_end_use_levers_aggregate_officiallandings.png", width = 5, height = 4, unit = "in", res = 300)
+
+x_nutr %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  group_by (nutrient, end_use_type) %>%
+  summarise (children_fed = sum (children_fed, na.rm = TRUE)) %>%
+  ggplot (aes (x = reorder(nutrient, -children_fed), y = children_fed/1000000, fill = end_use_type)) +
+  geom_col () +
+  theme_bw()+
+  scale_fill_grey(start = 0.8, end = 0.2, labels = c ("Fishmeal and fish oil", "Other", "Direct human consumption")) +
+  labs (y = "Child RNIs met, millions", x = "", fill = "Policy lever") +
+  ggtitle ("Allocative losses, end uses, Chile")  +    
+  theme ( 
+    axis.text.y = element_text (size = 11),
+    axis.text.x = element_text (size = 11),
+    axis.title = element_text (size = 16),
+    legend.text = element_text (size = 11),
+    legend.title = element_text (size = 13),
+    plot.title = element_text (size = 18),
+    legend.position = c(0.7, 0.8))
+dev.off()
+
+# chl foreign and exports
+
+z <- chl_landings %>%
+  filter (year == 2021) %>%
+  left_join (chl_sau_foreign_ratios, by = c ("species", "sector")) %>%
+  mutate (country = "Chile",
+          foreign_catch = catch_mt * prop_foreign,
+          domestic = catch_mt * (1-prop_foreign)) %>%
+  left_join (exports_5yr_mean, by = c("species", "country")) %>%
+  replace_na (list(mn_prop_exp = 0)) %>%
+  mutate (exported = domestic * mn_prop_exp,
+          domestic_catch = domestic - exported) %>%
+  select (species, sector, foreign_catch, domestic_catch, exported) %>%
+  # pivot longer
+  pivot_longer (foreign_catch:exported,
+                names_to = "lever",
+                values_to = "catch_mt") %>%
+  mutate (children_fed = pmap (list (species = species, amount = catch_mt, country_name = "Chile"), calc_children_fed_func)) %>%
+  unnest (cols = c(children_fed)) %>%
+  rename (mt = catch_mt)
+
+z$lever <- factor (z$lever, levels = c ("exported", "foreign_catch", "domestic_catch"))
+
+
+png ("Figures/Chl_trade_levers_aggregate_officiallandings.png", width = 5, height = 4, unit = "in", res = 300)
+z %>%  
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  group_by (nutrient, lever) %>%
+  summarise (children_fed = sum (children_fed, na.rm = TRUE)) %>%
+  ggplot (aes (x = reorder(nutrient, -children_fed), y = children_fed/1000000, fill = lever)) +
+  geom_col () +
+  theme_bw()+
+  scale_fill_grey(start = 0.8, end = 0.2, labels = c ("Exported", "Foreign catch", "DHC")) +
+  labs (y = "Child RNIs met, millions", x = "", fill = "Policy lever") +
+  ggtitle ("Allocative losses, trade/foreign catch, Chile") +
+  theme ( 
+    axis.text.y = element_text (size = 11),
+    axis.text.x = element_text (size = 11),
+    axis.title = element_text (size = 16),
+    legend.text = element_text (size = 11),
+    legend.title = element_text (size = 13),
+    plot.title = element_text (size = 18),
+    legend.position = c(0.7, 0.8))
+dev.off()
