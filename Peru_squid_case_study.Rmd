@@ -1,0 +1,244 @@
+---
+title: "Peru D. gigas case study"
+author: "JGM"
+date: "2023-04-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library (tidyverse)
+library (stringr)
+
+# function for converting catch in mt to children fed ----
+# this will also bring in fishnutr data and RNI data
+source ("Scripts/Function_convert_catch_amt_children_fed.R")
+
+# SAU data ----
+
+# as of 10/25/22 just 2019 data, suggested by Deng Palomares. Clipped in SAU_explore.R
+sau_2019 <- readRDS("Data/SAU_2019.Rds")
+
+# or mean of most recent 5 years *doesn't currently include indonesia* 
+sau_2015_2019 <- readRDS("Data/SAU_2015_2019.Rds")
+
+
+# exports ARTIS ----
+# emailed 10 19 2022
+exports <- read_csv ("Data/20221019_edf_ARTIS_snet.csv")
+
+# take a five year mean of proportion exported
+exports_5yr_mean <- exports %>%
+  filter (between (year, 2015, 2019)) %>%
+  group_by (exporter_iso3c, sciname) %>%
+  summarise (mn_prop_exp = mean (exports_percent_of_prod, na.rm = TRUE)/100) %>%
+  ungroup() %>%
+  mutate (species = str_to_sentence(sciname),
+          # just doing country names by hand...
+          country = case_when (
+            exporter_iso3c == "CHL" ~ "Chile",
+            exporter_iso3c == "IDN" ~ "Indonesia",
+            exporter_iso3c == "PER" ~ "Peru", 
+            exporter_iso3c == "MEX" ~ "Mexico",
+            exporter_iso3c == "SLE" ~ "Sierra Leone"
+          ), .keep = "unused") 
+
+# expressed as catch ratios relative to base year for midcentury and end century, can multiply by landings
+catch_upside_relative <- readRDS("Data/nutricast_upside_relative.Rds")
+```
+
+# nutrient content
+```{r print_nutrient_content}
+compiled_nutr %>% 
+  filter (species == "Dosidicus gigas") %>%
+  left_join(rni_child, by = "nutrient") %>%
+  mutate (perc_rni = amount/RNI * 100) %>%
+  arrange (desc (perc_rni))
+```
+
+
+```{r trade_levers}
+z <- sau_2019 %>%
+  filter (country == "Peru", species == "Dosidicus gigas") %>%
+  left_join (exports_5yr_mean, by = c("species", "country")) %>%
+  replace_na (list(mn_prop_exp = 0)) %>%
+  group_by (species) %>%
+  summarise (foreign_catch = sum (tonnes[fishing_entity != "Peru"]),
+             domestic_catch = sum (tonnes[fishing_entity == "Peru"]) * (1-mn_prop_exp),
+             exported = sum (tonnes[fishing_entity == "Peru"]) * mn_prop_exp) %>%
+  # creating many repeats, not sure why
+  # warning about reframe()
+  distinct () %>%
+  # pivot longer
+  pivot_longer (foreign_catch:exported,
+                names_to = "lever",
+                values_to = "catch_mt") %>%
+  mutate (children_fed = pmap (list (species = species, amount = catch_mt, country_name = "Peru"), calc_children_fed_func)) %>%
+  unnest (cols = c(children_fed)) %>%
+  rename (mt = catch_mt)
+
+z$lever <- factor (z$lever, levels = c ("exported", "foreign_catch", "domestic_catch"))
+
+Selenium <- FALSE
+if (Selenium == TRUE) {omit_nutrients <- "Protein"} else {omit_nutrients <- c("Protein", "Selenium")}
+
+
+#png ("Figures/Peru_trade_levers_squid.png", width = 5, height = 4, unit = "in", res = 300)
+ z %>%
+  filter (!nutrient %in% omit_nutrients) %>%
+  group_by (nutrient, lever) %>%
+  summarise (children_fed = sum (children_fed, na.rm = TRUE)) %>%
+  ggplot (aes (y = children_fed/1000000, x = reorder(nutrient, -children_fed), fill = lever)) +
+  geom_col () +
+  theme_bw()+
+  scale_fill_grey(start = 0.8, end = 0.2) +
+  labs (y = "Child RNIs met, millions", x = "", fill = "Policy lever") +
+  ggtitle ("Allocative losses, trade/foreign catch") +
+  theme ( 
+    axis.text.y = element_text (size = 11),
+    axis.text.x = element_text (size = 11),
+    axis.title = element_text (size = 16),
+    legend.text = element_text (size = 11),
+    legend.title = element_text (size = 13),
+    plot.title = element_text (size = 18),
+    legend.position = c(0.8, 0.8))
+ #dev.off()
+ 
+
+```
+
+```{r end_use_levers}
+
+c <- sau_2019 %>%
+   filter (country == "Peru", species == "Dosidicus gigas") %>%
+ 
+   group_by (species, end_use_type) %>%
+   summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
+
+   mutate (children_fed = pmap (list (species = species, amount = catch_mt, country_name = "Peru"), calc_children_fed_func)) %>%
+   unnest (cols = c(children_fed)) %>%
+   rename (mt = catch_mt)
+ 
+ c$end_use_type <- factor (c$end_use_type, levels = c ("Fishmeal and fish oil", "Other", "Direct human consumption"))
+ 
+ #if (Selenium == TRUE) {omit_nutrients <- "Protein"} else {omit_nutrients <- c("Protein", "Selenium")}
+ png ("Figures/Peru_enduse_levers_squid.png", width = 5, height = 4, unit = "in", res = 300)
+ c %>%
+   filter (!nutrient %in% omit_nutrients, !is.na (end_use_type)) %>%
+   group_by (nutrient, end_use_type) %>%
+   summarise (children_fed = sum (children_fed, na.rm = TRUE)) %>%
+   ggplot (aes (x = reorder(nutrient, -children_fed), y = children_fed/1000000, fill = end_use_type)) +
+   geom_col () +
+   theme_bw()+
+   scale_fill_grey(start = 0.8, end = 0.2) +
+   labs (y = "Child RNIs met, millions", x = "", fill = "Policy lever") +
+   ggtitle ("Allocative losses, end uses") +
+   theme ( 
+     axis.text.y = element_text (size = 11),
+     axis.text.x = element_text (size = 11),
+     axis.title = element_text (size = 16),
+     legend.text = element_text (size = 11),
+     legend.title = element_text (size = 13),
+     plot.title = element_text (size = 18),
+     legend.position = c(0.8, 0.8))
+ 
+dev.off()
+
+```
+
+```{r nutricast_ts}
+ds_spp <- readRDS("Data/Free_etal_proj_smaller.Rds")
+
+
+dat <- ds_spp%>% 
+    filter (country == "Peru", species == "Dosidicus gigas", year  >2030)
+  
+  dat$scenario <- factor (dat$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
+  
+  p <- dat %>% ggplot (aes (x = year, y = catch_mt, col = scenario)) +
+    geom_line() +
+    theme_bw() +
+    facet_grid (species ~ rcp, scales = "free_y") +
+    labs (x = "", y = "Catch, metric tons", col = "Mgmt scenario") +
+    ggtitle ("Free et al. (2020) projections") +
+    theme (plot.title = element_text (size = 14),
+           axis.text = element_text (size = 12))
+  
+  print (p)
+```
+
+```{r nutrient_upside}
+squid_upside_nutr <- sau_2019 %>%
+  filter(country == "Peru", species == "Dosidicus gigas") %>%
+  group_by (country, species) %>%
+  summarise (total_tonnes = sum (tonnes)) %>%
+  ungroup() %>%
+  left_join (catch_upside_relative, by = c("country", "species")) %>%
+  mutate (# multiply ratio by current landings
+    across(bau_ratio_midcentury:adapt_ratio_endcentury, ~.x * total_tonnes),
+    #convert to upside, subtract 
+    mey_2050 = mey_ratio_midcentury - bau_ratio_midcentury,
+    mey_2100 = mey_ratio_endcentury - bau_ratio_endcentury,
+    adapt_2050 = adapt_ratio_midcentury - bau_ratio_midcentury,
+    adapt_2100 = adapt_ratio_endcentury - bau_ratio_endcentury) %>%
+  
+  select (country, rcp, species, mey_2050:adapt_2100) %>%
+  pivot_longer(mey_2050:adapt_2100, 
+               names_to = c("scenario", "period"),
+               names_sep = "_",
+               values_to = "tonnes")  %>%
+    # get rid of non-matching species, NAs
+    filter (!is.na (rcp)) %>%
+    # convert to nutrients
+    mutate (children_fed = pmap (list (species = species, amount = tonnes, country_name = country), calc_children_fed_func)) %>%
+    unnest(cols = c(children_fed),  names_repair = "check_unique") 
+  
+  
+  # fix ratios
+squid_upside_nutr$scenario <- factor(squid_upside_nutr$scenario, levels = c ("mey", "adapt"))
+
+png ("Figures/Peru_nutricast_upside_squid_allRCPs.png", width = 10, height = 8, units= "in", res = 300)
+squid_upside_nutr %>%
+  filter (period == "2050") %>%
+    # preliminary plot
+    ggplot (aes (x = reorder(nutrient, -children_fed), y = children_fed/1000000, fill = scenario)) +
+    geom_col (position = "dodge") +
+    geom_hline (yintercept = 0, lty = 2) +
+    facet_wrap (~rcp) +
+    theme_bw() +
+    # roughly match colors from gaines et al
+    scale_fill_manual (values = c ("mediumseagreen", "dodgerblue4")) +
+    labs (y = "Change in # children fed, millions", x = "", fill = "Management \nstrategy") +
+    ggtitle ("Nutrition upside from climate-adaptive management, midcentury")
+  
+dev.off()
+
+
+#display value
+squid_upside_nutr %>% filter (nutrient == "Zinc")
+
+# display percent yield?
+pri_spp_catch_upside <- ds_spp %>% 
+  filter(country == "Peru", species == "Dosidicus gigas") %>%
+  mutate (
+    period = case_when (
+      year %in% c(2026:2035) ~ "2026-2035",
+      year %in% c(2051:2060) ~ "2051-2060",
+      year %in% c(2091:2100) ~ "2091-2100"
+    )) %>%
+  filter (!is.na (catch_mt), !is.na (period), scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation")) %>%
+  #take mean projected catch for the decade period
+  group_by (country, rcp, period, species, scenario) %>%
+  summarise (catch_mt = mean (catch_mt)) %>%
+  ungroup() %>%
+  # find difference among scenarios--absolute and percent diff
+  group_by (country, rcp, period, species) %>%
+  summarize (mey_diff_mt = catch_mt[scenario == "Productivity Only"] - catch_mt[scenario == "No Adaptation"],
+             mey_diff_percent = (catch_mt[scenario == "Productivity Only"] - catch_mt[scenario == "No Adaptation"])/catch_mt[scenario == "No Adaptation"] * 100,
+             adapt_diff_mt = catch_mt[scenario == "Full Adaptation"] - catch_mt[scenario == "No Adaptation"],
+             adapt_diff_percent = (catch_mt[scenario == "Full Adaptation"] - catch_mt[scenario == "No Adaptation"])/catch_mt[scenario == "No Adaptation"] * 100) %>%
+  ungroup()
+
+
+pri_spp_catch_upside %>% filter (period == "2051-2060")
+```
+
