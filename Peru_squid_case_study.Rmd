@@ -54,6 +54,116 @@ compiled_nutr %>%
   mutate (perc_rni = amount/RNI * 100) %>%
   arrange (desc (perc_rni))
 ```
+```{r peru_inadequate_intake}
+# this is already in percent, don't multiply by 100
+pii <- read_csv ("Data/Beal_2017_SI_inadequate_micronutrients.csv")
+
+peru_pii <- pii %>% 
+  filter (Country == "Peru", Year == 2011) %>%
+  select (Fortification, Micronutrient, `Prevalence of Inadequate Intake`) 
+
+
+peru_pii %>%
+  arrange (desc (round(`Prevalence of Inadequate Intake`, 2)))
+
+
+```
+```{r compare_radar_barchart}
+library (ggradar)
+
+
+spp_rni_met <- compiled_nutr %>%
+  filter (species %in% c("Dosidicus gigas", "Engraulis ringens", "Trachurus murphyi", "Merluccius gayi peruanus")) %>%
+  # join to rni data
+  left_join (rni_child, by = "nutrient") %>%
+  
+  # this would be the percentage of your daily requirement you could get from a 100g serving of each species. cap at 100%
+  mutate (perc_rni = amount/RNI * 100,
+          perc_rni = ifelse (perc_rni > 100, 100, perc_rni),
+          nutrient = 
+            case_when (nutrient == "Vitamin_A" ~ "Vit A",
+                       nutrient == "Omega_3" ~ "Omg 3",
+                       TRUE ~ nutrient)) %>%
+  ungroup()
+
+
+nutr_radar_plot <- spp_rni_met  %>%
+  # filter (species %in% c("Engraulis ringens", "Trachurus murphyi", "Merluccius gayi gayi"), !nutrient %in% c("Protein", "Selenium")) %>%
+   mutate(
+      spp_short = ifelse (
+        grepl(" ", species),
+        paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
+        species)) %>%
+  select (spp_short, nutrient, perc_rni) %>%
+  pivot_wider (
+    names_from = nutrient,
+    values_from = perc_rni) 
+
+
+#png ("Figures/Squid_radar.png", res = 300, width = 5, height = 5, units = "in")  
+ggradar(nutr_radar_plot,
+        grid.min = 0, grid.max = 100, 
+        group.point.size = 2,
+        group.line.width = 1,
+        legend.text.size = 8,
+        axis.label.size = 4,
+        grid.label.size = 4,
+        legend.position = "bottom") +
+  
+  theme (plot.title = element_text (size = 14))
+#dev.off()
+
+png ("Figures/Squid_nutr_dodge_bar_sm.png", width = 7, height = 4, units = "in", res = 300)
+ spp_rni_met  %>%
+  # filter (species %in% c("Engraulis ringens", "Trachurus murphyi", "Merluccius gayi gayi"), !nutrient %in% c("Protein", "Selenium")) %>%
+    group_by (species) %>%
+    mutate (micronutrient_density = sum (perc_rni),
+            spp_short = ifelse (
+              grepl(" ", species),
+              paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
+              species)
+    ) %>%
+    ungroup() %>%
+    
+    ggplot (aes (x = reorder(spp_short, -micronutrient_density), fill = nutrient, y = perc_rni)) +
+    geom_col (position = "dodge") +
+    theme_bw() +
+    labs (x = "", y = "% Child RNI met per 100g serving", fill = "Nutrient") +
+    #ylim (c(0,100)) +
+    ggtitle ("Nutrient content of selected species") +
+    theme ( 
+      axis.text.y = element_text (size = 13),
+      axis.text.x = element_text (size = 11),
+      axis.title = element_text (size = 16),
+      strip.text = element_text(size = 16),
+      legend.text = element_text (size = 12),
+      legend.title = element_text (size = 14),
+      plot.title = element_text (size = 18))
+ dev.off()
+
+```
+```{r catch rnis}
+
+# just pota for Peru, 2019
+  pota_catch <- sau_2019 %>% filter (country == "Peru", fishing_entity == "Peru", species == "Dosidicus gigas") %>%
+    group_by (species) %>% summarise (tonnes = sum (tonnes))
+  
+  pota_2019 <- calc_children_fed_func(species = "Dosidicus gigas", amount = pota_catch$tonnes, country = "Peru")
+  
+  png ("Figures/Peru_SAU_2019_pota_children_fed.png", res = 300, width = 5.5, height = 5, units = "in")  
+  pota_2019 %>%
+   # filter (nutrient != "Protein") %>%
+    ggplot (aes (x = nutrient, y = children_fed / 1000000, fill = nutrient)) +
+    geom_col() +
+    theme_bw() +
+    labs (x = "", y = "") +
+    theme (axis.text.x = element_blank (),
+           axis.text.y = element_text (size = 15),
+           legend.position = "none")
+  
+  dev.off()
+
+```
 
 
 ```{r trade_levers}
@@ -103,7 +213,27 @@ if (Selenium == TRUE) {omit_nutrients <- "Protein"} else {omit_nutrients <- c("P
     legend.position = c(0.8, 0.8))
  #dev.off()
  
+ # print percentages
+exports_5yr_mean %>% filter (country == "Peru", species == "Dosidicus gigas")
 
+b <- sau_2019 %>%
+  filter (country == "Peru", species == "Dosidicus gigas") %>%
+  left_join (exports_5yr_mean, by = c("species", "country")) %>%
+  replace_na (list(mn_prop_exp = 0)) %>%
+  group_by (species) %>%
+  summarise (foreign_catch = sum (tonnes[fishing_entity != "Peru"]),
+             domestic_catch = sum (tonnes[fishing_entity == "Peru"]) * (1-mn_prop_exp),
+             exported = sum (tonnes[fishing_entity == "Peru"]) * mn_prop_exp) %>%
+  # creating many repeats, not sure why
+  # warning about reframe()
+  distinct ()
+ 
+
+# which fishing nations?
+sau_2019 %>%
+    filter (country == "Peru", species == "Dosidicus gigas") %>%
+  group_by(fishing_entity) %>%
+  summarise (tot = sum (tonnes))
 ```
 
 ```{r end_use_levers}
@@ -143,6 +273,9 @@ c <- sau_2019 %>%
  
 dev.off()
 
+c %>% filter (nutrient == "Zinc")
+c %>% filter (nutrient == "Omega_3")
+
 ```
 
 ```{r nutricast_ts}
@@ -154,16 +287,22 @@ dat <- ds_spp%>%
   
   dat$scenario <- factor (dat$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
   
-  p <- dat %>% ggplot (aes (x = year, y = catch_mt, col = scenario)) +
+  p <- dat %>% ggplot (aes (x = year, y = catch_mt/1000, col = scenario)) +
     geom_line() +
     theme_bw() +
-    facet_grid (species ~ rcp, scales = "free_y") +
-    labs (x = "", y = "Catch, metric tons", col = "Mgmt scenario") +
-    ggtitle ("Free et al. (2020) projections") +
+    facet_grid (~ rcp, scales = "free_y") +
+    labs (x = "", y = "Catch, metric tons (1000s)", col = "Mgmt scenario") +
+    ggtitle ("Free et al. (2020) projections for D. gigas") +
     theme (plot.title = element_text (size = 14),
            axis.text = element_text (size = 12))
-  
-  print (p)
+
+  png ("Figures/Peru_squid_nutricast_ts.png", res = 300, width = 12, height = 5, units = "in")  
+  print (p) +
+    theme(strip.text = element_text (size = 12),
+          legend.title = element_text (size = 13),
+          legend.text = element_text (size = 11),
+          axis.title = element_text (size = 14))
+  dev.off()
 ```
 
 ```{r nutrient_upside}
@@ -196,7 +335,7 @@ squid_upside_nutr <- sau_2019 %>%
   # fix ratios
 squid_upside_nutr$scenario <- factor(squid_upside_nutr$scenario, levels = c ("mey", "adapt"))
 
-png ("Figures/Peru_nutricast_upside_squid_allRCPs.png", width = 10, height = 8, units= "in", res = 300)
+png ("Figures/Peru_nutricast_upside_squid_allRCPs_midcentury.png", width = 13, height = 7, units= "in", res = 300)
 squid_upside_nutr %>%
   filter (period == "2050") %>%
     # preliminary plot
@@ -206,11 +345,40 @@ squid_upside_nutr %>%
     facet_wrap (~rcp) +
     theme_bw() +
     # roughly match colors from gaines et al
-    scale_fill_manual (values = c ("mediumseagreen", "dodgerblue4")) +
+    scale_fill_manual (values = c ("mediumseagreen", "dodgerblue4"), labels = c("Productivity Only", "Full Adaptation")) +
     labs (y = "Change in # children fed, millions", x = "", fill = "Management \nstrategy") +
-    ggtitle ("Nutrition upside from climate-adaptive management, midcentury")
+    ggtitle ("Nutrition upside from climate-adaptive management, midcentury") +
+    theme (strip.text = element_text (size = 12),
+          legend.title = element_text (size = 13),
+          legend.text = element_text (size = 11),
+          axis.title = element_text (size = 14),
+         axis.text = element_text (size = 12),
+         plot.title = element_text (size = 16))
   
 dev.off()
+
+png ("Figures/Peru_nutricast_upside_squid_allRCPs_endcentury.png", width = 13, height = 7, units= "in", res = 300)
+squid_upside_nutr %>%
+  filter (period == "2100") %>%
+    # preliminary plot
+    ggplot (aes (x = reorder(nutrient, -children_fed), y = children_fed/1000000, fill = scenario)) +
+    geom_col (position = "dodge") +
+    geom_hline (yintercept = 0, lty = 2) +
+    facet_wrap (~rcp) +
+    theme_bw() +
+    # roughly match colors from gaines et al
+    scale_fill_manual (values = c ("mediumseagreen", "dodgerblue4"), labels = c("Productivity Only", "Full Adaptation")) +
+    labs (y = "Change in # children fed, millions", x = "", fill = "Management \nstrategy") +
+    ggtitle ("Nutrition upside from climate-adaptive management, 2100") +
+  theme (strip.text = element_text (size = 12),
+          legend.title = element_text (size = 13),
+          legend.text = element_text (size = 11),
+          axis.title = element_text (size = 14),
+         axis.text = element_text (size = 12),
+         plot.title = element_text (size = 16))
+  
+dev.off()
+
 
 
 #display value
