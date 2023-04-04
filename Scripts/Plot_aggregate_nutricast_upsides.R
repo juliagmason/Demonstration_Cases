@@ -144,3 +144,117 @@ c + theme (plot.title = element_text (size = 17),
            legend.title = element_text (size = 14),
            legend.text = element_text (size = 11)) 
 dev.off()
+
+## plot BAU and amount, not difference ----
+
+plot_nutr_upside_absolute <- function (country_name, Selenium = FALSE) {
+  
+  if (country_name == "Chile") {
+    landings <- chl_landings %>%
+      filter (year == 2021) %>%
+      group_by (species) %>%
+      summarise (total_tonnes = sum (catch_mt)) %>%
+      mutate (country = "Chile")
+  } else {
+    
+    landings <- sau_2019 %>%
+      filter (country == country_name) %>%
+      group_by (country, species) %>%
+      summarise (total_tonnes = sum (tonnes))
+  }
+  
+  # fix colnames so can pivot_longer and break into period and scenario
+  better_scenario_colnames <- gsub("ratio_", "", colnames(catch_upside_relative_repaired)[4:9])
+  old_colnames <- colnames(catch_upside_relative_repaired)[4:9]
+  
+  upside_ratios_absolute <- landings %>% 
+    left_join(catch_upside_relative_repaired, by = c ("country", "species")) %>%
+    rename_with (~ better_scenario_colnames, all_of(old_colnames)) %>%
+    mutate (# multiply ratio by current landings
+      across(bau_midcentury:adapt_endcentury, ~.x * total_tonnes)) %>%
+    
+    select (country, rcp, species, bau_midcentury:adapt_endcentury) %>%
+    pivot_longer(bau_midcentury:adapt_endcentury, 
+                 names_to = c("scenario", "period"),
+                 names_sep = "_",
+                 values_to = "tonnes") %>%
+    # get rid of non-matching species, NAs
+    filter (!is.na (rcp)) %>%
+    # convert to nutrients
+    mutate (children_fed = pmap (list (species = species, amount = tonnes, country_name = country), calc_children_fed_func)) %>%
+    unnest(cols = c(children_fed),  names_repair = "check_unique") 
+  
+  # fix levels
+  upside_ratios_absolute$scenario <- factor(upside_ratios_absolute$scenario, levels = c ("bau", "mey", "adapt"))
+  upside_ratios_absolute$period <- factor(upside_ratios_absolute$period, levels = c ("midcentury", "endcentury"))
+  
+  if (Selenium == TRUE) {
+    upside_summary <- upside_ratios_absolute %>%
+      group_by (rcp, scenario, period, nutrient) %>%
+      summarise (total_fed = sum (children_fed, na.rm = TRUE)) %>%
+      filter (!nutrient %in% c("Protein")) 
+  } else {
+    
+    upside_summary <- upside_ratios_absolute %>%
+      group_by (rcp, scenario, period, nutrient) %>%
+      summarise (total_fed = sum (children_fed, na.rm = TRUE)) %>%
+      filter (!nutrient %in% c("Protein", "Selenium")) 
+  }
+  
+  upside_summary %>%
+    # preliminary plot
+    ggplot (aes (x = reorder(nutrient, -total_fed), y = total_fed/1000000, fill = scenario)) +
+    geom_col (position = "dodge") +
+    geom_hline (yintercept = 0, lty = 2) +
+    facet_wrap (period ~ rcp, ncol =4) +
+    theme_bw() +
+    # roughly match colors from gaines et al
+    scale_fill_manual (values = c ("firebrick", "mediumseagreen", "dodgerblue4")) +
+    labs (y = "# Child RNIs met, millions", x = "", fill = "Management \nstrategy") +
+    ggtitle ("Nutrition provisioning from climate-adaptive management")
+}
+
+png ("Figures/Peru_nutricast_upside_overall_repaired_3scen.png", width = 6, height = 5, units= "in", res = 300)
+plot_nutr_upside_absolute("Peru") + theme (plot.title = element_text (size = 17),
+           axis.text = element_text (size = 11),
+           axis.text.x = element_text (angle = 60, hjust = 1),
+           strip.text.x =  element_text (size = 12),
+           axis.title = element_text (size = 16),
+           legend.title = element_text (size = 14),
+           legend.text = element_text (size = 11)) 
+dev.off()
+
+
+
+png ("Figures/Indo_nutricast_upside_overall_repaired_3scen.png", width = 6, height = 5, units= "in", res = 300)
+plot_nutr_upside_absolute("Indonesia") + theme (plot.title = element_text (size = 17),
+           axis.text = element_text (size = 11),
+           axis.text.x = element_text (angle = 60, hjust = 1),
+           strip.text.x =  element_text (size = 12),
+           axis.title = element_text (size = 16),
+           legend.title = element_text (size = 14),
+           legend.text = element_text (size = 11)) 
+dev.off()
+
+
+png ("Figures/SL_nutricast_upside_overall_repaired_3scen.png", width = 6, height = 5, units= "in", res = 300)
+plot_nutr_upside_absolute("Sierra Leone") + theme (plot.title = element_text (size = 17),
+           axis.text = element_text (size = 11),
+           axis.text.x = element_text (angle = 60, hjust = 1),
+           strip.text.x =  element_text (size = 12),
+           axis.title = element_text (size = 16),
+           legend.title = element_text (size = 14),
+           legend.text = element_text (size = 11)) 
+dev.off()
+
+
+png ("Figures/Chile_nutricast_upside_overall_repaired_3scen.png", width = 6, height = 5, units= "in", res = 300)
+plot_nutr_upside_absolute("Chile") + theme (plot.title = element_text (size = 17),
+           axis.text = element_text (size = 11),
+           axis.text.x = element_text (angle = 60, hjust = 1),
+           strip.text.x =  element_text (size = 12),
+           axis.title = element_text (size = 16),
+           legend.title = element_text (size = 14),
+           legend.text = element_text (size = 11)) 
+dev.off()
+
