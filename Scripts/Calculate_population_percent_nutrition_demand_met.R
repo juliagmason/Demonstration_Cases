@@ -65,7 +65,7 @@ convert_catch_to_nutr_tons <- function (species_name, catch_mt, country_name) {
   return (catch_nutrients)
 }
 
-convert_catch_to_nutr_tons ("Engraulis ringens", 100, "Peru")
+#convert_catch_to_nutr_tons ("Engraulis ringens", 100, "Peru")
 
 sau_peru_nutr <- sau_peru %>%
   mutate (nutr_yield = pmap (list (species_name = species, catch_mt = catch_mt, country_name = "Peru"), convert_catch_to_nutr_tons)) %>%
@@ -106,21 +106,41 @@ a %>%
   ggplot (aes (x = reorder(nutrient, -prop_demand_met, na.rm = TRUE), y = prop_demand_met*100, fill = commercial_group)) +
   geom_col() +
   theme_bw() +
-  ggtitle ("Proportion demand met\nMost recent year of landings") +
+  ggtitle ("Proportion demand met\nMost recent year of landings, Peru") +
   labs (x = "", y = "% population EARs met", fill = "Comm. group") 
 
-png ("Figures/Peru_aggregate_landings_perc_demand_met.png", width = 5, height = 4, units = "in", res = 300)  
-print(
-  plot_sau_rnis_met("Peru") +
-    theme ( 
-      axis.text.y = element_text (size = 13),
-      axis.text.x = element_text (size = 11),
-      axis.title = element_text (size = 16),
-      strip.text = element_text(size = 16),
-      legend.text = element_text (size = 10),
-      legend.title = element_text (size = 12),
-      plot.title = element_text (size = 18),
-      legend.position = "none"
-    )
-)
-dev.off()
+# png ("Figures/Peru_aggregate_landings_perc_demand_met.png", width = 5, height = 4, units = "in", res = 300)  
+# print(
+#   plot_sau_rnis_met("Peru") +
+#     theme ( 
+#       axis.text.y = element_text (size = 13),
+#       axis.text.x = element_text (size = 11),
+#       axis.title = element_text (size = 16),
+#       strip.text = element_text(size = 16),
+#       legend.text = element_text (size = 10),
+#       legend.title = element_text (size = 12),
+#       plot.title = element_text (size = 18),
+#       legend.position = "none"
+#     )
+# )
+# dev.off()
+
+
+indo_pop_needs_met <- sau_2019 %>%
+  filter(country == "Indonesia") %>%
+  left_join (sau_2019_taxa, by = "species") %>%
+  group_by (species, commercial_group) %>%
+  summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
+  mutate (nutr_tonnes = pmap (list (species_name = species, catch_mt = catch_mt, country_name = "Indonesia"), convert_catch_to_nutr_tons)) %>%
+  unnest(cols = c(nutr_tonnes),  names_repair = "check_unique") %>%
+  left_join (peru_demand_current, by = "nutrient") %>%
+  mutate (prop_demand_met = nutr_tonnes / supply_req_mt_yr_50perc)
+
+indo_pop_needs_met %>%
+  group_by (nutrient, commercial_group) %>%
+  summarise (prop_demand_met = sum (prop_demand_met, na.rm = TRUE)) %>%
+  ggplot (aes (x = reorder(nutrient, -prop_demand_met, na.rm = TRUE), y = prop_demand_met*100, fill = commercial_group)) +
+  geom_col() +
+  theme_bw() +
+  ggtitle ("Proportion demand met\nMost recent year of landings, Indonesia") +
+  labs (x = "", y = "% population EARs met", fill = "Comm. group") 
