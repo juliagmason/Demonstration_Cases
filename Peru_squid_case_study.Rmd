@@ -115,7 +115,7 @@ ggradar(nutr_radar_plot,
 
 png ("Figures/Squid_nutr_dodge_bar_sm.png", width = 7, height = 4, units = "in", res = 300)
  spp_rni_met  %>%
-  # filter (species %in% c("Engraulis ringens", "Trachurus murphyi", "Merluccius gayi gayi"), !nutrient %in% c("Protein", "Selenium")) %>%
+   filter (!nutrient %in% c("Protein", "Selenium")) %>%
     group_by (species) %>%
     mutate (micronutrient_density = sum (perc_rni),
             spp_short = ifelse (
@@ -303,6 +303,87 @@ dat <- ds_spp%>%
           legend.text = element_text (size = 11),
           axis.title = element_text (size = 14))
   dev.off()
+  
+  
+  
+# samuel asked for the full time series  
+  
+  dat <- ds_spp%>% 
+    filter (country == "Peru", species == "Dosidicus gigas")
+  
+  dat$scenario <- factor (dat$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
+  
+  p <- dat %>% ggplot (aes (x = year, y = catch_mt/1000, col = scenario)) +
+    geom_line() +
+    theme_bw() +
+    facet_grid (~ rcp, scales = "free_y") +
+    labs (x = "", y = "Catch, metric tons (1000s)", col = "Mgmt scenario") +
+    ggtitle ("Free et al. (2020) projections for D. gigas") +
+    theme (plot.title = element_text (size = 14),
+           axis.text = element_text (size = 12))
+
+  png ("Figures/Peru_squid_nutricast_ts_2020.png", res = 300, width = 12, height = 5, units = "in")  
+  print (p) +
+    theme(strip.text = element_text (size = 12),
+          legend.title = element_text (size = 13),
+          legend.text = element_text (size = 11),
+          axis.title = element_text (size = 14))
+  dev.off()
+  
+  # also zoom in on midcentury
+  
+  png ("Figures/Peru_squid_nutricast_ts_midcentury.png", res = 300, width = 12, height = 5, units = "in")  
+  dat %>% 
+    filter (year %in% 2051:2060) %>%
+    ggplot (aes (x = year, y = catch_mt/1000, col = scenario)) +
+    geom_line() +
+    theme_bw() +
+    facet_grid (~ rcp, scales = "free_y") +
+    labs (x = "", y = "Catch, metric tons (1000s)", col = "Mgmt scenario") +
+    ggtitle ("Free et al. (2020) projections for D. gigas, mid-century") +
+    theme (plot.title = element_text (size = 14),
+           axis.text = element_text (size = 12))
+  dev.off()
+  
+   png ("Figures/Peru_squid_nutricast_ts_endcentury.png", res = 300, width = 12, height = 5, units = "in")  
+  dat %>% 
+    filter (year %in% 2091:2100) %>%
+    ggplot (aes (x = year, y = catch_mt/1000, col = scenario)) +
+    geom_line() +
+    theme_bw() +
+    facet_grid (~ rcp, scales = "free_y") +
+    labs (x = "", y = "Catch, metric tons (1000s)", col = "Mgmt scenario") +
+    ggtitle ("Free et al. (2020) projections for D. gigas, end-century") +
+    theme (plot.title = element_text (size = 14),
+           axis.text = element_text (size = 12))
+  dev.off()
+  
+```
+```{r nutricast profit ts}
+ds_squid_long <- ds_spp%>% 
+    filter (country == "Peru", species == "Dosidicus gigas") %>%
+  pivot_longer(range_km2:ffmsy, 
+               names_to = "variable",
+               values_to = "value")
+  
+  ds_squid_long$scenario <- factor (ds_squid_long$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
+  
+  ds_squid_long$variable <- factor (ds_squid_long$variable, levels = c ("biomass_mt", "catch_mt", "profits_usd", "range_km2", "msy_mt", "bbmsy", "ffmsy"))
+
+  png ("Figures/Peru_squid_nutricast_ts_2020_allvar.png", res = 300, width = 12, height = 6, units = "in") 
+  p <- ds_squid_long %>% 
+    filter (variable %in% c ("catch_mt", "biomass_mt", "profits_usd")) %>%
+    ggplot (aes (x = year, y = value/1000000, col = scenario)) +
+    geom_line () +
+    facet_grid (variable ~ rcp, scales = "free_y") +
+    theme_bw() +
+    labs (x = "", y = "") +
+    ggtitle (paste0 ("Free et al. (2020) projections, all variables (millions)")) +
+    theme (plot.title = element_text (size = 14),
+           axis.text = element_text (size = 12))
+  print(p)
+  dev.off()
+
 ```
 
 ```{r nutrient_upside}
