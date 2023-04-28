@@ -73,7 +73,7 @@ library (ggradar)
 
 
 spp_rni_met <- compiled_nutr %>%
-  filter (species %in% c("Dosidicus gigas", "Engraulis ringens", "Trachurus murphyi", "Merluccius gayi peruanus")) %>%
+  filter (species %in% c("Dosidicus gigas", "Trachurus murphyi", "Merluccius gayi peruanus", "Coryphaena hippurus", "Oncorhynchus tshawytscha")) %>%
   # join to rni data
   left_join (rni_child, by = "nutrient") %>%
   
@@ -113,11 +113,13 @@ ggradar(nutr_radar_plot,
   theme (plot.title = element_text (size = 14))
 #dev.off()
 
-png ("Figures/Squid_nutr_dodge_bar_sm.png", width = 7, height = 4, units = "in", res = 300)
+png ("Figures/Squid_nutr_dodge_bar_sm_salmon.png", width = 7, height = 4, units = "in", res = 300)
  spp_rni_met  %>%
    filter (!nutrient %in% c("Protein", "Selenium")) %>%
     group_by (species) %>%
+   # samuel asked abt omega specifically, make a rank based on omg3?
     mutate (micronutrient_density = sum (perc_rni),
+            #omg_ranking = 
             spp_short = ifelse (
               grepl(" ", species),
               paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
@@ -142,6 +144,24 @@ png ("Figures/Squid_nutr_dodge_bar_sm.png", width = 7, height = 4, units = "in",
  dev.off()
 
 ```
+
+samuel asked if we could just say in words, calculate amt, say has X% more than another species
+```{r omg_percent_compare}
+
+spp_omg <- spp_rni_met %>%
+  filter (nutrient == "Omg 3")
+
+#compiled_nutr %>% filter (species == "Engraulis ringens")
+
+```
+
+D. gigas has 0.6 g omega 3 per servings, 54.5% RNI. 
+
+That's `r round(spp_omg$amount[which(spp_omg$species == "Dosidicus gigas")]/spp_omg$amount[which(spp_omg$species == "Oncorhynchus tshawytschas")], 2)`
+
+
+About 2x as much as jurel, about 4x as much as hake, slightly more than mahi mahi. salmon has 2.5x as much. anchovy has 1.02, 1.7x as much
+
 ```{r catch rnis}
 
 # just pota for Peru, 2019
@@ -277,6 +297,101 @@ c %>% filter (nutrient == "Zinc")
 c %>% filter (nutrient == "Omega_3")
 
 ```
+```{r end_use_by_country}
+
+d <- sau_2019 %>%
+   filter (country == "Peru", species == "Dosidicus gigas") %>%
+ 
+   group_by (species, end_use_type, fishing_entity, fishing_sector) %>%
+   summarise (catch_mt = sum (tonnes, na.rm = TRUE))  
+
+```
+
+Samuel feedback 4/11/23: no peruvian industrial fleets for Pota. try looking at past years and reconstruction method. 
+
+In De la puente 2020 reconstruction--d. gigas in industrial fleets is bycatch in domestic fleet. Assumed that the catch rate would be 2% of hake landings in trawl nets and 1% of chub/jack macerel purse seines, 0.01% of anchovy/sardine landings. assumed all industrial catch was fishmeal fishoil bc bycatch. 
+
+assume some use as bait for mahi mahi, blue shark, mako in longlines, but not sure how this is factored in to landings?
+
+importantly--they account for eyes, ink sack, and guts being discarded at sea. assume 15% by weight, so assume only 85% of total catch was reported in landings. but I think this means they padded the reported landings, not that I need to account for this with edible weight. 
+```{r examine_sau_pattners}
+dg_sau_ts <- sau_2015_2019 %>% filter (species == "Dosidicus gigas", country== "Peru")
+
+dg_sau_ts %>%
+  filter (!fishing_sector == "Subsistence") %>%
+  ggplot (aes (x = year, y = tonnes, fill = end_use_type)) +
+  geom_col() +
+  theme_bw()+
+  facet_wrap (~fishing_sector) +
+  ggtitle ("SAU D. gigas landings, Peru, 2019 reconstruction\ndownloaded 10/22")
+
+
+```
+
+so this is very weird, saying that most of the artisanal is fishmeal, and most of the industrial is DHC. 
+
+look at older dataset, before 2019 reconstruction
+```{r older_sau}
+
+download_older_full <- read.csv ("Data/SAU_EEZ_landings.csv")
+dg_sau_older <- download_older_full %>% filter (scientific_name == "Dosidicus gigas", area_name== "Peru")
+
+png("Figures/SAU_Peru_Dgigas_sector_2018.png", width = 7, height =5, unit = "in", res = 300)
+dg_sau_older %>%
+  filter (!fishing_sector == "Subsistence", year > 2000) %>%
+  ggplot (aes (x = year, y = tonnes, fill = end_use_type)) +
+  geom_col() +
+  theme_bw()+
+  facet_wrap (~fishing_sector) +
+  ggtitle ("SAU D. gigas landings, Peru, 2018 reconstruction\ndownloaded 03/22")
+dev.off()
+
+```
+also look at full years for 2019 reconstruction
+```{r 2019_reconstruction_longer_ts}
+download_2019_full <- read.csv("Data/SAU EEZ 2019.csv") 
+
+dg_sau_2019_full <- download_2019_full %>% filter (scientific_name == "Dosidicus gigas", area_name== "Peru")
+
+png("Figures/SAU_Peru_Dgigas_sector_2019.png", width = 7, height =5, unit = "in", res = 300)
+dg_sau_2019_full %>%
+  filter (!fishing_sector == "Subsistence", year > 2000) %>%
+  ggplot (aes (x = year, y = tonnes, fill = end_use_type)) +
+  geom_col() +
+  theme_bw()+
+  facet_wrap (~fishing_sector) +
+  ggtitle ("SAU D. gigas landings, Peru, 2019 reconstruction\ndownloaded 10/22")
+dev.off()
+
+# what about foreign
+png("Figures/SAU_Peru_Dgigas_end_use_foreign_ts.png", width = 5, height =5, unit = "in", res = 300)
+dg_sau_2019_full %>%
+  filter (!fishing_sector == "Subsistence", year > 2009, !fishing_entity == "Peru") %>%
+  ggplot (aes (x = year, y = tonnes/1000000, fill = end_use_type)) +
+  geom_col() +
+  theme_bw()+
+  facet_wrap (~fishing_sector) +
+  scale_x_continuous(breaks = c (2010, 2014, 2018)) +
+  labs (y = "million tonnes") +
+  ggtitle ("SAU D. gigas foreign landings")
+dev.off()
+
+png("Figures/SAU_Peru_Dgigas_end_use_domestic_ts.png", width = 7, height =5, unit = "in", res = 300)
+
+dg_sau_2019_full %>%
+  filter (!fishing_sector == "Subsistence", year > 2009, fishing_entity == "Peru") %>%
+  ggplot (aes (x = year, y = tonnes/1000000, fill = end_use_type)) +
+  geom_col() +
+  theme_bw()+
+   labs (y = "million tonnes") +
+  scale_x_continuous(breaks = c (2010, 2014, 2018)) +
+  facet_wrap (~fishing_sector) +
+  ggtitle ("SAU D. gigas domestic landings")
+dev.off()
+
+ 
+```
+okay. so the peru industrial is tiny, and mostly FMFO. the industrial FMFO is foreign catch, which I guess is DHC.
 
 ```{r nutricast_ts}
 ds_spp <- readRDS("Data/Free_etal_proj_smaller.Rds")
