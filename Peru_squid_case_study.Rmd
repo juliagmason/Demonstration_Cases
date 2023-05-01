@@ -117,17 +117,22 @@ png ("Figures/Squid_nutr_dodge_bar_sm_salmon.png", width = 7, height = 4, units 
  spp_rni_met  %>%
    filter (!nutrient %in% c("Protein", "Selenium")) %>%
     group_by (species) %>%
-   # samuel asked abt omega specifically, make a rank based on omg3?
+
     mutate (micronutrient_density = sum (perc_rni),
-            #omg_ranking = 
             spp_short = ifelse (
               grepl(" ", species),
               paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
-              species)
+              species),
+            #dumb...trying to order by omega 3 value
+            omg_amt = amount[nutrient == "Omg 3"]
     ) %>%
     ungroup() %>%
+      # samuel asked abt omega specifically, make a rank based on omg3?
+   group_by (nutrient) %>%
+   mutate (nutr_ranking = rank(-omg_amt)) %>%
+   ungroup() %>%
     
-    ggplot (aes (x = reorder(spp_short, -micronutrient_density), fill = nutrient, y = perc_rni)) +
+    ggplot (aes (x = reorder(spp_short, nutr_ranking), fill = nutrient, y = perc_rni)) +
     geom_col (position = "dodge") +
     theme_bw() +
     labs (x = "", y = "% Child RNI met per 100g serving", fill = "Nutrient") +
