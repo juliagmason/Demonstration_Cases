@@ -1,0 +1,137 @@
+---
+title: "Philippines species"
+date: 5/4/23
+output: html_notebook
+---
+
+Ppnes team pursuing a major grant that would look at coastal foods systems transformation, integrated aquaculture, ssf
+
+Helpful to know nutrition content and how much of population's nutrient needs could be met with expanded aquaculture production 
+
+"Two species of oysters and one species of mussels stand out for potential culture, the palm oyster (Crassotrea iredalie), the black lipped pearly oyster (Pinctada maxima) and the green mussel (Perna viridis)"
+	Also see which other bivalves harvested in philippines
+
+The major species farmed are Eucheuma denticulatum and Kappaphycus alvarezii for their carrageenan content 
+
+
+```{r setup, include = FALSE}
+library (tidyverse)
+library (stringr)
+library (AFCD)
+
+# function for converting catch in mt to children fed ----
+# this will also bring in fishnutr data and RNI data
+source ("Scripts/Function_convert_catch_amt_children_fed.R")
+
+# full RNIs, include more nutrients?
+
+rni <- readRDS("Data/RNI.RDA.Rds")
+
+# add in folate? eventually
+```
+
+### What are the major nutrient deficiencies in the philippines?
+```{r pii}
+# this is already in percent, don't multiply by 100
+pii <- read_csv ("Data/Beal_2017_SI_inadequate_micronutrients.csv")
+
+ppn_pii <- pii %>% 
+  filter (Country == "Philippines", Year == 2011) %>%
+  select (Fortification, Micronutrient, `Prevalence of Inadequate Intake`) 
+
+
+ppn_pii %>%
+  filter (Fortification == 0) %>%
+  arrange (desc (round(`Prevalence of Inadequate Intake`, 2)))
+```
+WITH fortification, 93% ca deficient, 11% zinc devicient. without, 93% CA deficient, 46% iron deficient, 27% vitamin A deficient
+
+```{r golden_def}
+mic_defs <- read_csv ("Data/2017_sevs_country_average.csv")
+
+mic_defs %>% filter (country == "Philippines")
+
+```
+
+According to Chris Golden's data on food supply and formulation of food system estimates of the proportion of the population deficient in particular nutrients: 96% calcium, 86% Vitamin A, 18% iron, 12% zinc, 10% omega 3s
+
+### Nutrient content of cultured species
+```{r check_spp_afcd, warning=FALSE}
+cultured_spp <- c("Crassostrea iredalie", "Pinctada maxima", "Perna viridis", "Eucheuma denticulatum", "Kappaphycus alvarezii")
+
+ppn_cultured_spp_nutr <- species_nutrients (cultured_spp,
+                                              prep = c ("raw", NA),
+                                              part = c("muscle tissue", "whole"),
+                                              nut = c("DHA_EPA", "Calcium", "Iron, total", "Selenium", "Zinc", "Vitamin_a_combined", "Folate, total")
+                                              ) %>%
+  # harmonize nutrient names
+  mutate (nutrient = case_when (
+    nutrient == "DHA_EPA" ~ "Omega_3",
+    nutrient == "Iron, total" ~ "Iron",
+    nutrient == "Vitamin_a_combined" ~ "Vitamin_A",
+    nutrient == "Folate, total" ~ "Folate",
+    TRUE ~ nutrient)
+    ) %>%
+  rename (amount = value)
+
+View (ppn_cultured_spp_nutr)
+
+# calculate RNI met
+rni_met <- ppn_cultured_spp_nutr %>%
+  select (species, nutrient, amount) %>%
+  # join to rni data
+  left_join (rni_child, by = "nutrient") %>%
+  
+  # this would be the percentage of your daily requirement you could get from a 100g serving of each species. cap at 100%
+  mutate (perc_rni = amount/RNI * 100,
+          perc_rni = ifelse (perc_rni > 100, 100, perc_rni),
+          nutrient = 
+            case_when (nutrient == "Vitamin_A" ~ "Vit A",
+                       nutrient == "Omega_3" ~ "Omg 3",
+                       TRUE ~ nutrient)) %>%
+  ungroup()
+
+```
+
+
+something suspicious is happening with the micronutrient density, adding doesn't seem right...
+```{r barplot_rni_met}
+
+#png ("Figures/Squid_nutr_dodge_bar_sm_salmon.png", width = 7, height = 4, units = "in", res = 300)
+y <- rni_met  %>%
+   filter (!nutrient %in% c("Protein", "Folate")) %>%
+    group_by (species) %>%
+
+    mutate (micronutrient_density = sum (perc_rni, na.rm = TRUE),
+            spp_short = ifelse (
+              grepl(" ", species),
+              paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
+              species
+
+    )) %>%
+    ungroup() %>%
+    
+    ggplot (aes (x = reorder(spp_short, -micronutrient_density), fill = nutrient, y = perc_rni)) +
+    geom_col (position = "dodge") +
+    theme_bw() +
+    labs (x = "", y = "% Child RNI met per 100g serving", fill = "Nutrient") +
+    #ylim (c(0,100)) +
+    ggtitle ("Nutrient content of selected species") +
+    theme ( 
+      axis.text.y = element_text (size = 13),
+      axis.text.x = element_text (size = 11),
+      axis.title = element_text (size = 16),
+      strip.text = element_text(size = 16),
+      legend.text = element_text (size = 12),
+      legend.title = element_text (size = 14),
+      plot.title = element_text (size = 18))
+ #dev.off()
+
+
+
+```
+
+### Population nutrition needs that could be met
+
+get an estimate of currently cultured species??
+https://www.fao.org/fishery/statistics-query/en/aquaculture/aquaculture_quantity
