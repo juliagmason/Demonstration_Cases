@@ -57,8 +57,9 @@ According to Chris Golden's data on food supply and formulation of food system e
 
 ### Nutrient content of cultured species
 ```{r check_spp_afcd, warning=FALSE}
-cultured_spp <- c("Crassostrea iredalie", "Pinctada maxima", "Perna viridis", "Eucheuma denticulatum", "Kappaphycus alvarezii")
+cultured_spp <- c("Crassostrea iredalei", "Pinctada maxima", "Perna viridis", "Eucheuma denticulatum", "Kappaphycus alvarezii")
 
+#Crassostrea iredalei
 ppn_cultured_spp_nutr <- species_nutrients (cultured_spp,
                                               prep = c ("raw", NA),
                                               part = c("muscle tissue", "whole"),
@@ -135,3 +136,30 @@ y <- rni_met  %>%
 
 get an estimate of currently cultured species??
 https://www.fao.org/fishery/statistics-query/en/aquaculture/aquaculture_quantity
+```{r fao_aquaculture}
+# from digging in country_groups, philippines is PHL, identifier 171 (un code 608)
+
+# figure out species groups
+fao_aq_spp <- read.csv("Data/FAO_aquaculture/CL_FI_SPECIES_GROUPS.csv")
+
+# just list genus names
+ppn_genus <- word (cultured_spp, 1, 1)
+
+# https://www.statology.org/r-grepl-multiple-patterns/
+ppn_spp_codes <- fao_aq_spp %>%
+  filter (grepl(paste(ppn_genus, collapse = "|"), Scientific_Name, ignore.case = TRUE)) %>%
+  select (X3A_Code, Scientific_Name) %>%
+  rename (spp_code = X3A_Code)
+
+
+# select those species for ppines, last five years
+fao_aq_qty <- read.csv("Data/FAO_aquaculture/Aquaculture_Quantity.csv")
+
+ppn_aquaculture_qty <- fao_aq_qty %>%
+  filter (COUNTRY.UN_CODE == 608, SPECIES.ALPHA_3_CODE %in% ppn_spp_codes$spp_code, between (PERIOD, 2017, 2021)) %>%
+  rename (spp_code = SPECIES.ALPHA_3_CODE) %>%
+  left_join (ppn_spp_codes, by = "spp_code")
+
+
+```
+
