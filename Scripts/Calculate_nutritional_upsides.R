@@ -42,6 +42,27 @@ catch_upside_relative %>%
   arrange (country, rank) %>%
   write.excel()
 
+# also do this for each year so I can plot a full time series----
+
+# probably can do this with brackets but just make a baseline value separately
+ds_spp_baseline <- ds_spp %>%
+  filter (scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), catch_mt > 0, between (year, 2012, 2021)) %>%
+  group_by (country, rcp, scenario, species) %>%
+  summarise (baseline_catch = mean (catch_mt, na.rm = TRUE)) %>%
+  ungroup()
+  
+catch_upside_relative_annual <-  ds_spp %>%
+  filter (scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), catch_mt > 0, year > 2021) %>%
+  left_join (ds_spp_baseline, by = c("country", "rcp", "scenario", "species")) %>%
+  mutate (catch_ratio = catch_mt / baseline_catch) %>%
+  select (country, rcp, scenario, species, baseline_catch, catch_mt, catch_ratio)
+  
+
+saveRDS (catch_upside_relative_annual, file = "Data/nutricast_upside_relative_annual_ratio.Rds")
+# need to fix SAU missing species, check_SAU_nutricast_Species
+
+
+######################################
 
 # copying code here on 2/1 from regional team priority species but not checking
 # upside BAU to MEY ----
