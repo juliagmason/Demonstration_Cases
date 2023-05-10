@@ -17,6 +17,11 @@ library (tidyverse)
 # full rnis, not just child
 # rni.rds emailed by Rachel Zuercher on 5 oct 2022
 rni <- readRDS("Data/RNI.RDA.Rds")
+# add folate and riboflavin for philippines 5/5/23
+rni <- rni %>%
+  mutate (Folate_mcg_day = c(rep(c(80,80,150,200,300,400,400,400, 400),each = 2), rep(c(600,500), each = 3)),
+          Riboflavin_mg_day = c(rep(c(0.3, 0.4, 0.5, 0.6, 0.9), each = 2), c(1, 1.3, 1.1, 1.1, 1.3, 1.3, 1.1, 1.3), rep (c(1.4, 1.6), each = 3))
+  )
 
 # updated WPP data
 # https://population.un.org/wpp/Download/Standard/CSV/
@@ -36,11 +41,12 @@ rni_merge_infants <- rni %>%
     TRUE ~ Age
   )) %>% 
   group_by (Sex, age_infant) %>%
-  summarise (across(Calcium_mg_day:Omega3_PUFA_g_day, ~mean(.x, na.rm = TRUE))) %>%
+  #summarise (across(Calcium_mg_day:Omega3_PUFA_g_day, ~mean(.x, na.rm = TRUE))) %>%
+  summarise (across(Calcium_mg_day:Riboflavin_mg_day, ~mean(.x, na.rm = TRUE))) %>%
   # rename age range to match
   rename (age_range_rni = age_infant) %>%
   # pivot longer
-  pivot_longer(Calcium_mg_day:Omega3_PUFA_g_day,
+  pivot_longer(Calcium_mg_day:Riboflavin_mg_day,
                names_to = "nutrient",
                values_to = "amount") %>%
   # fix names
@@ -116,8 +122,8 @@ wpp_long <- wpp_pop %>%
   # multiply population by amount needed. this is in native units so need to convert to tons
   mutate (scalar = case_when (
             nutrient %in% c("Protein", "Omega_3") ~ 1,
-            nutrient %in% c("Calcium", "Zinc", "Iron") ~ 1/1000,
-            nutrient %in% c("Vitamin_A", "Selenium") ~ 1/1e6),
+            nutrient %in% c("Calcium", "Zinc", "Iron", "Riboflavin") ~ 1/1000,
+            nutrient %in% c("Vitamin_A", "Selenium", "Folate") ~ 1/1e6),
           #multiply population by 1000
           nutr_annual_demand = Pop * 1000 * amount * scalar/1000/1000*365) 
           
@@ -135,6 +141,9 @@ saveRDS(wpp_country_aggregate, "Data/annual_nutr_demand_rni_by_country.Rds")
 
 # relate landings to nutrition demand ----
 # take current landings, convert to metric tons of nutrients, convert to proportion of current population
+
+# if running from here:
+wpp_country_aggregate <- readRDS("Data/annual_nutr_demand_rni_by_country.Rds")
 
 sau_2019 <- readRDS("Data/SAU_2019.Rds")
 #Clean_Chile_Sernapesca_landings.R
@@ -207,11 +216,16 @@ calculate_prop_demand_met <- function (country_name, year) {
       unnest(cols = c(nutr_yield),  names_repair = "check_unique")
   }
   
+  # summarise overall nutr provisioning
+  landings_nutr <- landings %>%
+    group_by (nutrient) %>%
+    summarise (nutr_tonnes = sum (nutr_tonnes, na.rm = TRUE))
+  
   prop_demand_met <- wpp_country_aggregate %>%
     filter (country == country_name, Time %in% year) %>%
     group_by (nutrient) %>%
     summarise (mean_annual_demand = mean(tot_nutr_annual_demand, na.rm = TRUE)) %>%
-    left_join (sau_peru_nutr, by = "nutrient") %>%
+    left_join (landings_nutr, by = "nutrient") %>%
     # this is proportion, not percent
     mutate (prop_demand_met = nutr_tonnes / mean_annual_demand)
   
