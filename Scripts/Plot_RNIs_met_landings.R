@@ -53,7 +53,8 @@ plot_sau_rnis_met <- function (country_name, Selenium = FALSE) {
     
     landings <- chl_landings %>%
       filter (year == 2021) %>%
-      group_by (species) %>%
+      rename (commercial_group = taxa) %>%
+      group_by (species, commercial_group) %>%
       summarise (catch_mt = sum (catch_mt)) %>%
       mutate (children_fed = pmap (list (species = species, amount = catch_mt, country_name = "Chile"), calc_children_fed_func)) %>%
       unnest(cols = c(children_fed),  names_repair = "check_unique") 
@@ -140,16 +141,16 @@ dev.off()
 png ("Figures/Chl_aggregate_landings_RNIs_met.png", width = 5, height = 4, units = "in", res = 300)  
 print(
   plot_sau_rnis_met("Chile")  +
-    theme ( 
-      axis.text.y = element_text (size = 13),
-      axis.text.x = element_text (size = 11),
-      axis.title = element_text (size = 16),
-      strip.text = element_text(size = 16),
-      legend.text = element_text (size = 10),
-      legend.title = element_text (size = 12),
-      plot.title = element_text (size = 18),
-      legend.position = "none"
-    )
+    # theme ( 
+    #   axis.text.y = element_text (size = 13),
+    #   axis.text.x = element_text (size = 11),
+    #   axis.title = element_text (size = 16),
+    #   strip.text = element_text(size = 16),
+    #   legend.text = element_text (size = 10),
+    #   legend.title = element_text (size = 12),
+    #   plot.title = element_text (size = 18),
+    #   legend.position = "none"
+    # )
 )
 dev.off()
 
