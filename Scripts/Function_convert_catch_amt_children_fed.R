@@ -57,3 +57,15 @@ calc_children_fed_func <- function (species_name, amount_mt, country_name) {
 # m <- calc_children_fed_func ("Crassostrea gigas", "Mollusc", 200)
 # s <- calc_children_fed_func ("Scylla serrata", "Crustacean", 55)
 #a <- calc_children_fed_func("Stolephorus", 1000, "Indonesia")
+
+ef_nutr <- calc_children_fed_func("Ethmalosa fimbriata",  128815, "Sierra Leone")
+
+png ("Figures/SL_Efim_children_fed.png", height = 4, width = 4, units = "in", res = 300)
+ef_nutr %>%
+  filter (!nutrient %in% c("Selenium", "Vitamin_A", "Iron")) %>%
+  ggplot (aes (x = reorder(nutrient, -children_fed), y= children_fed/1000000)) +
+  geom_col() +
+  theme_bw() +
+  theme (axis.text = element_text (size = 15)) +
+  labs (x = "", y = "")
+dev.off()
