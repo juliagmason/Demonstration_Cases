@@ -1,20 +1,17 @@
 ---
-title: "Philippines species"
-date: 5/4/23
-output: html_notebook
+title: "Potential nutrient provisioning from aquaculture species in the Philippines"
+author: "JGM"
+date: "5/4/23"
+output:
+  word_document: default
+  html_notebook: default
+  pdf_document: default
 ---
 
-Ppnes team pursuing a major grant that would look at coastal foods systems transformation, integrated aquaculture, ssf
-
-Helpful to know nutrition content and how much of population's nutrient needs could be met with expanded aquaculture production 
-
-"Two species of oysters and one species of mussels stand out for potential culture, the palm oyster (Crassotrea iredalie), the black lipped pearly oyster (Pinctada maxima) and the green mussel (Perna viridis)"
-	Also see which other bivalves harvested in philippines
-
-The major species farmed are Eucheuma denticulatum and Kappaphycus alvarezii for their carrageenan content 
+Quick exploration of nutrient content and potential provisioning for expanded shellfish and seaweed aquaculture in the Philippines for proposed species: the palm oyster (_Crassotrea iredalei_), the black lipped pearly oyster (_Pinctada maxima_) and the green mussel (_Perna viridis_); and two major farmed seaweed species: _Eucheuma denticulatum_ and _Kappaphycus alvarezii_ (currently primarily used for their carrageenan content).
 
 
-```{r setup, include = FALSE}
+```{r setup, include = FALSE, echo = FALSE}
 library (tidyverse)
 library (stringr)
 library (AFCD)
@@ -23,15 +20,50 @@ library (AFCD)
 # this will also bring in fishnutr data and RNI data
 source ("Scripts/Function_convert_catch_amt_children_fed.R")
 
+# function for harmonizing species name capitalization
+# https://stackoverflow.com/questions/18509527/first-letter-to-upper-case
+firstup <- function(x) {
+  substr(x, 1, 1) <- toupper(substr(x, 1, 1))
+  x
+}
+
 # full RNIs, include more nutrients?
 
 rni <- readRDS("Data/RNI.RDA.Rds")
 
-# add in folate? eventually
+# add in folate and riboflavin manually from WHO report
+# child age 6 months to 6 years
+folate_child_rni <- mean (c(80, 150, 200))
+riboflav_child_rni <- mean (c(0.4, 9.6, 0.6))
+
+rni_child_addl <- data.frame (
+  nutrient = c("Folate", "Riboflavin"),
+  RNI = c(folate_child_rni, riboflav_child_rni)
+)
+
+
+rni_child <- rni_child %>%
+  rbind (rni_child_addl)
+  
+rni <- rni %>%
+  mutate (Folate_mcg_day = c(rep(c(80,80,150,200,300,400,400,400, 400),each = 2), rep(c(600,500), each = 3)),
+          Riboflavin_mg_day = c(rep(c(0.3, 0.4, 0.5, 0.6, 0.9), each = 2), c(1, 1.3, 1.1, 1.1, 1.3, 1.3, 1.1, 1.3), rep (c(1.4, 1.6), each = 3))
+  )
+
+
+# nutrition demand by country, age, sex. from Scripts/Calculate_population_percent_nutrition
+wpp_nutr_demand <- readRDS("Data/annual_nutr_demand_rni_by_country_age_sex.Rds")
+ppn_nutr_demand <- wpp_nutr_demand %>% filter (ISO3_code == "PHL")
+
+# maybe just need aggregate for now
+
+ppn_nutr_demand_agg <- readRDS("Data/annual_nutr_demand_rni_by_country.Rds") %>% filter (country == "Philippines")
+
+cultured_spp <- c("Crassostrea iredalei", "Pinctada maxima", "Perna viridis", "Eucheuma denticulatum", "Kappaphycus alvarezii")
 ```
 
-### What are the major nutrient deficiencies in the philippines?
-```{r pii}
+### What are the major nutrient deficiencies in the Philippines?
+```{r pii, echo = FALSE, message=FALSE}
 # this is already in percent, don't multiply by 100
 pii <- read_csv ("Data/Beal_2017_SI_inadequate_micronutrients.csv")
 
@@ -40,33 +72,31 @@ ppn_pii <- pii %>%
   select (Fortification, Micronutrient, `Prevalence of Inadequate Intake`) 
 
 
-ppn_pii %>%
-  filter (Fortification == 0) %>%
-  arrange (desc (round(`Prevalence of Inadequate Intake`, 2)))
-```
-WITH fortification, 93% ca deficient, 11% zinc devicient. without, 93% CA deficient, 46% iron deficient, 27% vitamin A deficient
+# #ppn_pii %>%
+#   filter (Fortification == 1) %>%
+#   arrange (desc (round(`Prevalence of Inadequate Intake`, 2)))
 
-```{r golden_def}
+# Chris golden data--given food supply and formulation of food system, estimates of the proportion of the population deficient in particular nutrients
 mic_defs <- read_csv ("Data/2017_sevs_country_average.csv")
 
-mic_defs %>% filter (country == "Philippines")
-
+#mic_defs %>% filter (country == "Philippines")
 ```
+According to a global study of national food supply, fortification policies, and dietary intake estimates (Beal et al. 2017), 93% of the Philippines' population is deficient in calcium, 85% deficient in folate, 37% are deficient in riboflavin (Vitamin B2) and 11% are deficient in zinc. If we look at intakes excluding fortified foods, we would also worry about iron (46% deficient) and Vitamin A (27% deficient). Our partner Chris Golden has data on food supply and food system formulation that does not account for fortification and has similar estimates for calcium and zinc (96% and 12% of the population deficient), but estimates that 86% of the population is vitamin A deficient, 18% is iron deficient, and 10% deficient in Omega-3 fatty acids. 
 
-According to Chris Golden's data on food supply and formulation of food system estimates of the proportion of the population deficient in particular nutrients: 96% calcium, 86% Vitamin A, 18% iron, 12% zinc, 10% omega 3s
 
 ### Nutrient content of cultured species
-```{r check_spp_afcd, warning=FALSE}
-cultured_spp <- c("Crassostrea iredalei", "Pinctada maxima", "Perna viridis", "Eucheuma denticulatum", "Kappaphycus alvarezii")
+```{r check_spp_afcd, warning=FALSE, echo = FALSE}
+
 
 #Crassostrea iredalei
 ppn_cultured_spp_nutr <- species_nutrients (cultured_spp,
                                               prep = c ("raw", NA),
                                               part = c("muscle tissue", "whole"),
-                                              nut = c("DHA_EPA", "Calcium", "Iron, total", "Selenium", "Zinc", "Vitamin_a_combined", "Folate, total")
+                                              nut = c("DHA_EPA", "Calcium", "Iron, total", "Selenium", "Zinc", "Vitamin_a_combined", "Folate, total", "Riboflavin")
                                               ) %>%
-  # harmonize nutrient names
-  mutate (nutrient = case_when (
+  # harmonize nutrient names, species capitalization
+  mutate (species = firstup (species),
+          nutrient = case_when (
     nutrient == "DHA_EPA" ~ "Omega_3",
     nutrient == "Iron, total" ~ "Iron",
     nutrient == "Vitamin_a_combined" ~ "Vitamin_A",
@@ -75,11 +105,13 @@ ppn_cultured_spp_nutr <- species_nutrients (cultured_spp,
     ) %>%
   rename (amount = value)
 
-View (ppn_cultured_spp_nutr)
+#View (ppn_cultured_spp_nutr)
 
 # calculate RNI met
 rni_met <- ppn_cultured_spp_nutr %>%
   select (species, nutrient, amount) %>%
+  # get rid of seaweed repeats
+  distinct() %>%
   # join to rni data
   left_join (rni_child, by = "nutrient") %>%
   
@@ -93,14 +125,18 @@ rni_met <- ppn_cultured_spp_nutr %>%
   ungroup()
 
 ```
+Nutrient content from the Aquatic Foods Composition Database. _P. viridis_ has species-specific nutrient information for all nutrients. For _P. maxima_, the information for calcium, iron, riboflavin, and Vitamin A is at the genus level, but the other nutrients are at the order level (basically all oysters, I think). _C. iridalei_ information is all at the genus level. For the seaweeds, _K. alvarzii_ has species-specific information for calcium, iron, and zinc, but the other nutrients are at the family level. _E. denticulatum_ has all nutrition information at the genus level. 
 
 
-something suspicious is happening with the micronutrient density, adding doesn't seem right...
-```{r barplot_rni_met}
+This chart shows the nutrition content of a 100g "serving" of each of the species. The y axis is the percentage of a child's daily needs of that nutrient met from eating that 100g serving--similar to the "% daily value" numbers in the nutrition facts on the back of a cereal box. The values are based on the World Health Organization's Recommended Nutrient Intake (RNI) values for children aged 6 months to 6 years. 
+
+The species are ordered by overall micronutrient density (most nutritious to least nutritious), meaning they meet the most daily needs across nutrients. I calculated this as the sum of the percent daily RNIs met (the sum of the colored bars). 
+
+```{r barplot_rni_met, echo = FALSE, fig.width= 7}
 
 #png ("Figures/Squid_nutr_dodge_bar_sm_salmon.png", width = 7, height = 4, units = "in", res = 300)
-y <- rni_met  %>%
-   filter (!nutrient %in% c("Protein", "Folate")) %>%
+rni_met  %>%
+   filter (!nutrient %in% c("Protein")) %>%
     group_by (species) %>%
 
     mutate (micronutrient_density = sum (perc_rni, na.rm = TRUE),
@@ -132,24 +168,41 @@ y <- rni_met  %>%
 
 ```
 
-### Population nutrition needs that could be met
+Some quick takeaways might be that most of the species are rich in zinc and iron, but few provide Vitamin A or riboflavin. _K. alvarezii_ is a good source of calcium and folate, two priority nutrients. _C. iredalei_ provides more omega 3s than most of the other species. 
 
-get an estimate of currently cultured species??
-https://www.fao.org/fishery/statistics-query/en/aquaculture/aquaculture_quantity
-```{r fao_aquaculture}
+
+### Population nutrition needs that could be met with current and expanded aquaculture production
+
+I found estimates of the Philippines' aquaculture production of these species from the FAO's aquaculture statistics database (https://www.fao.org/fishery/statistics-query/en/aquaculture/aquaculture_quantity). Using the above nutrition content information, I can multiply the aquaculture production by the nutrient content and a conversion factor for the edible amount of each species to get the amount of edible nutrient yield.
+
+I can then use age and sex-specific population data and the WHO RNI values to determine the amount of nutrients that would be needed to meet the needs of the entire population of the Philippines, and show how much of the total nutrient demand could be met by current and or expanded aquaculture prodcution of these species. 
+
+The FAO database has production values for _C. iredalei_, _P. viridis_, _K. alvarezii_, and _E. denticulatum_. I took the mean of the most recent five years of production data, 2017-2021. There are no additional bivalves in the FAO data for the Philippines, but there are two other types of seaweed--Gracilaria and Caulerpa. We can look at their nutrition content as well if desired. 
+
+Note that I haven't yet been able to determine if the FAO values are in wet/total weight or edible weight (i.e., does it include the shells of bivalves?). I'm assuming wet weight, so I'm using a conversion factor from the literature of 17% for bivalves. I don't have a conversion factor for seaweed so I'm just assuming 100% is edible for now. 
+
+
+```{r fao_aquaculture, echo = FALSE}
+
+# get an estimate of currently cultured species??
+# https://www.fao.org/fishery/statistics-query/en/aquaculture/aquaculture_quantity
+# assuming value is in tons
+# is it edible weight, or wet weight? assume wet weight, so multiplying by 0.17 for bivalves. assume all kelp is edible??
+
+
 # from digging in country_groups, philippines is PHL, identifier 171 (un code 608)
 
 # figure out species groups
-fao_aq_spp <- read.csv("Data/FAO_aquaculture/CL_FI_SPECIES_GROUPS.csv")
+fao_aq_spp <- read.csv("Data/FAO_aquaculture/CL_FI_SPECIES_GROUPS.csv") %>%
+  rename (spp_code = X3A_Code, species = Scientific_Name)
 
 # just list genus names
 ppn_genus <- word (cultured_spp, 1, 1)
 
 # https://www.statology.org/r-grepl-multiple-patterns/
 ppn_spp_codes <- fao_aq_spp %>%
-  filter (grepl(paste(ppn_genus, collapse = "|"), Scientific_Name, ignore.case = TRUE)) %>%
-  select (X3A_Code, Scientific_Name) %>%
-  rename (spp_code = X3A_Code)
+  filter (grepl(paste(ppn_genus, collapse = "|"), species, ignore.case = TRUE)) %>%
+  select (spp_code, species) 
 
 
 # select those species for ppines, last five years
@@ -160,6 +213,96 @@ ppn_aquaculture_qty <- fao_aq_qty %>%
   rename (spp_code = SPECIES.ALPHA_3_CODE) %>%
   left_join (ppn_spp_codes, by = "spp_code")
 
+# also look at other major aquaculture spp?
+ppn_major_aq_spp <- fao_aq_qty %>%
+   filter (COUNTRY.UN_CODE == 608, between (PERIOD, 2017, 2021)) %>%
+  rename (spp_code = SPECIES.ALPHA_3_CODE) %>%
+  group_by (spp_code) %>%
+  summarise (production = mean (VALUE, na.rm = TRUE)) %>%
+  arrange (desc (production)) %>%
+  left_join (select (fao_aq_spp, spp_code, species, Name_En), by = "spp_code")
 
+  
+
+# take average and calculate nutrition provisioning
+
+# current pop needs, 2017-2021
+ppn_pop_demand_current <- ppn_nutr_demand_agg %>%
+  filter (between (Time, 2017, 2021)) %>%
+  group_by (nutrient) %>%
+  summarise (nutr_annual_demand = mean (tot_nutr_annual_demand, na.rm = TRUE))
+
+current_pop_needs_met <- ppn_aquaculture_qty %>%
+  group_by (species) %>%
+  summarise (mn_production = mean (VALUE, na.rm = TRUE)) %>%
+  left_join (ppn_cultured_spp_nutr, by = "species") %>%
+  select (species, mn_production, nutrient, nutrient_units, amount) %>%
+  # convert to tons
+  mutate (
+    # assume bivalves are wet weight, use 0.17 conversion; assume seaweeds 100% edible?
+    p_edible = ifelse (species %in% c("Eucheuma denticulatum", "Kappaphycus alvarezii"), 1, 0.17),
+    scalar = case_when (
+            nutrient_units == "g" ~ 1,
+            nutrient_units == "mg" ~ 1/1000,
+            nutrient_units == "mcg" ~ 1/1e6),
+    nutr_yield_tons = mn_production * p_edible * amount * scalar / 100
+         ) %>%
+  left_join (ppn_pop_demand_current, by = "nutrient") %>%
+  mutate (prop_demand_met = nutr_yield_tons / nutr_annual_demand)
+```
+
+This chart shows the percent of the Philippines population's nutrient needs that could theoretically be met if all of the aquaculture production of these species was kept and consumed domestically. Note that _K. alvarezii_ dominates the graph; this is because there's currently way more production of this species (about two orders of magnitude more than the other species)
+
+```{r plot_current_pop_needs, echo = FALSE, fig.width = 7}
+
+current_pop_needs_met %>%
+  filter (!is.na(prop_demand_met)) %>%
+  #filter (!species == "Kappaphycus alvarezii") %>%
+  ggplot (aes (x = prop_demand_met * 100, y = nutrient, fill = species)) +
+  geom_col (position = "stack") +
+  theme_bw() +
+  labs (y = "", x = "Percent of population nutrient needs met with current production")
+```
+
+Here's that same chart but with _K. alvarezii_ removed, to better see the (much smaller!) contribution of the other species. 
+
+```{r plot_current_pop_needs_no_alvarezii, echo = FALSE, fig.width = 7}
+
+current_pop_needs_met %>%
+  filter (!is.na(prop_demand_met)) %>%
+  filter (!species == "Kappaphycus alvarezii") %>%
+  ggplot (aes (x = prop_demand_met * 100, y = nutrient, fill = species)) +
+  geom_col (position = "stack") +
+  theme_bw() +
+  labs (y = "", x = "Percent of population nutrient needs met with current production")
+```
+
+If you have estimates of how much additional production of these species you expect as a result of this grant, or want to communicate nutrition impacts in grant outcome reporting, we can translate that amount into the number of children, number of people, or percent of the population whose nutrient needs could be met from that production.
+
+In the meantime, here's another way of thinking about the nutrient contribution of these species and the nutritional possibilities for expanded production. These graphs show the amount (million tons) of each of these species that would meet 1% of the Philippines' current (2023) population's RNIs for a few key nutrients. 
+```{r prod_for_1perc_demand, echo = FALSE, , fig.width = 7}
+demand_1perc <- ppn_nutr_demand_agg %>% filter (Time == 2023) %>% mutate (demand_1perc = tot_nutr_annual_demand/100)
+
+c <- ppn_cultured_spp_nutr %>%
+  left_join (demand_1perc, by = "nutrient") %>%
+  select (species, nutrient, nutrient_units, amount, demand_1perc) %>%
+  distinct() %>%
+  # demand is in tons. then have to go backward, convert amount to tons and think about p_edible
+  mutate (scalar = case_when (
+            nutrient_units == "g" ~ 1,
+            nutrient_units == "mg" ~ 1000,
+            nutrient_units == "mcg" ~ 1e6),
+          p_edible = ifelse (species %in% c("Eucheuma denticulatum", "Kappaphycus alvarezii"), 1, 0.17),
+          tons_needed = demand_1perc * scalar * 100 / p_edible / amount
+  ) 
+
+
+c %>%
+  filter (nutrient %in% c("Calcium", "Folate", "Riboflavin", "Zinc")) %>%
+  ggplot (aes (x = tons_needed/1000000, y = species)) +
+  geom_col () +
+  facet_wrap (~nutrient, scales = "free_x") +
+  theme_bw() +
+  labs (y = "", x = "Production (million tons) needed to meet 1% of population nutrient needs")
 ```
 
