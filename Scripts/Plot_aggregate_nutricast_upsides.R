@@ -10,7 +10,7 @@ library (tidyverse)
 # expressed as catch ratios relative to base year for midcentury and end century, can multiply by landings
 catch_upside_relative <- readRDS("Data/nutricast_upside_relative.Rds")
 
-# averaged data for missing spp
+# averaged data for missing spp, scripts/check_SAU_nutricast_species
 catch_upside_relative_missing <- readRDS("Data/catch_upside_relative_repair_missing.Rds")
 
 catch_upside_relative_repaired <- 
@@ -27,49 +27,99 @@ chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
 
 # SAU data 
 # as of 10/25/22 just 2019 data, suggested by Deng Palomares. Clipped in SAU_explore.R
-sau_2019 <- readRDS("Data/SAU_2019.Rds") 
+sau_2019 <- readRDS("Data/SAU_2019.Rds")
+
+# request to plot current provisions 
 
 
 # Function to convert landings to ratio to children fed, by country ----
 # may need to specify division
-plot_nutr_upside_ratios <- function (country_name, Selenium = FALSE) {
+calc_nutr_upside_tonnes <- function (country_name) {
  
   if (country_name == "Chile") {
     landings <- chl_landings %>%
       filter (year == 2021) %>%
       group_by (species) %>%
-      summarise (total_tonnes = sum (catch_mt)) %>%
+      summarise (bau_current = sum (catch_mt)) %>%
       mutate (country = "Chile")
   } else {
     
     landings <- sau_2019 %>%
       filter (country == country_name) %>%
       group_by (country, species) %>%
-      summarise (total_tonnes = sum (tonnes))
+      summarise (bau_current = sum (tonnes))
   }
   
-  upside_ratios <- landings %>% left_join(catch_upside_relative_repaired, by = c ("country", "species")) %>%
-    mutate (# multiply ratio by current landings
-      across(bau_ratio_midcentury:adapt_ratio_endcentury, ~.x * total_tonnes),
-      #convert to upside, subtract 
-      mey_2050 = mey_ratio_midcentury - bau_ratio_midcentury,
-      mey_2100 = mey_ratio_endcentury - bau_ratio_endcentury,
-      adapt_2050 = adapt_ratio_midcentury - bau_ratio_midcentury,
-      adapt_2100 = adapt_ratio_endcentury - bau_ratio_endcentury) %>%
+ nutr_upside <- catch_upside_relative_repaired %>%
+    #okay. if I'm just trying to get the projected tons, makes sense to pivot longer, then multiply by current landings all in one go. but since I want to have the baseline value repeated across each scenario, going to mutate across, then pivot longer
+    inner_join (landings, by = c ("country", "species")) %>%
+   mutate (# multiply ratio by current landings
+     across(bau_ratio_midcentury:adapt_ratio_endcentury, ~.x * bau_current),
+     # make fake current columns
+     mey_current = bau_current,
+     adapt_current = bau_current) %>%
+     # remove "ratio" from column names, https://stackoverflow.com/questions/63459369/remove-prefix-letter-from-column-variables
+    rename_all (~stringr::str_replace(., "ratio_", "")) %>%
     
-    select (country, rcp, species, mey_2050:adapt_2100) %>%
-    pivot_longer(mey_2050:adapt_2100, 
-                 names_to = "upside",
-                 values_to = "tonnes") %>%
-    # get rid of non-matching species, NAs
-    filter (!is.na (rcp)) %>%
-    # convert to nutrients
-    mutate (children_fed = pmap (list (species = species, amount = tonnes, country_name = country), calc_children_fed_func)) %>%
-    unnest(cols = c(children_fed),  names_repair = "check_unique")
+    pivot_longer (-c(country, rcp, species),
+                  names_to = c("scenario", "period"),
+                  names_sep = "_",
+                  values_to = "tonnes"
+                  ) %>%
+   # get rid of non-matching species, NAs
+   filter (!is.na (rcp)) %>%
+   # convert to nutrients
+   mutate (children_fed = pmap (list (species = species, amount = tonnes, country_name = country), calc_children_fed_func)) %>%
+   unnest(cols = c(children_fed),  names_repair = "check_unique")
   
-  # fix ratios
-  upside_ratios$upside <- factor(upside_ratios$upside, levels = c ("mey_2050", "mey_2100", "adapt_2050", "adapt_2100"))
   
+      
+      # #convert to upside, subtract 
+      # mey_2050 = mey_ratio_midcentury - bau_ratio_midcentury,
+      # mey_2100 = mey_ratio_endcentury - bau_ratio_endcentury,
+      # adapt_2050 = adapt_ratio_midcentury - bau_ratio_midcentury,
+      # adapt_2100 = adapt_ratio_endcentury - bau_ratio_endcentury) %>%
+    
+  # fix levels
+ nutr_upside$scenario <- factor(nutr_upside$scenario, levels = c ("bau", "mey", "adapt"))
+ nutr_upside$period <- factor(nutr_upside$period, levels = c("current", "midcentury", "endcentury"))
+ 
+ return (nutr_upside)
+  
+}
+
+
+# plot as 3 point time series, line graph, scenario as color ----
+plot_nutr_absolutes_tonnes <- function (country_name) {
+  
+  upsides <- calc_nutr_upside_tonnes(country_name)
+  
+  q <- upsides %>%
+    group_by (country, rcp, scenario, period, nutrient) %>%
+    summarise (tot_fed = sum (children_fed, na.rm = TRUE)) %>%
+    filter (rcp == "RCP60", !nutrient == "Protein") %>%
+    filter (!nutrient == "Protein") %>%
+    ggplot (aes (x = factor(period), y = tot_fed/1000000, col = scenario, group = scenario)) +
+    geom_point() +
+    geom_line() +
+    facet_wrap (~nutrient) +
+    theme_bw() +
+    labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
+    ggtitle (paste0 ("Projected nutrient yield for ", country_name, ", RCP 6.0"))
+  
+}
+  
+
+a <- plot_nutr_absolutes_tonnes("Peru")
+a + 
+  theme (axis.text = element_text (size = 12),
+         axis.title = element_text (size = 14)) 
+
+c <- plot_nutr_absolutes_tonnes("Chile")
+  
+# plot as bar, just mey and adapt difference ----
+# have to retool and take subtractions
+plot_bar_nutr_upside_ratios <- function (country_name, Selenium = FALSE) {
   if (Selenium == TRUE) {
     upside_summary <- upside_ratios %>%
       group_by (rcp, upside, nutrient) %>%
