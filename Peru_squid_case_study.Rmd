@@ -73,7 +73,7 @@ library (ggradar)
 
 
 spp_rni_met <- compiled_nutr %>%
-  filter (species %in% c("Dosidicus gigas", "Trachurus murphyi", "Merluccius gayi peruanus", "Coryphaena hippurus", "Oncorhynchus tshawytscha")) %>%
+  filter (species %in% c("Dosidicus gigas", "Trachurus murphyi", "Merluccius gayi peruanus", "Coryphaena hippurus", "Oncorhynchus tshawytscha", "Sarda chiliensis", "Engraulis ringens", "Mugil cephalus", "Sciaena deliciosa")) %>%
   # join to rni data
   left_join (rni_child, by = "nutrient") %>%
   
@@ -115,7 +115,7 @@ ggradar(nutr_radar_plot,
 
 png ("Figures/Squid_nutr_dodge_bar_sm_salmon.png", width = 7, height = 4, units = "in", res = 300)
  spp_rni_met  %>%
-   filter (!nutrient %in% c("Protein", "Selenium")) %>%
+   filter (!nutrient %in% c("Protein", "Selenium"), !species %in% ("Oncorhynchus tshawytscha")) %>%
     group_by (species) %>%
 
     mutate (micronutrient_density = sum (perc_rni),
@@ -609,5 +609,61 @@ pri_spp_catch_upside <- ds_spp %>%
 
 
 pri_spp_catch_upside %>% filter (period == "2051-2060")
+```
+
+Just plot 3 point time series for d gigas nutrient provisioning
+```{r nutricast_3point_ts}
+# from plot_aggregate_nutricast_upsides
+# just plot d. gigas for peru 3 point
+# don't clip to domestic
+pota_catch_total <- sau_2019 %>% filter (country == "Peru", species == "Dosidicus gigas") %>%
+    group_by (country, species) %>% 
+  summarise (bau_current = sum (tonnes) )
+
+
+pota_nutr_upside <- catch_upside_relative_repaired %>%
+    #okay. if I'm just trying to get the projected tons, makes sense to pivot longer, then multiply by current landings all in one go. but since I want to have the baseline value repeated across each scenario, going to mutate across, then pivot longer
+    inner_join (pota_catch_total , by = c ("country", "species")) %>%
+   mutate (# multiply ratio by current landings
+     across(bau_ratio_midcentury:adapt_ratio_endcentury, ~.x * bau_current),
+     # make fake current columns
+     mey_current = bau_current,
+     adapt_current = bau_current) %>%
+     # remove "ratio" from column names, https://stackoverflow.com/questions/63459369/remove-prefix-letter-from-column-variables
+    rename_all (~stringr::str_replace(., "ratio_", "")) %>%
+    
+    pivot_longer (-c(country, rcp, species),
+                  names_to = c("scenario", "period"),
+                  names_sep = "_",
+                  values_to = "tonnes"
+                  ) %>%
+   # get rid of non-matching species, NAs
+   filter (!is.na (rcp)) %>%
+   # convert to nutrients
+   mutate (children_fed = pmap (list (species = species, amount = tonnes, country_name = country), calc_children_fed_func)) %>%
+   unnest(cols = c(children_fed),  names_repair = "check_unique")
+
+pota_nutr_upside$scenario <- factor(pota_nutr_upside$scenario, levels = c ("bau", "mey", "adapt"))
+ pota_nutr_upside$period <- factor(pota_nutr_upside$period, levels = c("current", "midcentury", "endcentury"))
+ 
+ 
+ png ("Figures/Peru_nutricast_upside_squid_3pt_ts_rcp26.png", width = 13, height = 7, units= "in", res = 300)
+  pota_nutr_upside %>%
+    group_by (country, rcp, scenario, period, nutrient) %>%
+    summarise (tot_fed = sum (children_fed, na.rm = TRUE)) %>%
+    filter (rcp == "RCP26", !nutrient == "Protein") %>%
+    filter (!nutrient == "Protein") %>%
+    ggplot (aes (x = factor(period), y = tot_fed/1000000, col = scenario, group = scenario)) +
+    geom_point() +
+    geom_line() +
+    facet_wrap (~nutrient) +
+    theme_bw() +
+    labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
+    ggtitle (paste0 ("Projected nutrient yield for D. gigas, RCP 2.6")) + 
+  theme (axis.text = element_text (size = 12),
+         axis.title = element_text (size = 14)) 
+dev.off()
+  
+
 ```
 
