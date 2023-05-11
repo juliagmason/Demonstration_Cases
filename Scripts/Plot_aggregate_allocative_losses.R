@@ -6,6 +6,7 @@
 
 library (tidyverse)
 library (stringr)
+library (ggsankey)
 
 # function for converting catch in mt to children fed ----
 source ("Scripts/Function_convert_catch_amt_children_fed.R")
@@ -24,6 +25,12 @@ peru_anchov_dhc <- sau_2015_2019 %>%
   filter (country == "Peru", fishing_entity == "Peru", year == 2018, species == "Engraulis ringens") %>%
   group_by (country, species, year) %>%
   summarise (prop_non_dhc = sum(tonnes[end_use_type == "Fishmeal and fish oil" & fishing_entity == "Peru"])/sum(tonnes[fishing_entity == "Peru"])) # 0.955
+
+# r <- sau_2015_2019 %>%
+#   filter (country == "Peru", species == "Engraulis ringens") %>%
+#   group_by (year, fishing_entity, fishing_sector) %>%
+#   summarise (prop_dhc = sum(tonnes[end_use_type == "Direct human consumption"])/sum(tonnes))%>%
+#   arrange (year, fishing_entity)
 
 peru_anchov_total_2019 <- sau_2015_2019 %>%
   filter (country == "Peru", fishing_entity == "Peru", year == 2019, species == "Engraulis ringens") %>%
@@ -55,6 +62,81 @@ exports_5yr_mean <- exports %>%
             exporter_iso3c == "SLE" ~ "Sierra Leone"
           ), .keep = "unused") 
 
+#########################################################################################
+# sankey diagrams ----
+# https://r-charts.com/flow/sankey-diagram-ggplot2/
+
+# start with end use, that one is most straightforward I think
+c <- sau_2019 %>%
+  filter (country == country_name) %>% 
+  group_by (species, end_use_type) %>%
+  summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
+  
+  # mutate hack, fix peru anchovy. multiply total domestic anchov production * proportion non dhc from 2018
+  mutate (catch_mt = case_when (
+    country_name == "Peru" & species == "Engraulis ringens" & end_use_type == "Fishmeal and fish oil" ~ peru_anchov_dhc$prop_non_dhc * peru_anchov_total_2019,
+    country_name == "Peru" & species == "Engraulis ringens" & end_use_type == "Direct human consumption" ~ (1 - peru_anchov_dhc$prop_non_dhc) * peru_anchov_total_2019,
+    TRUE ~ catch_mt),
+    children_fed = pmap (list (species = species, amount = catch_mt, country_name = country_name), calc_children_fed_func)
+  ) %>%
+  unnest (cols = c(children_fed)) %>%
+  rename (mt = catch_mt)
+
+c$end_use_type <- factor (c$end_use_type, levels = c ("Fishmeal and fish oil", "Other", "Direct human consumption"))
+
+# maybe need to make REALLY long? repeat the nutrient name 30873 times??
+
+# seems easier to do this with network D3
+#https://stackoverflow.com/questions/69780665/ggplot-sankey-diagram-of-income-to-expenses-ggsankey
+library (networkD3)
+library (plotly)
+
+# https://www.marsja.se/create-a-sankey-plot-in-r-ggplot2-plotly/
+# think this would be cleaner if we grouped by species
+c_group <- c %>%
+  filter (!nutrient == "Protein") %>%
+  group_by (nutrient, end_use_type) %>%
+  summarise (children_fed = sum (children_fed, na.rm = TRUE))
+
+nodes <- data.frame (name = unique (c(as.character(c_group$nutrient),
+                                    as.character(c_group$end_use_type)
+                                    )))
+
+# links df
+links <- data.frame(source = match(c_group$nutrient, nodes$name) - 1,
+                    target = match(c_group$end_use_type, nodes$name) - 1,
+                    value = c_group$children_fed,
+                    stringsAsFactors = FALSE)
+
+# https://community.plotly.com/t/changing-trace-colors-in-sankey/10691
+# https://plotly.com/python/reference/sankey/
+
+plot_ly(
+  type = "sankey",
+  orientation = "h",
+  node = list(pad = 15,
+              thickness = 20,
+              line = list(color = "black", width = 0.5),
+              label = nodes$name,
+              color = c("blue", "red", "purple", "orange", "brown", "green", "yellow", "gray", "black")),
+  link = list(source = links$source,
+              target = links$target,
+              value = links$value,
+              color = c(rep("blue", 3), rep("red", 3), rep("purple", 3), rep("orange", 3), rep("brown",3), rep("green",3), rep("yellow", 3), rep("gray", 3), rep("black", 3))),
+  textfont = list(size = 10),
+  width = 720,
+  height = 480) %>%
+  layout(title = "Sankey Diagram: End use type, Peru",
+         font = list(size = 14),
+         margin = list(t = 40, l = 10, r = 10, b = 10))
+
+# https://stackoverflow.com/questions/68449073/sankey-networkd3-set-link-colours-across-entire-flow
+# https://r-graph-gallery.com/322-custom-colours-in-sankey-diagram.html
+links$group <- as.factor (c())
+links$links.col <- as.factor(gsub(" ", "_", links$links.col))
+sankeyNetwork(Links = links, Nodes = nodes, Source = 'IDsource',
+              Target = 'IDtarget', Value = 'value', NodeID = 'name', 
+              LinkGroup="links.col", NodeGroup="node.col")
 
 # plot exports and foreign fishing----
 
