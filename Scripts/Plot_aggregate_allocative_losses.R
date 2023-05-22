@@ -138,6 +138,97 @@ sankeyNetwork(Links = links, Nodes = nodes, Source = 'IDsource',
               Target = 'IDtarget', Value = 'value', NodeID = 'name', 
               LinkGroup="links.col", NodeGroup="node.col")
 
+# try sierra leone foreign fishing and exports for dicastery----
+# assume exports are from domestic
+# exports doesn't fully capture
+
+# i'm trying to combine fishing entity and exports in a weird way... maybe try making separate databases and left joining
+sl_exports <- sau_2019 %>%
+  filter (country == "Sierra Leone", fishing_entity == "Sierra Leone") %>%
+  left_join (exports_5yr_mean, by = c("species", "country")) %>%
+  replace_na (list(mn_prop_exp = 0)) %>%
+  mutate (Exported = tonnes * mn_prop_exp,
+          Kept = tonnes * (1-mn_prop_exp)) %>%
+  ungroup() %>%
+  select (species, Exported, Kept) %>%
+  pivot_longer (-species,
+                names_to = "trade", 
+                values_to = "tonnes") %>%
+  mutate (fleet = "Domestic")
+
+sl_trade <- sau_2019 %>%
+  filter (country == "Sierra Leone") %>%
+  # need different column for foreign/domestic and exported
+  mutate (fleet = case_when (fishing_entity == "Sierra Leone" ~ "Domestic",
+                             fishing_entity != "Sierra Leone" ~ "Foreign fishing")
+          ) %>%
+  group_by (country, species, fleet) %>%
+  summarise (tonnes2 = sum (tonnes)) %>%
+  left_join (sl_exports, by = c ("species", "fleet")) %>%
+  mutate (tonnes = ifelse (is.na (tonnes), tonnes2, tonnes),
+          children_fed = pmap (list (species = species, amount = tonnes, country_name = "Sierra Leone"), calc_children_fed_func)) %>%
+  unnest (cols = c(children_fed))  %>%
+  group_by (fleet, trade, nutrient) %>%
+  summarise (tot_fed= sum (children_fed, na.rm = TRUE))
+
+
+
+sl_trade_group_sm <- sl_trade %>%
+  filter (nutrient %in% c("Protein", "Omega_3", "Zinc", "Calcium"))
+
+nodes <- data.frame (name = unique (c(as.character(sl_trade_group_sm$nutrient),
+                                      as.character(sl_trade_group_sm$fleet),
+                                      as.character(sl_trade_group_sm$trade)
+)))
+
+# links df
+links <- data.frame(source = match(sl_trade_group_sm$nutrient, nodes$name) - 1,
+                    target = match(sl_trade_group_sm$fleet, nodes$name) - 1,
+                    value = sl_trade_group_sm$tot_fed,
+                    stringsAsFactors = FALSE)
+
+# add second layer
+links <- rbind (links, 
+                data.frame(source = match(sl_trade_group_sm$fleet, nodes$name) - 1,
+                           target = match(sl_trade_group_sm$trade, nodes$name) - 1,
+                           value = sl_trade_group_sm$tot_fed,
+                           stringsAsFactors = FALSE)
+                )
+
+# https://r-graph-gallery.com/322-custom-colours-in-sankey-diagram.html
+
+# repeat each nutrient 3 times, then the 4 nutrients in a row 3 times
+links$group <- as.factor (c(rep(c("Protein", "Omega_3", "Calcium", "Zinc"), each = 3), rep(c("Protein", "Omega_3", "Calcium", "Zinc"), 3)))
+nodes$group <- as.factor(c("group"))
+
+my_color <- 'd3.scaleOrdinal() .domain(["Protein", "Omega_3", "Calcium", "Zinc" "group"]) .range(["green", "orange", "steelblue", "red", "grey"])'
+
+p <- sankeyNetwork(Links = links, Nodes = nodes, Source = "source", Target = "target", 
+                   Value = "value", NodeID = "name", 
+                   colourScale=my_color, LinkGroup="group", NodeGroup="group")
+
+p
+
+
+# https://stackoverflow.com/questions/46616321/modify-networkd3-sankey-plot-with-user-defined-colors
+
+plot_ly(
+  type = "sankey",
+  orientation = "h",
+  node = list(pad = 15,
+              thickness = 20,
+              line = list(color = "black", width = 0.5),
+              label = nodes$name),
+  link = list(source = links$source,
+              target = links$target,
+              value = links$value),
+  textfont = list(size = 10),
+  width = 720,
+  height = 480
+) %>%
+  layout(title = "Sierra Leone Nutrient Flows",
+         font = list(size = 14),
+         margin = list(t = 40, l = 10, r = 10, b = 10))
 # plot exports and foreign fishing----
 
 # assume foreign catch is separate from exports. that is, export proportions are for domestic catch
