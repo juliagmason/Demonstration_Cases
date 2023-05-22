@@ -55,7 +55,7 @@ catch_upside_relative_annual <-  ds_spp %>%
   filter (scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), catch_mt > 0, year > 2021) %>%
   left_join (ds_spp_baseline, by = c("country", "rcp", "scenario", "species")) %>%
   mutate (catch_ratio = catch_mt / baseline_catch) %>%
-  select (country, rcp, scenario, species, baseline_catch, catch_mt, catch_ratio)
+  select (country, rcp, scenario, year, species, baseline_catch, catch_mt, catch_ratio)
   
 
 saveRDS (catch_upside_relative_annual, file = "Data/nutricast_upside_relative_annual_ratio.Rds")
