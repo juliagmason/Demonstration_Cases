@@ -34,9 +34,16 @@ d_gigas_nutr <- data.frame (
 
 # afcd data for nonfish ----
 
+# something weird with taxa! some are plural some not!!
 nonfish_afcd_nutr <- readRDS("Data/nonfish_afcd_nutr_compiled.Rds") %>%
   select (species, nutrient, amount, taxa) %>%
-  filter (species != "Dosidicus gigas")
+  filter (species != "Dosidicus gigas") %>%
+  mutate (taxa = case_when (
+    taxa == "Cephalopods" ~ "Cephalopod",
+    taxa == "Crustaceans" ~ "Crustacean",
+    taxa == "Molluscs" ~ "Mollusc",
+    TRUE ~ taxa
+  ))
 
 
 
