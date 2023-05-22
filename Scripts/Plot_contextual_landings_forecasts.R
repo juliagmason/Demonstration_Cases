@@ -102,9 +102,9 @@ upside_chile <- filter(upside_ts_bau_agg, country == "Chile") %>% ungroup()
 png ("Figures/contextual_agg_catch_line_Chile.png", width = 6, height = 4, units = "in", res = 300)
 chl_landings_agg_clip %>% 
   ggplot (aes (x = year, y = tonnes/1000000)) +
-  geom_line(group = 1) +
+  geom_line(group = 1, lty = 2,) +
   geom_line (data = upside_chile, aes(x = year, y = tonnes/1000000, col = rcp)) +
-  geom_line (data = chl_landings_agg, aes (x = year, y = tonnes/1000000), lty = 2, group  =1) +
+  geom_line (data = chl_landings_agg, aes (x = year, y = tonnes/1000000),  group  =1) +
   theme_bw() +
   ggtitle ("Recent and projected total landings, Chile") +
   labs (y ="Catch, million tonnes", x = "", col = "Climate\nscenario")+
@@ -119,19 +119,15 @@ for (country_name in sau_countries) {
       filter (country == country_name) %>%
       group_by(year) %>%
       summarise (tonnes = sum (tonnes))
-    
-    upside <- upside_ts_bau_agg  %>% filter(country == country_name)
-    
-    total_sau <- filter(sau_10yr_agg, country == country_name)
-  
+
  p <-  sau_10yr_nutricast_clip %>%
    filter (country == country_name) %>%
    group_by(year) %>%
    summarise (tonnes = sum (tonnes)) %>%
     ggplot (aes (x = year, y = tonnes/1000000)) +
-    geom_line() +
+    geom_line(lty = 2) +
     geom_line (data = filter(upside_ts_bau_agg, country == country_name), aes(x = year, y = tonnes/1000000, col = rcp)) +
-    geom_line (data = filter (sau_10yr_agg, country == country_name), aes (x = year, y = tonnes/1000000), lty = 2) +
+    geom_line (data = filter (sau_10yr_agg, country == country_name), aes (x = year, y = tonnes/1000000)) +
    labs (y ="Catch, million tonnes", x = "", col = "Climate\nscenario")+
       theme (axis.text = element_text (size = 10),
              axis.title = element_text (size = 14),
@@ -143,3 +139,110 @@ png (paste0("Figures/contextual_agg_catch_line_", country_name,".png"), width = 
   print (p)
   dev.off()
 }
+
+
+######
+# by commercial group??
+sau_2019_taxa <- readRDS("Data/SAU_2019_taxa.Rds")
+
+sau_10yr_nutricast_clip %>%
+  filter (country == "Peru") %>%
+  group_by(year, commercial_group) %>%
+  summarise (tonnes = sum (tonnes)) %>%
+  ggplot (aes (x = year, y = tonnes, fill = commercial_group)) +
+  geom_area(position = "stack") +
+  theme_bw()
+
+
+upside_ts_bau_agg_comm_group <- catch_upside_ts %>%
+  filter (scenario == "No Adaptation") %>%
+  inner_join (sau_2019_taxa, by = "species") %>%
+  group_by (country, rcp, year, commercial_group) %>%
+  summarise (tonnes = sum (tonnes))
+
+upside_ts_bau_agg_comm_group %>%
+  filter (country == "Peru") %>%
+  ggplot (aes (x = year, y = tonnes, fill = commercial_group)) +
+  geom_area(position = "stack") +
+  theme_bw() +
+  facet_wrap (~rcp)
+
+
+sau_10yr_nutricast_clip %>%
+  filter (country == "Peru") %>%
+  group_by(year, commercial_group) %>%
+  summarise (tonnes = sum (tonnes)) %>%
+  ggplot (aes (x = year, y = tonnes, fill = commercial_group)) +
+  geom_area(position = "stack") +
+  theme_bw() +
+  geom_area(data = filter(upside_ts_bau_agg_comm_group, country == "Peru"), position = "stack") +
+  theme_bw() +
+  facet_wrap (~rcp)
+
+for (country_name in sau_countries) {
+  
+  p <-  sau_10yr_nutricast_clip %>%
+    filter (country == country_name) %>%
+    group_by(year, commercial_group) %>%
+    summarise (tonnes = sum (tonnes)) %>%
+    ggplot (aes (x = year, y = tonnes/1000000, fill = commercial_group), position = "stack") +
+    geom_area() +
+    geom_area (data = filter(upside_ts_bau_agg_comm_group, country == country_name), position = "stack") +
+    facet_wrap (~rcp) +
+    labs (y ="Catch, million tonnes", x = "", col = "Climate\nscenario")+
+    theme (axis.text = element_text (size = 10),
+           axis.title = element_text (size = 14),
+           plot.title = element_text(size = 18)) +
+    theme_bw() +
+    ggtitle (paste0("Recent and projected total landings, ", country_name))
+  
+  png (paste0("Figures/contextual_agg_catch_area_comm_group_", country_name,".png"), width = 6, height = 4, units = "in", res = 300)
+  print (p)
+  dev.off()
+}
+
+
+# Chile
+
+# try to trick color scale
+library(scales)
+show_col(hue_pal()(6))
+
+
+chl_landings_agg_clip_commgroup <- chl_landings %>%
+  mutate (country = "Chile") %>%
+  right_join (nutricast_spp, by = c("country", "species")) %>%
+  rename (commercial_group = taxa) %>%
+  group_by (year, commercial_group) %>%
+  summarise (tonnes = sum (catch_mt))%>%
+  filter (!is.na(year)) %>%
+  ungroup()%>%
+  mutate (year = as.integer(year))
+
+chl_groups <- 
+  chl_landings %>%
+  select (species, taxa) %>%
+  distinct () %>%
+  rename (commercial_group = taxa)
+
+upside_chile_groups <- catch_upside_ts %>%
+  filter (scenario == "No Adaptation", country == "Chile") %>%
+  inner_join (chl_groups, by = "species") %>%
+  group_by (country, rcp, year, commercial_group) %>%
+  summarise (tonnes = sum (tonnes))
+
+png ("Figures/contextual_agg_catch_area_comm_group_Chile.png", width = 6, height = 4, units = "in", res = 300)
+chl_landings_agg_clip_commgroup %>%
+  ggplot (aes (x = year, y = tonnes/1000000, fill = commercial_group)) +
+  geom_area(position = "stack") +
+  geom_area (data = upside_chile_groups, position = "stack") +
+  facet_wrap (~rcp) +
+  labs (y ="Catch, million tonnes", x = "", col = "Climate\nscenario")+
+  theme (axis.text = element_text (size = 10),
+         axis.title = element_text (size = 14),
+         plot.title = element_text(size = 18)) +
+  theme_bw() +
+  scale_fill_manual(values = c("#B79F00", "#00BA38", "#00BFC4", "#619CFF", "#F564E3")) +
+  ggtitle (paste0("Recent and projected total landings, ", "Chile"))
+
+dev.off()
