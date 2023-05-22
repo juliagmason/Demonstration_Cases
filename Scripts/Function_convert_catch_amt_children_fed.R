@@ -40,14 +40,16 @@ calc_children_fed_func <- function (species_name, amount_mt, country_name) {
               taxa == "Crustacean" ~ 0.36,
               taxa == "Mollusc" ~ 0.17,
               # GENuS/nutricast is 0.21 for cephalopods. Using 0.67, Bianchi et al. 2022 value for D. gigas; only cephalopod in our priority species. They also have a blanket 0.7 value for cephalopods.  
-              taxa == "Cephalopod" ~ 0.67,
-              taxa == "Other" ~ 1),
+              taxa == "Cephalopod" & species == "Dosidicus gigas" ~ 0.67,
+              taxa == "Cephalopod" & species != "Dosidicus gigas" ~ 0.21,
+              taxa == "Other" ~ 1,
+              taxa == "Algae" ~ 1),
             # convert tons per year to 100g /day, proportion edible
             edible_servings = catch_mt * p_edible * 1000 * 1000 /100 / 365,
             nutrient_servings = edible_servings * amount) %>%
     left_join (rni_child, by = "nutrient") %>%
-    mutate (children_fed = nutrient_servings / RNI) %>%
-    select (nutrient, children_fed)
+    mutate (rni_equivalents = nutrient_servings / RNI) %>%
+    select (nutrient, rni_equivalents)
   
 
 }
@@ -58,14 +60,16 @@ calc_children_fed_func <- function (species_name, amount_mt, country_name) {
 # s <- calc_children_fed_func ("Scylla serrata", "Crustacean", 55)
 #a <- calc_children_fed_func("Stolephorus", 1000, "Indonesia")
 
-ef_nutr <- calc_children_fed_func("Ethmalosa fimbriata",  128815, "Sierra Leone")
-
-png ("Figures/SL_Efim_children_fed.png", height = 4, width = 4, units = "in", res = 300)
-ef_nutr %>%
-  filter (!nutrient %in% c("Selenium", "Vitamin_A", "Iron")) %>%
-  ggplot (aes (x = reorder(nutrient, -children_fed), y= children_fed/1000000)) +
-  geom_col() +
-  theme_bw() +
-  theme (axis.text = element_text (size = 15)) +
-  labs (x = "", y = "")
-dev.off()
+#ef_nutr <- calc_children_fed_func("Ethmalosa fimbriata",  128815, "Sierra Leone")
+# alg <- calc_children_fed_func("Callophyllis variegata", 1000, "Chile")
+# oct <- calc_children_fed_func("Octopus vulgaris", 199, "Chile")
+# 
+# png ("Figures/SL_Efim_children_fed.png", height = 4, width = 4, units = "in", res = 300)
+# ef_nutr %>%
+#   filter (!nutrient %in% c("Selenium", "Vitamin_A", "Iron")) %>%
+#   ggplot (aes (x = reorder(nutrient, -children_fed), y= children_fed/1000000)) +
+#   geom_col() +
+#   theme_bw() +
+#   theme (axis.text = element_text (size = 15)) +
+#   labs (x = "", y = "")
+# dev.off()
