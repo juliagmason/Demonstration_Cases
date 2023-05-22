@@ -45,7 +45,8 @@ nonfish_afcd_nutr <- readRDS("Data/nonfish_afcd_nutr_compiled.Rds") %>%
     TRUE ~ taxa
   ))
 
-
+# also duplicates?
+nonfish_afcd_nutr <- nonfish_afcd_nutr[!duplicated(nonfish_afcd_nutr), ]
 
 
 compiled_nutr <- rbind (fishnutr_long, d_gigas_nutr, nonfish_afcd_nutr)
