@@ -190,7 +190,64 @@ nutricast_repair <- nutricast_missing_spp %>%
 
 saveRDS(nutricast_repair, file = "Data/catch_upside_relative_repair_missing.Rds")
 
+# also do this with annual ts ----
+nutricast_annual <- readRDS ("Data/nutricast_upside_relative_annual_ratio.Rds")
 
+
+nutricast_annual_fam <- nutricast_annual %>%
+  left_join (nutricast_fams, by = "species") %>%
+  # grab Genus even if not in fishbase
+  mutate (Genus = 
+            case_when (is.na (Genus) ~ word(species, 1),
+                       TRUE ~ Genus)
+  )
+
+# for this one we only need to mutate one column, catch_ratio
+match_nutricast_taxa_annual <- function (species_name, country_name) {
+  # send SAU species name into nutricast df
+  
+  catch_upside_country <- nutricast_annual_fam %>%
+    filter (country == country_name) 
+  
+  # if identified to species level, clip to Genus
+  if (grepl(" ", species_name)) {species_name = word(species_name, 1)}
+  
+  # if identified at family level, choose family
+  if (grepl ("ae", str_sub(species_name, -2, -1))) {
+    match <- filter (catch_upside_country, Family == species_name)
+    
+    match_mean <- match %>%
+      group_by (rcp, scenario, year, Family) %>%
+      # take mean of all the ratio columns
+      summarise (catch_ratio = mean (catch_ratio, na.rm = TRUE)) %>%
+      #rename (species = Family) %>%
+      # remove to avoid name duplication
+      select (-Family)
+    
+    
+  } else {
+    match <- filter (catch_upside_country, Genus == species_name)
+    
+    match_mean <- match %>%
+      group_by (rcp, scenario, year, Genus) %>%
+      # take mean of all the ratio columns
+      summarise (catch_ratio = mean (catch_ratio, na.rm = TRUE)) %>%
+      #rename (species = Genus)
+      select (-Genus)
+    
+  }
+  
+  
+  return (tibble(match_mean))
+  
+}
+
+nutricast_repair_annual <- nutricast_missing_spp %>%
+  mutate (nutricast = pmap(list(species_name = species, country_name = country), match_nutricast_taxa_annual)
+  ) %>% 
+  unnest (cols = c(nutricast), names_repair = "check_unique")
+
+saveRDS(nutricast_repair_annual, file = "Data/nutricast_upside_relative_annual_repair_missing.Rds")
 #######################################################################################
 
 # Peru, SAU ----
