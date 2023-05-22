@@ -29,7 +29,7 @@ chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
 # as of 10/25/22 just 2019 data, suggested by Deng Palomares. Clipped in SAU_explore.R
 sau_2019 <- readRDS("Data/SAU_2019.Rds")
 
-# request to plot current provisions 
+# request to plot current provisioning
 
 
 # Function to convert landings to ratio to children fed, by country ----
@@ -111,12 +111,121 @@ plot_nutr_absolutes_tonnes <- function (country_name) {
   
 
 a <- plot_nutr_absolutes_tonnes("Peru")
+
+png("Figures/nutricast_3pt_ts_Peru_free.png", width = 6.5, height = 4, units = "in", res = 300)
 a + 
-  theme (axis.text = element_text (size = 12),
+  facet_wrap (~ nutrient, scales = "free_y") +
+  scale_x_discrete (labels = c ("current", "2050s", "2090s")) +
+  theme (axis.text = element_text (size = 10),
          axis.title = element_text (size = 14)) 
+dev.off()
 
 c <- plot_nutr_absolutes_tonnes("Chile")
+png("Figures/nutricast_3pt_ts_Chile_free.png", width = 6.5, height = 4, units = "in", res = 300)
+c + 
+  facet_wrap (~ nutrient, scales = "free_y") +
+  scale_x_discrete (labels = c ("current", "2050s", "2090s")) +
+  theme (axis.text = element_text (size = 10),
+         axis.title = element_text (size = 14)) 
+dev.off()
+
+i <- plot_nutr_absolutes_tonnes("Indonesia")
+png("Figures/nutricast_3pt_ts_Indo_free.png", width = 6.5, height = 4, units = "in", res = 300)
+i + 
+  facet_wrap (~ nutrient, scales = "free_y") +
+  scale_x_discrete (labels = c ("current", "2050s", "2090s")) +
+  theme (axis.text = element_text (size = 10),
+         axis.title = element_text (size = 14)) 
+dev.off()
+
+sl <- 
+  i <- plot_nutr_absolutes_tonnes("Sierra Leone")
+png("Figures/nutricast_3pt_ts_SL_free.png", width = 6.5, height = 4, units = "in", res = 300)
+sl + 
+  facet_wrap (~ nutrient, scales = "free_y") +
+  scale_x_discrete (labels = c ("current", "2050s", "2090s")) +
+  theme (axis.text = element_text (size = 10),
+         axis.title = element_text (size = 14)) 
+dev.off()
+
+# plot as full time series ----
+# these are identical for the nutrients....
+# annual nutricast time series
+catch_upside_annual <- readRDS ("Data/nutricast_upside_relative_annual_ratio.Rds")
+# repaired missing species, this is in a slightly different format (check_sau_nutricast_species.R)
+catch_upside_annual_repaired <- readRDS("Data/nutricast_upside_relative_annual_repair_missing.Rds")
+
+# define baselines, join sau and chl data
+sau_baseline <- sau_2019 %>%
+  filter (!country == "Chile") %>%
+  group_by (country, species) %>%
+  summarise (bl_tonnes = sum (tonnes))
+
+full_baseline <- chl_landings %>%
+  filter (year == 2021) %>%
+  mutate (country = "Chile") %>%
+  group_by (country, species) %>%
+  summarise (bl_tonnes = sum (catch_mt)) %>%
+  rbind (sau_baseline)
+
+# multiply ratio by baseline
+catch_upside_ts <- catch_upside_annual %>%
+  select (country, species, rcp, scenario, year, catch_ratio) %>%
+  rbind(catch_upside_annual_repaired) %>%
+  # join to baseline
+  inner_join(full_baseline, by = c ("country", "species")) %>%
+  mutate (tonnes = catch_ratio * bl_tonnes)
+
+
+# function to convert to rni equiv
+calc_nutr_upside_tonnes_annual <- function (country_name) {
   
+  nutr_upside_annual <- catch_upside_ts %>%
+    filter (country == country_name) %>%
+    filter (!is.na (rcp)) %>%
+    # convert to nutrients
+    mutate (children_fed = pmap (list (species = species, amount = tonnes, country_name = country), calc_children_fed_func)) %>%
+    unnest(cols = c(children_fed),  names_repair = "check_unique")
+ 
+  # fix levels
+  nutr_upside_annual$scenario <- factor(nutr_upside_annual$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
+  
+  return (nutr_upside_annual)
+  
+}
+
+
+
+q <- nutr_upside_annual %>%
+  group_by (rcp, scenario, year, nutrient) %>%
+  summarise (tot_fed = sum (children_fed, na.rm = TRUE)) %>%
+  filter (rcp == "RCP60", !nutrient == "Protein") %>%
+  filter (!nutrient == "Protein") %>% View()
+  ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
+  #geom_point() +
+  geom_line() +
+  facet_wrap (~nutrient, scales = "free_y") +
+  theme_bw() +
+  labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
+  ggtitle (paste0 ("Projected nutrient yield for ", country_name, ", RCP 6.0"))
+  
+  saveRDS(nutr_upside_annual, file = "Data/annual_nutr_upside_chile_TEMP.Rds")
+
+indo <-   calc_nutr_upside_tonnes_annual ("Indonesia"); beep()
+saveRDS(indo, file = "Data/annual_nutr_upside_indo_TEMP.Rds")
+
+indo %>%
+  group_by (rcp, scenario, year, nutrient) %>%
+  summarise (tot_fed = sum (children_fed, na.rm = TRUE)) %>%
+  filter (rcp == "RCP60", !nutrient == "Protein") %>%
+ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
+  #geom_point() +
+  geom_line() +
+  facet_wrap (~nutrient, scales = "free_y") +
+  theme_bw() +
+  labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
+  ggtitle ("Projected nutrient yield for Indonesia, RCP 6.0")
+
 # plot as bar, just mey and adapt difference ----
 # have to retool and take subtractions
 plot_bar_nutr_upside_ratios <- function (country_name, Selenium = FALSE) {
