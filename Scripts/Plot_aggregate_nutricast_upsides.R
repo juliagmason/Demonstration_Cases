@@ -153,7 +153,14 @@ dev.off()
 # annual nutricast time series
 catch_upside_annual <- readRDS ("Data/nutricast_upside_relative_annual_ratio.Rds")
 # repaired missing species, this is in a slightly different format (check_sau_nutricast_species.R)
-catch_upside_annual_repaired <- readRDS("Data/nutricast_upside_relative_annual_repair_missing.Rds")
+catch_upside_annual_missing <- readRDS("Data/nutricast_upside_relative_annual_repair_missing.Rds")
+
+# join
+catch_upside_annual_repaired <- catch_upside_annual %>%
+  #match columns from missing species
+  select (country, species, rcp, scenario, year, catch_ratio) %>%
+  rbind (catch_upside_annual_missing)
+
 
 # define baselines, join sau and chl data
 sau_baseline <- sau_2019 %>%
@@ -169,9 +176,7 @@ full_baseline <- chl_landings %>%
   rbind (sau_baseline)
 
 # multiply ratio by baseline
-catch_upside_ts <- catch_upside_annual %>%
-  select (country, species, rcp, scenario, year, catch_ratio) %>%
-  rbind(catch_upside_annual_repaired) %>%
+catch_upside_ts <- catch_upside_annual_repaired %>%
   # join to baseline
   inner_join(full_baseline, by = c ("country", "species")) %>%
   mutate (tonnes = catch_ratio * bl_tonnes)
@@ -184,8 +189,8 @@ calc_nutr_upside_tonnes_annual <- function (country_name) {
     filter (country == country_name) %>%
     filter (!is.na (rcp)) %>%
     # convert to nutrients
-    mutate (children_fed = pmap (list (species = species, amount = tonnes, country_name = country), calc_children_fed_func)) %>%
-    unnest(cols = c(children_fed),  names_repair = "check_unique")
+    mutate (rni_equivalents = pmap (list (species = species, amount = tonnes, country_name = country), calc_children_fed_func)) %>%
+    unnest(cols = c(rni_equivalents),  names_repair = "check_unique")
  
   # fix levels
   nutr_upside_annual$scenario <- factor(nutr_upside_annual$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
@@ -212,11 +217,11 @@ q <- nutr_upside_annual %>%
   saveRDS(nutr_upside_annual, file = "Data/annual_nutr_upside_chile_TEMP.Rds")
 
 indo <-   calc_nutr_upside_tonnes_annual ("Indonesia"); beep()
-saveRDS(indo, file = "Data/annual_nutr_upside_indo_TEMP.Rds")
+saveRDS(indo, file = "Data/annual_nutr_upside_indo.Rds")
 
-indo %>%
+chl %>%
   group_by (rcp, scenario, year, nutrient) %>%
-  summarise (tot_fed = sum (children_fed, na.rm = TRUE)) %>%
+  summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
   filter (rcp == "RCP60", !nutrient == "Protein") %>%
 ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
   #geom_point() +
@@ -226,6 +231,66 @@ ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
   labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
   ggtitle ("Projected nutrient yield for Indonesia, RCP 6.0")
 
+indo %>%
+group_by (rcp, scenario, year, nutrient) %>%
+  summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
+  filter (rcp == "RCP60", !nutrient %in% c("Protein","Selenium")) %>%
+  ggplot (aes (x = year, y = tot_fed/1000000, col = nutrient, group = nutrient)) +
+  #geom_point() +
+  geom_line() +
+  facet_wrap (~scenario, scales = "free_y") +
+  theme_bw() +
+  labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
+  ggtitle ("Projected nutrient yield for Indonesia, RCP 6.0")
+
+peru <-   calc_nutr_upside_tonnes_annual ("Peru"); beep()
+saveRDS(peru, file = "Data/annual_nutr_upside_peru.Rds")
+
+sl <-   calc_nutr_upside_tonnes_annual ("Sierra Leone"); beep()
+saveRDS(sl, file = "Data/annual_nutr_upside_sl.Rds")
+
+chl <-   calc_nutr_upside_tonnes_annual ("Chile"); beep()
+saveRDS(chl, file = "Data/annual_nutr_upside_chile.Rds")
+############################################################################
+# WHY is 3 point showing different dynamics for different nutrients?!?!?
+# indonesia is an example, vitamin A very different than the others
+# looking at one species, bau is same but adapt/mey is different. HUGE ratios for non-bau scenarios. 
+
+#NOW it works
+
+indo6 <- catch_upside_relative_repaired %>%
+  filter (country == "Indonesia", rcp == "RCP60")
+
+#is this consistent if I take averages of annual?
+indo6_annual_recreate <- catch_upside_annual_repaired %>%
+  filter (country == "Indonesia", rcp == "RCP60") %>%
+  mutate (
+    # baseline and mid century and end century
+    period = case_when (
+      year %in% c(2012:2021) ~ "2012-2021",
+      year %in% c(2051:2060) ~ "2051-2060",
+      year %in% c(2091:2100) ~ "2091-2100")) %>%
+
+  filter (!is.na (period)) %>%
+  group_by (country, rcp, scenario, period, species) %>%
+  summarise (mean_ratio = mean (catch_ratio, na.rm = TRUE))
+
+indo6 %>% filter (species == "Lutjanus")
+indo6_annual_recreate %>% filter (species == "Lutjanus")
+
+
+
+
+
+
+
+
+
+
+
+
+
+############################################################################
 # plot as bar, just mey and adapt difference ----
 # have to retool and take subtractions
 plot_bar_nutr_upside_ratios <- function (country_name, Selenium = FALSE) {
