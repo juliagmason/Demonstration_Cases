@@ -46,10 +46,19 @@ catch_upside_relative %>%
 
 # probably can do this with brackets but just make a baseline value separately
 ds_spp_baseline <- ds_spp %>%
-  filter (scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), catch_mt > 0, between (year, 2012, 2021)) %>%
+  filter (scenario %in% "No Adaptation", catch_mt > 0, between (year, 2012, 2021)) %>%
   group_by (country, rcp, scenario, species) %>%
   summarise (baseline_catch = mean (catch_mt, na.rm = TRUE)) %>%
   ungroup()
+
+# then need to make 2 more fake ones with the other scenarios??
+ds_spp_baseline_mey <- ds_spp_baseline %>%
+  mutate (scenario = "Productivity Only")
+
+ds_spp_baseline_adapt <- ds_spp_baseline %>%
+  mutate (scenario = "Full Adaptation")
+
+ds_spp_baseline <- rbind (ds_spp_baseline, ds_spp_baseline_mey, ds_spp_baseline_adapt)
   
 catch_upside_relative_annual <-  ds_spp %>%
   filter (scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), catch_mt > 0, year > 2021) %>%
@@ -60,7 +69,8 @@ catch_upside_relative_annual <-  ds_spp %>%
 
 saveRDS (catch_upside_relative_annual, file = "Data/nutricast_upside_relative_annual_ratio.Rds")
 # need to fix SAU missing species, check_SAU_nutricast_Species
-
+# did this 5/22/23 in check_sau_nutricast_species, but only saved catch_ratio, i think this is all that I need
+# "Data/nutricast_upside_relative_annual_repair_missing.Rds"
 
 ######################################
 
