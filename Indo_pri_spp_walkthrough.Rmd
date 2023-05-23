@@ -106,9 +106,38 @@ sau_indo_2019 %>%
 
 write out nutrition facts for L. gibbus
 ```{r}
-fishnutr_long %>%
+compiled_nutr %>%
   filter (species == "Lutjanus gibbus") %>%
   left_join(rni_child, by = "nutrient") %>%
   mutate (perc_rni = amount/RNI * 100)
+```
+```{r L_GIBBUS_landings}
+# plot most recent landings, highlighting l gibbus
+
+ lg_sector <- sau_indo %>%
+  rename (species = scientific_name) %>%
+  filter (between (year, 2010, 2019), !species == "Marine fishes not identified") %>%
+  mutate(snapper = case_when(species == "Lutjanus" ~ "Lutjanus",
+                             TRUE ~ "Other")
+         )%>% 
+  group_by (snapper, year) %>%
+  summarise (tonnes = sum(tonnes)) %>%
+  ggplot (aes (x = year, y = tonnes, fill = snapper)) +
+  geom_area(position = "stack")
+
+png ("Figures/Indo_snapper_catch_ts.png", width = 4, height = 4, units = "in", res = 300)
+sau_indo %>%
+  rename (species = scientific_name) %>%
+  filter (between (year, 2010, 2019), species == "Lutjanus") %>%
+  group_by (year) %>%
+  summarise (tonnes = sum(tonnes)) %>%
+  ggplot (aes (x = year, y = tonnes/1000)) +
+  geom_area(fill = "grey70") +
+   theme_bw() +
+   scale_x_continuous(name = "", breaks = c(2010, 2014, 2018)) +
+   theme (axis.text = element_text (size = 16)) +
+   labs (y = "")
+dev.off()
+
 ```
 
