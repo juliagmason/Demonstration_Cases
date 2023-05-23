@@ -88,13 +88,13 @@ chl_landings_spp <- chl_landings %>%
   select (country, species) %>%
   distinct()
 
-sau_peru <- sau_2019_country_spp %>% filter (country == "Peru")
-
-peru_nutricast_missing <- nutricast_peru %>% 
-  filter (!species %in% sau_peru$species)
-
-peru_sau_missing <- sau_peru %>%
-  filter (!species %in% nutricast_peru $species)
+# sau_peru <- sau_2019_country_spp %>% filter (country == "Peru")
+# 
+# peru_nutricast_missing <- nutricast_peru %>% 
+#   filter (!species %in% sau_peru$species)
+# 
+# peru_sau_missing <- sau_peru %>%
+#   filter (!species %in% nutricast_peru $species)
 
 
 
@@ -136,23 +136,23 @@ match_nutricast_taxa <- function (species_name, country_name) {
   
 }
 
-match_nutricast_taxa("Caranx", "Peru")
+# match_nutricast_taxa("Caranx", "Peru")
+# 
+# peru_match_taxa_nutricast <- peru_sau_missing %>%
+#   mutate (nutricast = pmap(list(species_name = species, country = "Peru"), match_nutricast_taxa)
+#   ) %>% 
+#   unnest (cols = c(nutricast), names_repair = "check_unique")
+# 
+# length (unique (peru_match_taxa_nutricast$species)) # 17 of 65
 
-peru_match_taxa_nutricast <- peru_sau_missing %>%
-  mutate (nutricast = pmap(list(species_name = species, country = "Peru"), match_nutricast_taxa)
-  ) %>% 
-  unnest (cols = c(nutricast), names_repair = "check_unique")
-
-length (unique (peru_match_taxa_nutricast$species)) # 17 of 65
-
-# can I combine missing and non-missing
-mega_peru <- sau_peru %>%
-  left_join (catch_upside_relative, by = c("country", "species")) %>%
-  mutate (nutricast = case_when (
-    is.na (rcp) ~ pmap(list(species_name = species, country = "Peru"), match_nutricast_taxa), 
-    TRUE ~ "NA"
-  ))
-# no...
+# # can I combine missing and non-missing
+# mega_peru <- sau_peru %>%
+#   left_join (catch_upside_relative, by = c("country", "species")) %>%
+#   mutate (nutricast = case_when (
+#     is.na (rcp) ~ pmap(list(species_name = species, country = "Peru"), match_nutricast_taxa), 
+#     TRUE ~ "NA"
+#   ))
+# # no...
 
 # what is a smooth way of doing this all at once? making the missing data with 
 check_missing_nutricast_spp <- function (country_name) {
@@ -176,9 +176,9 @@ check_missing_nutricast_spp <- function (country_name) {
   
 }
   
-i <- check_missing_nutricast_spp("Indonesia")
-c <- check_missing_nutricast_spp("Chile")
-
+# i <- check_missing_nutricast_spp("Indonesia")
+# c <- check_missing_nutricast_spp("Chile")
+# 
 
 
 nutricast_missing_spp <- map_dfr(as.list (c("Chile", "Peru", "Indonesia", "Sierra Leone")), check_missing_nutricast_spp)
