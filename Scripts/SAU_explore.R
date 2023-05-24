@@ -19,7 +19,7 @@ indo_2019_download_full <- read.csv("Data/SAU EEZ indonesia.csv") %>%
 
 download_older_full <- read.csv ("Data/SAU_EEZ_landings.csv")
 
-sau_2019 <- readRDS("DAta/SAU_2019.Rds")
+sau_2019 <- readRDS("Data/SAU_2019.Rds")
 
 unique (download_2019_full$end_use_type)
 unique (download_older_full$end_use_type)
@@ -105,78 +105,9 @@ plot_sau_landings_one_spp <- function (country_name, species_name, year) {
 } 
   
 
-sau_indo <- read.csv("Data/SAU EEZ indonesia.csv") %>% 
-  filter (year == 2019) %>%
-  mutate (country = "Indonesia") %>%
-  rename (species = scientific_name) %>%
-  group_by (country, species, year, fishing_sector, fishing_entity, end_use_type) %>%
-  summarise (tonnes = sum(tonnes),
-             landed_value = sum(landed_value))
 
-sau_2019 <- read.csv("Data/SAU EEZ 2019.csv") %>%
-  filter (year == 2019) %>%
-  mutate (country = case_when(
-    grepl("Indo", area_name) ~ "Indonesia",
-    grepl ("Mex", area_name) ~ "Mexico",
-    area_name == "Chile (mainland)" ~ "Chile",
-    TRUE ~ area_name)
-  ) %>%
-  rename (species = scientific_name) %>%
-  group_by (country, species, year, fishing_sector, fishing_entity, end_use_type) %>%
-  summarise (tonnes = sum(tonnes),
-             landed_value = sum(landed_value))
 
-sau_2019 <- rbind (sau_2019, sau_indo)
 
-saveRDS (sau_2019, file = "Data/SAU_2019.Rds")
-
-# make species to taxa conversion df ----
-c <- read.csv("Data/SAU EEZ 2019.csv")
-indo <-  read.csv("Data/SAU EEZ indonesia.csv")
-
-c <- rbind (c, indo)
-
-# other fishes and inverts... fish except cephalopods, "other demersal invertebrates", jellyfish
-
-# remaining: urchins, echinoderms, sea cucumbers
-# Loxechinus albus
-# Pyura chilensis
-# Miscellaneous aquatic invertebrates
-# Athyonidium chilensis -- sea cucumber
-# Holothuriidae	
-# Echinodermata
-# Stichopus
-other_sau <- c %>% filter (functional_group == "Other demersal invertebrates" & commercial_group == "Other fishes & inverts") %>% pull (scientific_name) %>% unique()
-
-sau_2019_taxa <- c %>%
-  select (scientific_name, commercial_group, functional_group) %>%
-  distinct () %>%
-  mutate (taxa = case_when (
-    commercial_group == "Molluscs" & !functional_group %in% c("Cephalopods", "Jellyfish") ~ "Mollusc",
-    functional_group == "Cephalopods" ~ "Cephalopod",
-    commercial_group == "Crustaceans" ~ "Crustacean",
-    functional_group == "Jellyfish" ~ "Other",
-    scientific_name %in% other_sau   ~ "Other",
-    TRUE ~ "Finfish"
-  )) %>%
-  rename (species = scientific_name)
-
-saveRDS (sau_2019_taxa, file = "Data/SAU_2019_taxa.Rds")
-
-sau_2015_2019 <- read.csv("Data/SAU EEZ 2019.csv") %>%
-  filter (between(year,2015,2019)) %>%
-  mutate (country = case_when(
-    grepl("Indo", area_name) ~ "Indonesia",
-    grepl ("Mex", area_name) ~ "Mexico",
-    area_name == "Chile (mainland)" ~ "Chile",
-    TRUE ~ area_name)
-  ) %>%
-  rename (species = scientific_name) %>%
-  group_by (country, species, year, fishing_sector, fishing_entity, end_use_type) %>%
-  summarise (tonnes = sum(tonnes),
-             landed_value = sum(landed_value))
-
-saveRDS(sau_2015_2019, file = "Data/SAU_2015_2019.Rds")
 
 sau_2015_2019 %>%
   ggplot (aes (x = year, y = tonnes, fill = fishing_sector)) +
