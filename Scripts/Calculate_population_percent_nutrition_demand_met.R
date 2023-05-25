@@ -14,15 +14,15 @@ library (tidyverse)
 # based on EARs and excludes children
 # this is per year, has been multiplied by 365
 
-# full rnis, not just child
-# rni.rds emailed by Rachel Zuercher on 5 oct 2022
-rni <- readRDS("Data/RNI.RDA.Rds")
-# add folate and riboflavin for philippines 5/5/23
-rni <- rni %>%
-  mutate (Folate_mcg_day = c(rep(c(80,80,150,200,300,400,400,400, 400),each = 2), rep(c(600,500), each = 3)),
-          Riboflavin_mg_day = c(rep(c(0.3, 0.4, 0.5, 0.6, 0.9), each = 2), c(1, 1.3, 1.1, 1.1, 1.3, 1.3, 1.1, 1.3), rep (c(1.4, 1.6), each = 3))
-  )
-
+# # full rnis, not just child
+# # rni.rds emailed by Rachel Zuercher on 5 oct 2022
+# rni <- readRDS("Data/RNI.RDA.Rds")
+# # add folate and riboflavin for philippines 5/5/23
+# rni <- rni %>%
+#   mutate (Folate_mcg_day = c(rep(c(80,80,150,200,300,400,400,400, 400),each = 2), rep(c(600,500), each = 3)),
+#           Riboflavin_mg_day = c(rep(c(0.3, 0.4, 0.5, 0.6, 0.9), each = 2), c(1, 1.3, 1.1, 1.1, 1.3, 1.3, 1.1, 1.3), rep (c(1.4, 1.6), each = 3))
+#   )
+# 
 
 # 
 # # updated WPP data
@@ -147,7 +147,10 @@ rni <- rni %>%
 # if running from here:
 wpp_country_aggregate <- readRDS("Data/annual_nutr_demand_rni_by_country.Rds")
 
+# clean_compile_SAU_2019.R
 sau_2019 <- readRDS("Data/SAU_2019.Rds")
+sau_2019_taxa <- readRDS(("Data/SAU_2019_taxa.Rds"))
+
 #Clean_Chile_Sernapesca_landings.R
 chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
 
@@ -197,7 +200,7 @@ convert_catch_to_nutr_tons <- function (species_name, catch_mt, country_name) {
 }
 
 
-# convert catch to proprotion of population demand met in a given time period
+# convert catch to proportion of population demand met in a given time period from current landings
 calculate_prop_demand_met <- function (country_name, year) {
   # year can be a range, e.g. 2051:2060
   
@@ -242,64 +245,109 @@ x <- calculate_prop_demand_met("Indonesia", 2022)
 
 h <- calculate_prop_demand_met("Indonesia", 2051:2060)
 
+h <- calculate_prop_demand_met("Peru", 2022)
+
 
 # plot current landings ----
 
-# plot by commercial group?
-# bring back in sau_2019_taxa for groups
-sau_2019_taxa <- readRDS("Data/SAU_2019_taxa.Rds")
+# plot bar graph showing % population demand met, by commercial group
 
-peru_demand_current <- pop_proj_req_supply %>%
-  filter (country == "Peru", year == 2020) %>%
-  mutate (nutrient = case_when (nutrient == "Vitamin A" ~ "Vitamin_A",
-                                TRUE ~ nutrient))
+plot_agg_bar_pop_needs_met <- function (country_name) {
+  
+  if (country_name == "Chile") {
+    
+    landings <- chl_landings %>%
+      filter (year == 2021) %>%
+      mutate (country = "Chile") %>%
+      rename (commercial_group = taxa, tonnes = catch_mt)
+    
+  } else {
+    
+    landings <- sau_2019 %>%
+      filter(country == country_name) %>%
+      left_join (sau_2019_taxa, by = "species")
+     
+  }
+  
+  
+  pop_needs <- landings %>%
+    group_by (country, species, commercial_group) %>%
+    summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
+    mutate (nutr_tonnes = pmap (list (species_name = species, catch_mt = catch_mt, country_name = country_name), convert_catch_to_nutr_tons)) %>%
+    unnest(cols = c(nutr_tonnes),  names_repair = "check_unique") %>%
+    left_join (filter(wpp_country_aggregate, Time == 2019), by = c("nutrient", "country")) %>%
+    mutate (prop_demand_met = nutr_tonnes / tot_nutr_annual_demand) %>%
+    group_by (nutrient, commercial_group) %>%
+    summarise (prop_demand_met = sum (prop_demand_met, na.rm = TRUE)) 
+  
+  
+  
+  p <- pop_needs %>%
+    filter (!nutrient %in% c("Selenium", "Protein")) %>% 
+    ggplot (aes (x = nutrient, y = prop_demand_met*100, fill = commercial_group)) +
+    geom_col() +
+    theme_bw() +
+    ggtitle (paste0("Proportion of population demand met\nMost recent year of landings, ", country_name)) +
+    labs (x = "", y = "% population RNI equiv.", fill = "Comm. group") +
+    theme (
+      axis.text.y = element_text (size = 13),
+      axis.text.x = element_text (size = 11),
+      axis.title = element_text (size = 16),
+      legend.text = element_text (size = 10),
+      legend.title = element_text (size = 12),
+      plot.title = element_text (size = 18)
+    )
+  
+  return (p)
+  
+}
 
-a <- sau_2019 %>%
-  filter(country == "Peru") %>%
-  left_join (sau_2019_taxa, by = "species") %>%
-  group_by (country, species, commercial_group) %>%
-  summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
-  mutate (nutr_tonnes = pmap (list (species_name = species, catch_mt = catch_mt, country_name = "Peru"), convert_catch_to_nutr_tons)) %>%
-  unnest(cols = c(nutr_tonnes),  names_repair = "check_unique") %>%
-  left_join (filter(wpp_country_aggregate, Time == 2019), by = c("nutrient", "country")) %>%
-  mutate (prop_demand_met = nutr_tonnes / tot_nutr_annual_demand)
+i <- plot_agg_bar_pop_needs_met("Indonesia")
+png ("Figures/Indo_aggregate_landings_Pop_demand_met.png", width = 5, height = 4, units = "in", res = 300)
+print (i + theme(legend.position = "none"))
+dev.off()
 
-a %>%
-  group_by (nutrient, commercial_group) %>%
-  summarise (prop_demand_met = sum (prop_demand_met, na.rm = TRUE)) %>%
-  ggplot (aes (x = reorder(nutrient, -prop_demand_met, na.rm = TRUE), y = prop_demand_met*100, fill = commercial_group)) +
-  geom_col() +
-  theme_bw() +
-  ggtitle ("Proportion demand met\nMost recent year of landings, Peru") +
-  labs (x = "", y = "% population RNIs met", fill = "Comm. group") 
+x <- calculate_prop_demand_met("Indonesia", 2019) # seems to match
 
 
-b <- calculate_prop_demand_met("Peru", 2019) # seems to match
+png ("Figures/Peru_aggregate_landings_Pop_demand_met.png", width = 5, height = 4, units = "in", res = 300)
+
+dev.off()
+
+png ("Figures/Chile_aggregate_landings_Pop_demand_met_algae.png", width = 5, height = 4, units = "in", res = 300)
+c <- plot_agg_bar_pop_needs_met("Chile")
+dev.off()
 
 
-# Indonesia
-indo_pop_needs <- sau_2019 %>%
-  filter(country == "Indonesia") %>%
-  left_join (sau_2019_taxa, by = "species") %>%
-  group_by (country, species, commercial_group) %>%
-  summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
-  mutate (nutr_tonnes = pmap (list (species_name = species, catch_mt = catch_mt, country_name = "Peru"), convert_catch_to_nutr_tons)) %>%
-  unnest(cols = c(nutr_tonnes),  names_repair = "check_unique") %>%
-  left_join (filter(wpp_country_aggregate, Time == 2019), by = c("nutrient", "country")) %>%
-  mutate (prop_demand_met = nutr_tonnes / tot_nutr_annual_demand)
+png ("Figures/SL_aggregate_landings_Pop_demand_met.png", width = 5, height = 4, units = "in", res = 300)
+dev.off()
 
-indo_pop_needs %>%
-  group_by (nutrient, commercial_group) %>%
-  filter (!nutrient %in% c("Selenium")) %>%
-  summarise (prop_demand_met = sum (prop_demand_met, na.rm = TRUE)) %>%
-  ggplot (aes (x = reorder(nutrient, -prop_demand_met, na.rm = TRUE), y = prop_demand_met*100, fill = commercial_group)) +
-  geom_col() +
-  theme_bw() +
-  ggtitle ("Proportion demand met\nMost recent year of landings, Indonesia") +
-  labs (x = "", y = "% population RNIs met", fill = "Comm. group") 
-
-
+############################################################################
 # plot nutricast upsides ----
+
+
+# Can I just join annual timeseries? noooooo didn't save the tonnes
+#plot_aggregate_nutricast_upsides.R
+peru_tonnes_ts <- catch_upside_ts %>% filter (country == "Peru")
+
+peru_tonnes_nutr_ts <- peru_tonnes_ts %>%
+  # convert to nutrients
+  mutate (nutr_yield = pmap (list (species_name = species, catch_mt = tonnes, country_name = country), convert_catch_to_nutr_tons)) %>%
+  unnest(cols = c(nutr_yield),  names_repair = "check_unique") ; beep()
+saveRDS(peru_tonnes_nutr_ts, file = "Data/Peru_annual_ts_forecasted_nutrients_tonnes.Rds")
+
+peru_tonnes_nutr_agg_ts <-  peru_tonnes_nutr_ts %>%
+  group_by (year, nutrient, rcp, scenario) %>%
+  summarise (tot_tonnes = sum (tonnes))
+
+peru_ts_perc_pop <- wpp_country_aggregate %>%
+  filter (country == "Peru", Time > 2022) %>%
+  rename (year = Time) %>%
+  left_join (peru_tonnes_nutr_agg_ts, by = c ("year", "nutrient")) %>%
+  mutate (prop_demand_met = tot_tonnes / tot_nutr_annual_demand)
+
+
+
 catch_upside_relative <- readRDS("Data/nutricast_upside_relative.Rds")
 
 # averaged data for missing spp
@@ -402,6 +450,7 @@ indo_pop_needs_future %>%
 
 
 # plot as 3 step
+# need to make fake current columns to have baseline
 
 
 indo_pop_needs_future %>%
