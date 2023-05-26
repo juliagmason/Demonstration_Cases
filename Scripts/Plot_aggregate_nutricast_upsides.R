@@ -168,6 +168,7 @@ sau_baseline <- sau_2019 %>%
   group_by (country, species) %>%
   summarise (bl_tonnes = sum (tonnes))
 
+# take 2021 chile data and rbind to sau_baseline
 full_baseline <- chl_landings %>%
   filter (year == 2021) %>%
   mutate (country = "Chile") %>%
@@ -210,6 +211,7 @@ q <- nutr_upside_annual %>%
   #geom_point() +
   geom_line() +
   facet_wrap (~nutrient, scales = "free_y") +
+  scale_col_manual (values = c ("firebrick", "mediumseagreen", "dodgerblue4")) +
   theme_bw() +
   labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
   ggtitle (paste0 ("Projected nutrient yield for ", country_name, ", RCP 6.0"))
@@ -251,6 +253,120 @@ saveRDS(sl, file = "Data/annual_nutr_upside_sl.Rds")
 
 chl <-   calc_nutr_upside_tonnes_annual ("Chile"); beep()
 saveRDS(chl, file = "Data/annual_nutr_upside_chile.Rds")
+
+
+
+################################################
+# plot annual ts-----
+peru_nutr_ts <- readRDS("Data/annual_nutr_upside_peru.Rds")
+
+png ("Figures/Peru_annual_nutr_ts_mgmt_facet.png", width = 10, height = 6, units = "in", res = 300)
+peru_nutr_ts %>%
+group_by (rcp, scenario, year, nutrient) %>%
+  summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
+  filter (rcp == "RCP60", !nutrient %in% c("Protein","Selenium")) %>%
+  ggplot (aes (x = year, y = tot_fed/1000000, col = nutrient, group = nutrient)) +
+  #geom_point() +
+  geom_line() +
+  facet_wrap (~scenario, scales = "free_y") +
+  theme_bw() +
+  labs (y = "Child RNI equivalents, millions", x = "", col = "") +
+  ggtitle ("Projected nutrient yield for Peru, RCP 6.0") +
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16),
+         strip.text = element_text (size = 16),
+         legend.text = element_text (size = 12),
+         legend.title = element_text (size = 14),
+         plot.title = element_text (size = 18))
+dev.off()
+
+png ("Figures/Peru_annual_nutr_ts_nutrient_facet.png", width = 10, height = 6, units = "in", res = 300)
+peru_nutr_ts %>%
+  group_by (rcp, scenario, year, nutrient) %>%
+  summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
+  filter (rcp == "RCP60", !nutrient %in% c("Protein")) %>%
+  ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
+  #geom_point() +
+  geom_line() +
+  facet_wrap (~nutrient, scales = "free_y") +
+  theme_bw() +
+  labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
+  ggtitle ("Projected nutrient yield for Peru, RCP 6.0") +
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16),
+         strip.text = element_text (size = 16),
+         legend.text = element_text (size = 12),
+         legend.title = element_text (size = 14),
+         plot.title = element_text (size = 18))
+dev.off()
+
+
+
+
+chl_nutr_ts <- readRDS("Data/annual_nutr_upside_chile.Rds")
+png ("Figures/Chile_annual_nutr_ts_nutrient_facet.png", width = 10, height = 6, units = "in", res = 300)
+chl_nutr_ts %>%
+  group_by (rcp, scenario, year, nutrient) %>%
+  summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
+  filter (rcp == "RCP60", !nutrient %in% c("Protein")) %>%
+  ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
+  #geom_point() +
+  geom_line() +
+  facet_wrap (~nutrient, scales = "free_y") +
+  theme_bw() +
+  labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
+  ggtitle ("Projected nutrient yield for Chile, RCP 6.0") +
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16),
+         strip.text = element_text (size = 16),
+         legend.text = element_text (size = 12),
+         legend.title = element_text (size = 14),
+         plot.title = element_text (size = 18))
+dev.off()
+
+indo_nutr_ts <- readRDS("Data/annual_nutr_upside_indo.Rds")
+png ("Figures/Indo_annual_nutr_ts_nutrient_facet.png", width = 10, height = 6, units = "in", res = 300)
+indo_nutr_ts %>%
+  group_by (rcp, scenario, year, nutrient) %>%
+  summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
+  filter (rcp == "RCP60", !nutrient %in% c("Protein")) %>%
+  ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
+  #geom_point() +
+  geom_line() +
+  facet_wrap (~nutrient, scales = "free_y") +
+  theme_bw() +
+  labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
+  ggtitle ("Projected nutrient yield for Indonesia, RCP 6.0") +
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16),
+         strip.text = element_text (size = 16),
+         legend.text = element_text (size = 12),
+         legend.title = element_text (size = 14),
+         plot.title = element_text (size = 18))
+dev.off()
+
+
+sl_nutr_ts <- readRDS("Data/annual_nutr_upside_sl.Rds")
+png ("Figures/SL_annual_nutr_ts_nutrient_facet.png", width = 10, height = 6, units = "in", res = 300)
+sl_nutr_ts %>%
+  group_by (rcp, scenario, year, nutrient) %>%
+  summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
+  filter (rcp == "RCP60", !nutrient %in% c("Protein")) %>%
+  ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
+  #geom_point() +
+  geom_line() +
+  facet_wrap (~nutrient, scales = "free_y") +
+  theme_bw() +
+  labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
+  ggtitle ("Projected nutrient yield for Sierra Leone, RCP 6.0") +
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16),
+         strip.text = element_text (size = 16),
+         legend.text = element_text (size = 12),
+         legend.title = element_text (size = 14),
+         plot.title = element_text (size = 18))
+dev.off()
+
 ############################################################################
 # WHY is 3 point showing different dynamics for different nutrients?!?!?
 # indonesia is an example, vitamin A very different than the others
