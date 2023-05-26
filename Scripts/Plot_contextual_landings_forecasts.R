@@ -42,11 +42,11 @@ full_baseline <- chl_landings %>%
 catch_upside_annual <- readRDS ("Data/nutricast_upside_relative_annual_ratio.Rds")
 
 # repaired missing species, this is in a slightly different format (check_sau_nutricast_species.R)
-catch_upside_annual_repaired <- readRDS("Data/nutricast_upside_relative_annual_repair_missing.Rds")
+catch_upside_annual_missing <- readRDS("Data/nutricast_upside_relative_annual_repair_missing.Rds")
 
 catch_upside_ts <- catch_upside_annual %>%
   select (country, species, rcp, scenario, year, catch_ratio) %>%
-  rbind(catch_upside_annual_repaired) %>%
+  rbind(catch_upside_annual_missing) %>%
   # join to baseline
   inner_join(full_baseline, by = c ("country", "species")) %>%
   mutate (tonnes = catch_ratio * bl_tonnes)
@@ -185,18 +185,22 @@ for (country_name in sau_countries) {
     filter (country == country_name) %>%
     group_by(year, commercial_group) %>%
     summarise (tonnes = sum (tonnes)) %>%
-    ggplot (aes (x = year, y = tonnes/1000000, fill = commercial_group), position = "stack") +
-    geom_area() +
-    geom_area (data = filter(upside_ts_bau_agg_comm_group, country == country_name), position = "stack") +
+    ggplot (aes (x = year, y = tonnes/1000000)) +
+    geom_area(aes (fill = commercial_group), position = "stack") +
+    geom_area (data = filter(upside_ts_bau_agg_comm_group, country == country_name, rcp %in% c("RCP26", "RCP60")), aes (fill = commercial_group), position = "stack") +
+    # add line of aggregated landings
+    geom_line (data = filter (sau_10yr_agg, country == country_name)) +
     facet_wrap (~rcp) +
-    labs (y ="Catch, million tonnes", x = "", col = "Climate\nscenario")+
+    guides (fill = "none") +
+    labs (y ="Catch, million tonnes", x = "", fill = "Commercial group")+
     theme (axis.text = element_text (size = 10),
            axis.title = element_text (size = 14),
-           plot.title = element_text(size = 18)) +
+           plot.title = element_text(size = 18),
+           legend.position = "none") +
     theme_bw() +
     ggtitle (paste0("Recent and projected total landings, ", country_name))
   
-  png (paste0("Figures/contextual_agg_catch_area_comm_group_", country_name,".png"), width = 6, height = 4, units = "in", res = 300)
+  png (paste0("Figures/contextual_agg_catch_area_comm_group_2scen", country_name,".png"), width = 6, height = 4, units = "in", res = 300)
   print (p)
   dev.off()
 }
