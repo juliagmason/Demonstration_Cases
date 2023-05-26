@@ -328,17 +328,60 @@ dev.off()
 
 # Can I just join annual timeseries? noooooo didn't save the tonnes
 #plot_aggregate_nutricast_upsides.R
+
+# annual nutricast time series
+catch_upside_annual <- readRDS ("Data/nutricast_upside_relative_annual_ratio.Rds")
+# repaired missing species, this is in a slightly different format (check_sau_nutricast_species.R)
+catch_upside_annual_missing <- readRDS("Data/nutricast_upside_relative_annual_repair_missing.Rds")
+
+# join
+catch_upside_annual_repaired <- catch_upside_annual %>%
+  #match columns from missing species
+  select (country, species, rcp, scenario, year, catch_ratio) %>%
+  rbind (catch_upside_annual_missing)
+
+
+# define baselines, join sau and chl data
+sau_baseline <- sau_2019 %>%
+  filter (!country == "Chile") %>%
+  group_by (country, species) %>%
+  summarise (bl_tonnes = sum (tonnes))
+
+# take 2021 chile data and rbind to sau_baseline
+full_baseline <- chl_landings %>%
+  filter (year == 2021) %>%
+  mutate (country = "Chile") %>%
+  group_by (country, species) %>%
+  summarise (bl_tonnes = sum (catch_mt)) %>%
+  rbind (sau_baseline)
+
+# multiply ratio by baseline
+catch_upside_ts <- catch_upside_annual_repaired %>%
+  # join to baseline
+  inner_join(full_baseline, by = c ("country", "species")) %>%
+  mutate (tonnes = catch_ratio * bl_tonnes)
+
+
 peru_tonnes_ts <- catch_upside_ts %>% filter (country == "Peru")
 
 peru_tonnes_nutr_ts <- peru_tonnes_ts %>%
   # convert to nutrients
   mutate (nutr_yield = pmap (list (species_name = species, catch_mt = tonnes, country_name = country), convert_catch_to_nutr_tons)) %>%
   unnest(cols = c(nutr_yield),  names_repair = "check_unique") ; beep()
+
+
 saveRDS(peru_tonnes_nutr_ts, file = "Data/Peru_annual_ts_forecasted_nutrients_tonnes.Rds")
+
+peru_tonnes_nutr_ts <- readRDS("Data/Peru_annual_ts_forecasted_nutrients_tonnes.Rds")
+
+# tonnes of nutrients seem way off--it was bc i was multiplying by tonnes, not nutr_tonnes!!!!
+peru_tonnes_agg <- peru_tonnes_ts %>%
+  group_by (rcp, scenario, year) %>%
+  summarise (tot_tonnes = sum (tonnes))
 
 peru_tonnes_nutr_agg_ts <-  peru_tonnes_nutr_ts %>%
   group_by (year, nutrient, rcp, scenario) %>%
-  summarise (tot_tonnes = sum (tonnes))
+  summarise (tot_tonnes = sum (nutr_tonnes, na.rm = TRUE))
 
 peru_ts_perc_pop <- wpp_country_aggregate %>%
   filter (country == "Peru", Time > 2022) %>%
@@ -346,6 +389,56 @@ peru_ts_perc_pop <- wpp_country_aggregate %>%
   left_join (peru_tonnes_nutr_agg_ts, by = c ("year", "nutrient")) %>%
   mutate (prop_demand_met = tot_tonnes / tot_nutr_annual_demand)
 
+peru_ts_perc_pop$scenario  <- factor(peru_ts_perc_pop$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
+
+
+
+png ("Figures/Peru_annual_nutr_ts_mgmt_facet_population.png", width = 10, height = 6, units = "in", res = 300)
+peru_ts_perc_pop %>%
+  filter (rcp == "RCP60", !nutrient %in% c("Protein")) %>%
+  ggplot (aes (x = year, y = prop_demand_met * 100, col = scenario, group = scenario)) +
+  #geom_point() +
+  geom_line() +
+  facet_wrap (~nutrient, scales = "free_y") +
+  theme_bw() +
+  labs (y = "% population RNI equiv.", x = "", col = "Mgmt\nscenario") +
+  ggtitle ("Projected nutrient yield for Peru, RCP 6.0") +
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16),
+         strip.text = element_text (size = 16),
+         legend.text = element_text (size = 12),
+         legend.title = element_text (size = 14),
+         plot.title = element_text (size = 18))
+dev.off()
+
+
+# plot projected pop growth ----
+wpp_pop <- read_csv("Data/WPP2022_Population1JanuaryByAge5GroupSex_Medium.csv")
+
+peru_pop <- wpp_pop %>%
+  select (Location, ISO3_code, Time, AgeGrp, PopMale, PopFemale) %>%
+  filter (Location == "Peru", Time > 2010) %>%
+  rename (country = Location, age_range_wpp = AgeGrp, year= Time) %>%
+  pivot_longer (PopMale:PopFemale,
+                names_prefix = "Pop",
+                names_to = "Sex",
+                values_to = "Pop") %>%
+  group_by (year) %>%
+  summarise (population = sum (Pop))
+
+
+png ("Figures/Peru_population_proj.png", width = 6, height = 6, units = "in", res = 300)
+peru_pop %>%
+  ggplot (aes (x = year, y = population/1000)) +
+  geom_line() +
+  theme_bw() +
+  labs (x = "", y = "Projected population, millions") + 
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16))
+dev.off()
+
+###################################################
+# periods ----
 
 
 catch_upside_relative <- readRDS("Data/nutricast_upside_relative.Rds")
