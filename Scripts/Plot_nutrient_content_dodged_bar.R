@@ -3,7 +3,7 @@
 
 library (tidyverse)
 library (stringr)
-library (AFCD)
+#library (AFCD)
 
 # priority species ----
 # top 5-7 priority species identified by regional teams
@@ -93,6 +93,38 @@ indo_spp <- sau_2019 %>%
 plot_colorful_spp_nutr_dodge_bar(indo_spp$species, Selenium = TRUE)
 # Sardinella species, and scomberomorous
 
+
+# Malawi top spp
+mal_names <- read.csv ("Data/Malawi_names.csv") %>%
+  rename (comm_name = Common.name,
+          species = Scientific.name) %>%
+  select (-Notes) %>%
+  # replace species names to match fishnutr
+  mutate (species = case_when (
+    comm_name == "Chambo" ~ "Oreochromis lidole combined",
+    comm_name == "Utaka" ~ "Mchenga inornata",
+    TRUE ~ species
+  ))
+
+mal_top <- mal_names %>%
+  filter (comm_name %in% c("Chambo", "Usipa", "Utaka"))
+
+png ("Figures/Malawi_top_spp_nutr_dodge_bar.png", width = 6, height = 6, units = "in", res = 300)
+print(
+plot_colorful_spp_nutr_dodge_bar(mal_top$species, Selenium = FALSE) +
+  theme ( 
+    axis.text.y = element_text (size = 12),
+    axis.text.x = element_text (size = 11),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 12),
+    legend.title = element_text (size = 14),
+    plot.title = element_text (size = 18))
+)
+dev.off()
+
+
+##### Priority species plots ----
 # quick peru plot
 peru_spp <- priority_spp %>% filter (country == "Peru", rank <6)
 png ("Figures/Peru_pri_spp_nutr_dodge_bar_sm.png", width = 7, height = 4, units = "in", res = 300)
@@ -127,6 +159,11 @@ print (
 dev.off()
 
 # Malawi ----
+
+# from abby landings/fishnutrients
+
+
+
 # malawi
 library (googlesheets4)
 gs_id <- "1_apQe54xNsP0-bGHkGBUa75hJR5WX0pd"
