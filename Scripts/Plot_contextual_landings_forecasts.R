@@ -11,7 +11,11 @@ download_2019_full <- read.csv("Data/SAU EEZ 2019.csv")%>% # this doesn't have i
   mutate (country = case_when (grepl ("Mex", area_name) ~ "Mexico",
                                grepl ("Chile", area_name) ~ "Chile",
                                TRUE ~ area_name)
-          )
+          ) %>%
+  # remove Chile and Sierra Leone. really should only be Peru now. 
+  filter (country == "Peru")
+
+
 indo_2019_download_full <- read.csv("Data/SAU EEZ indonesia.csv") %>%
   mutate (country = "Indonesia") 
 
@@ -30,12 +34,25 @@ sau_baseline <- sau_full %>%
 # chl landings
 chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
 
-full_baseline <- chl_landings %>%
+chl_baseline <- chl_landings %>% 
   filter (year == 2021) %>%
   mutate (country = "Chile") %>%
   group_by (country, species) %>%
-  summarise (bl_tonnes = sum (catch_mt)) %>%
-  rbind (sau_baseline)
+  summarise (bl_tonnes = sum (catch_mt)) 
+
+# sl IHH
+# year with data for both artisanal and industrial is 2017
+sl_ihh_landings <- readRDS("Data/SLE_landings_IHH.Rds")
+
+sl_baseline <- sl_ihh_landings %>% 
+  filter (year == 2017) %>%
+  mutate (country = "Sierra Leone") %>%
+  group_by (country, species) %>%
+  summarise (bl_tonnes = sum (catch_mt, na.rm = TRUE)) 
+
+
+# should remove SL
+full_baseline <- rbind (sau_baseline, chl_baseline, sl_baseline)
 
 # catch upside ----
 # ratio of baseline (2012-2021) to future catch for each year/scenario calculate_nutritional_upsides.R
@@ -71,15 +88,15 @@ upside_ts_bau_agg <- catch_upside_ts %>%
   group_by (country, rcp, year) %>%
   summarise (tonnes = sum (tonnes))
 
-sau_10yr_nutricast_clip %>%
-  group_by(country, year) %>%
-  summarise (tonnes = sum (tonnes)) %>% 
-  ggplot (aes (x = year, y = tonnes/1000000)) +
-  geom_line() +
-  geom_line (data = upside_ts_bau_agg, aes(x = year, y = tonnes/1000000, col = rcp)) +
-  geom_line (data = sau_10yr_agg, aes (x = year, y = tonnes/1000000), lty = 2) +
-  facet_wrap (~country, scales = "free_y") +
-  theme_bw()
+# sau_10yr_nutricast_clip %>%
+#   group_by(country, year) %>%
+#   summarise (tonnes = sum (tonnes)) %>% 
+#   ggplot (aes (x = year, y = tonnes/1000000)) +
+#   geom_line() +
+#   geom_line (data = upside_ts_bau_agg, aes(x = year, y = tonnes/1000000, col = rcp)) +
+#   geom_line (data = sau_10yr_agg, aes (x = year, y = tonnes/1000000), lty = 2) +
+#   facet_wrap (~country, scales = "free_y") +
+#   theme_bw()
 
 # country by country
 chl_landings_agg <- chl_landings %>%
@@ -111,6 +128,7 @@ chl_landings_agg_clip %>%
   theme (axis.text = element_text (size = 10),
          axis.title = element_text (size = 14)) 
 dev.off()
+
 
 sau_countries <- c("Indonesia", "Peru", "Sierra Leone")
 
@@ -206,15 +224,16 @@ for (country_name in sau_countries) {
 }
 
 
-# Chile
+# Chile comm group ----
 
 # try to trick color scale
 library(scales)
 show_col(hue_pal()(6))
 
-
+# past landings
 chl_landings_agg_clip_commgroup <- chl_landings %>%
   mutate (country = "Chile") %>%
+  # clips to nutricast spp
   right_join (nutricast_spp, by = c("country", "species")) %>%
   rename (commercial_group = taxa) %>%
   group_by (year, commercial_group) %>%
@@ -223,12 +242,14 @@ chl_landings_agg_clip_commgroup <- chl_landings %>%
   ungroup()%>%
   mutate (year = as.integer(year))
 
+# data frame of species and taxa/commercial group
 chl_groups <- 
   chl_landings %>%
   select (species, taxa) %>%
   distinct () %>%
   rename (commercial_group = taxa)
 
+# chile specific nutricast data, add taxa
 upside_chile_groups <- catch_upside_ts %>%
   filter (scenario == "No Adaptation", country == "Chile") %>%
   inner_join (chl_groups, by = "species") %>%
@@ -236,10 +257,12 @@ upside_chile_groups <- catch_upside_ts %>%
   summarise (tonnes = sum (tonnes))
 
 png ("Figures/contextual_agg_catch_area_comm_group_Chile.png", width = 6, height = 4, units = "in", res = 300)
+# plot past landings
 chl_landings_agg_clip_commgroup %>%
   ggplot (aes (x = year, y = tonnes/1000000, fill = commercial_group)) +
   geom_area(position = "stack") +
-  geom_area (data = upside_chile_groups, position = "stack") +
+  # add future landings
+  geom_area (data = filter (upside_chile_groups, rcp %in% c("RCP26", "RCP60")), position = "stack") +
   facet_wrap (~rcp) +
   labs (y ="Catch, million tonnes", x = "", col = "Climate\nscenario")+
   theme (axis.text = element_text (size = 10),
@@ -249,4 +272,74 @@ chl_landings_agg_clip_commgroup %>%
   scale_fill_manual(values = c("#B79F00", "#00BA38", "#00BFC4", "#619CFF", "#F564E3")) +
   ggtitle (paste0("Recent and projected total landings, ", "Chile"))
 
+dev.off()
+
+# sierra leone ihh data comm_group ----
+
+# attempt to make taxa group
+sl_ihh_taxa <- sl_ihh_landings %>%
+  select (species) %>%
+  distinct () %>%
+  left_join (sau_2019_taxa, by = "species") %>%
+  # copy from afcd_explore 
+  mutate (
+    Commercial_group =  case_when (
+      species %in% c("Octopus vulgaris", "Illex coindetii", "Sepia") ~ "Cephalopods",
+      species %in% c("Penaeus notialis",   "Penaeus kerathurus", "Callinectes","Panulirus", "Holthuispenaeopsis atlantica", "Parapeneopsis atlantica") ~ "Crustaceans",
+      # maybe check these
+      species %in% c("Arius", "Gerres", "Dentex congoinsis", "Diodon holocanthus","Dactylopterus volitans", "Priacanthus arenatus", "Pseudotolithus brachygnathus", "Albula vulpes", "Sphyraena afra", "Decapturus rhonsus") ~ "Other fishes & inverts",
+      species == "Cymbium" ~ "Other fihses & inverts",
+      TRUE ~ Commercial_group
+  ))
+
+# past landings, add taxa
+
+sl_landings_agg_clip_commgroup <- sl_ihh_landings %>%
+  filter (sector == "Artisanal") %>%
+  mutate (country = "Sierra Leone") %>%
+  left_join (sl_ihh_taxa, by = "species") %>%
+  #clip to nutricast
+  right_join (nutricast_spp, by = c("country", "species")) %>%
+  #rename (commercial_group = taxa) %>%
+  group_by (year, commercial_group) %>%
+  summarise (tonnes = sum (catch_mt, na.rm = TRUE))
+
+# trial plot
+sl_landings_agg_clip_commgroup %>%
+  ggplot (aes (x = year, y = tonnes/1000000, fill = commercial_group)) +
+  geom_area(position = "stack")
+
+#  specific nutricast data, add taxa
+upside_sl_groups <- catch_upside_ts %>%
+  filter (scenario == "No Adaptation", country == "Sierra Leone") %>%
+  inner_join (sl_ihh_taxa, by = "species") %>%
+  group_by (country, rcp, year, commercial_group) %>%
+  summarise (tonnes = sum (tonnes))
+
+
+sl_landings_agg_clip_commgroup %>%
+  ggplot (aes (x = year, y = tonnes/1000000, fill = commercial_group)) +
+  geom_area(position = "stack")
+
+# trick colors
+library(scales)
+show_col(hue_pal()(8))
+
+png ("Figures/contextual_agg_catch_area_comm_group_Sierra_Leone_IHH_SSF.png", width = 6, height = 4, units = "in", res = 300)
+# plot past landings
+sl_landings_agg_clip_commgroup %>%
+  ggplot (aes (x = year, y = tonnes/1000000, fill = commercial_group)) +
+  geom_area(position = "stack") +
+  # add future landings
+  geom_area (data = filter (upside_sl_groups, rcp %in% c("RCP26", "RCP60")), position = "stack") +
+  facet_wrap (~rcp) +
+  labs (y ="Catch, million tonnes", x = "")+
+ 
+  theme_bw() +
+  scale_fill_manual(values = c("#F8766D", "#7CAE00", "#00BFC4", "#00A9FF", "#C77CFF", "#FF61CC", "gray50")) +
+  theme (axis.text = element_text (size = 10),
+        axis.title = element_text (size = 14),
+        plot.title = element_text(size = 18),
+        legend.position = "none") +
+  ggtitle (paste0("Recent and projected total landings, Sierra Leone\n IHH SSF"))
 dev.off()
