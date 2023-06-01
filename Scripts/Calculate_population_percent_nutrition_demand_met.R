@@ -154,6 +154,9 @@ sau_2019_taxa <- readRDS(("Data/SAU_2019_taxa.Rds"))
 #Clean_Chile_Sernapesca_landings.R
 chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
 
+# malawi landings just top 3 indicated; clean_malawi_landings.R
+mal_top <- readRDS("Data/malawi_landings_top.Rds")
+
 # nutrient data ----
 # compiled in compile_species_nutrition_data.R
 #this has Fishnutr, AFCD, and D. gigas
@@ -259,7 +262,16 @@ plot_agg_bar_pop_needs_met <- function (country_name) {
     landings <- chl_landings %>%
       filter (year == 2021) %>%
       mutate (country = "Chile") %>%
-      rename (commercial_group = taxa, tonnes = catch_mt)
+      rename (commercial_group = taxa, tonnes = catch_mt) 
+    
+  } else if (country_name == "Malawi") {
+    
+    # most recent year with both industrial and artisanal is 2017. mal_top just names the top 3 species and puts the rest as "other". not really commercial group but using as a placeholder
+      landings <- mal_top %>%
+        filter (Year == 2017) %>%
+        mutate (country = "Malawi") %>%
+        rename (commercial_group = comm_name)
+  
     
   } else {
     
@@ -301,6 +313,11 @@ plot_agg_bar_pop_needs_met <- function (country_name) {
   return (p)
   
 }
+
+
+png ("Figures/Malawi_aggregate_landings_Pop_demand_met.png", width = 5, height = 4, units = "in", res = 300)
+plot_agg_bar_pop_needs_met("Malawi")
+dev.off()
 
 i <- plot_agg_bar_pop_needs_met("Indonesia")
 png ("Figures/Indo_aggregate_landings_Pop_demand_met.png", width = 5, height = 4, units = "in", res = 300)
@@ -429,6 +446,29 @@ peru_pop <- wpp_pop %>%
 
 png ("Figures/Peru_population_proj.png", width = 6, height = 6, units = "in", res = 300)
 peru_pop %>%
+  ggplot (aes (x = year, y = population/1000)) +
+  geom_line() +
+  theme_bw() +
+  labs (x = "", y = "Projected population, millions") + 
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16))
+dev.off()
+
+
+malawi_pop <- wpp_pop %>%
+  select (Location, ISO3_code, Time, AgeGrp, PopMale, PopFemale) %>%
+  filter (Location == "Malawi", Time > 2010) %>%
+  rename (country = Location, age_range_wpp = AgeGrp, year= Time) %>%
+  pivot_longer (PopMale:PopFemale,
+                names_prefix = "Pop",
+                names_to = "Sex",
+                values_to = "Pop") %>%
+  group_by (year) %>%
+  summarise (population = sum (Pop))
+
+
+png ("Figures/Malawi_population_proj.png", width = 6, height = 6, units = "in", res = 300)
+malawi_pop %>%
   ggplot (aes (x = year, y = population/1000)) +
   geom_line() +
   theme_bw() +

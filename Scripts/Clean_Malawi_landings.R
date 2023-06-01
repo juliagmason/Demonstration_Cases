@@ -96,6 +96,9 @@ mal_top <- mal_landings %>%
 
 mal_top$comm_name = factor(mal_top$comm_name, levels = c("Chambo", "Ndunduma", "Usipa", "Utaka", "Others"))
 
+# save this as R object
+saveRDS(mal_top, file = "Data/malawi_landings_top.Rds")
+
 png ("Figures/Malawi_landings_top_spp.png", width = 10, height = 8, res = 300, units = "in")
 
 mal_top %>%
