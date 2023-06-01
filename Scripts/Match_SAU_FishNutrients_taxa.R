@@ -48,6 +48,8 @@ match_fishnutr_taxa <- function (fishnutr_df, species_name) {
   
 }
 
+
+
 # Peru ----
 
 sau_peru_missing <- sau_2019_country_spp %>%
@@ -124,6 +126,12 @@ sau_sl_missing <- sau_2019_country_spp %>%
   filter (taxa == "Finfish",  !species %in% fishnutr$species) 
 # 66, of which got 48
 
+# Sierra Leone, IHH data
+ihh_sl_missing <- readRDS ("Data/SLE_landings_IHH.Rds") %>%
+  select (species) %>%
+  distinct() %>%
+  filter (!species %in% fishnutr$species)
+
 
 # country specific fishnutr, convert to long
 fishnutr_sl <- read.csv("Data/FishNutrients_country/NUTRIENT_PREDICTED_DATA_OF_SPECIES_IN_SIERRA_LEONE.csv") %>%
@@ -150,6 +158,14 @@ sl_match_taxa <- sau_sl_missing %>%
   unnest (cols = c(nutr))
 
 length (unique (sl_match_taxa$species))
+
+sl_ihh_match_taxa <- ihh_sl_missing %>%
+  mutate (nutr = pmap(list(species_name = species), match_fishnutr_taxa, fishnutr_df = fishnutr_sl)
+  ) %>%
+  unnest (cols = c(nutr)) %>%
+  mutate (country = "Sierra Leone", 
+          taxa = "Finfish") %>%
+  select (country, species, taxa, nutrient, amount)
 
 
 #Chile ----
@@ -192,6 +208,12 @@ length (unique (chl_match_taxa$species))
 matched_sau <- rbind (indo_match_taxa, peru_match_taxa, sl_match_taxa) %>%
   select (country, species, taxa, nutrient, amount) %>%
   rbind (chl_match_taxa)
+
+# add sierra leone IHH, 6/1/23
+matched_sau <- readRDS("Data/Matched_finfish_nutr.Rds")
+
+
+matched_sau <- rbind (matched_sau, sl_ihh_match_taxa)
 
 
 saveRDS(matched_sau, file = "Data/Matched_finfish_nutr.Rds")
