@@ -45,11 +45,19 @@ sle_landings_ihh <- rbind (sle_ssf, sle_ind) %>%
     species == "Pseudupenaeus prayensis" ~ "Pseudupeneus prayensis",
     # A. alexandrinus not in fishnutr, assume the same
     species == "Alectis alexandrinus" ~ "Alectis alexandrina",
-    TRUE ~ species)
+    TRUE ~ species),
+    year = as.integer(year)
   )
     
 
 saveRDS(sle_landings_ihh, file = "Data/SLE_landings_IHH.Rds")  
+
+# quick plot check
+sle_landings_ihh %>%
+  group_by (year, sector) %>%
+  summarize (tot = sum (catch_mt, na.rm = TRUE)) %>%
+  ggplot (aes (x = year, y = tot, fill = sector)) +
+  geom_area(position = "stack")
 
 
 ## compare with sau ----
