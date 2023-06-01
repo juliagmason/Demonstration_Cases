@@ -14,6 +14,9 @@ source ("Scripts/Function_convert_catch_amt_children_fed.R")
 #Clean_Chile_Sernapesca_landings.R
 chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
 
+# Clean_Malawi_landings.R
+mal_landings <- readRDS("Data/Malawi_landings_cleaned.Rds")
+
 # SAU landings data ----
 
 # as of 10/25/22 just 2019 data, suggested by Deng Palomares. Clipped in SAU_explore.R
@@ -64,7 +67,8 @@ plot_sau_rnis_met <- function (country_name, Selenium = FALSE) {
     
     #landings$commercial_group <- factor(landings$commercial_group, levels = c ("Algae", "Cephalopod", "Crustacean", "Finfish", "Mollusc", "Other"))
     
-  } else {
+  } else  {
+
     
     landings <- sau_2019 %>%
       left_join (sau_2019_taxa, by = "species") %>%
@@ -107,7 +111,7 @@ print(
       legend.text = element_text (size = 10),
       legend.title = element_text (size = 12),
       plot.title = element_text (size = 18),
-      legend.position = "none"
+      #legend.position = "none"
       #legend.position = c(0.8, 0.6))
     ))
 dev.off()
@@ -173,6 +177,62 @@ print(
     )
 )
 dev.off()
+
+# Malawi----
+# plot separately
+# ssf has 2018 but industrial most recent is 2017
+# Clean_Malawi_landings.R
+mal_landings <- readRDS("Data/Malawi_landings_cleaned.Rds")
+
+top_spp <- mal_landings %>% 
+  filter (!comm_name %in% c("Chisawasawa", "Kambuzi")) %>%
+  group_by (sector,comm_name) %>%
+  summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  slice_max (tonnes, n= 3) 
+
+mal_top <- mal_landings %>%
+  filter (!comm_name %in% c("Chisawasawa", "Kambuzi")) %>%
+  mutate (comm_name = ifelse (comm_name %in% top_spp$comm_name, comm_name, "Others"))
+mal_top$comm_name = factor(mal_top$comm_name, levels = c("Chambo", "Ndunduma", "Usipa", "Utaka", "Others"))
+
+mal_nutr <- mal_top %>%
+  filter (Year == 2017) %>%
+  mutate (rni_equivalents = pmap (list (species = species, amount = tonnes, country_name = "Malawi"), calc_children_fed_func)) %>%
+  unnest(cols = c(rni_equivalents),  names_repair = "check_unique") 
+
+
+png ("Figures/Mal_aggregate_landings_RNIs_met.png", width = 5, height = 4, units = "in", res = 300)  
+mal_nutr %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  ggplot (aes (x = nutrient, y = rni_equivalents/1000000, fill = comm_name)) +
+  #ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000, fill = commercial_group)) +
+  geom_col() +
+  theme_bw() +
+  ggtitle (paste0("Child RNI equivalents, Malawi\nMost recent year of landings")) +
+  labs (x = "", y = "Child RNI equivalents, millions", fill = "Species") +
+theme (
+  axis.text.y = element_text (size = 13),
+  axis.text.x = element_text (size = 11),
+  axis.title = element_text (size = 16),
+  strip.text = element_text(size = 16),
+  legend.text = element_text (size = 10),
+  legend.title = element_text (size = 12),
+  plot.title = element_text (size = 18)
+)
+
+dev.off()
+
+# facet by sector? industrial is negligible
+mal_nutr %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  ggplot (aes (x = nutrient, y = rni_equivalents/1000000, fill = comm_name)) +
+  facet_wrap (~sector) +
+ 
+  geom_col() +
+  theme_bw() +
+  ggtitle (paste0("Child RNI equivalents, Malawi\nMost recent year of landings")) +
+  labs (x = "", y = "Child RNI equivalents, millions", fill = "Species") 
+  
 
 # plot overall catch by comm_group ----
 sau_2019_taxa <- readRDS("Data/SAU_2019_taxa.Rds")
