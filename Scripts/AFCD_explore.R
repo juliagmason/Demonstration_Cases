@@ -18,7 +18,7 @@ library (stringr)
 
 # cleaned version from zach, 5/31/22
 #https://github.com/Aquatic-Food-Composition-Database/AFCD
-devtools::install_github("Aquatic-Food-Composition-Database/AFCD", force=T)
+#devtools::install_github("Aquatic-Food-Composition-Database/AFCD", force=T)
 library(AFCD)
 
 # function for harmonizing species name capitalization
@@ -243,6 +243,45 @@ chl_nutr <- chl_nutr %>%
 
 saveRDS(chl_nutr, file = "Data/chl_nonfish_afcd_nutrients.Rds")
 
+# sierra leone IHH nonfish----
+# just do this from Match_SAU_fishNutrients_taxa.R for IHH. the remaining species that weren't matched in fishnutrients are likely inverts
+sl_ihh_nonfish <- ihh_sl_missing %>% filter (!species %in% sl_ihh_match_taxa$species)
+  
+  
+sl_ihh_nutr <- species_nutrients (sl_ihh_nonfish$species,
+                                 prep = c ("raw", NA),
+                                 part = c("muscle tissue", "whole"),
+                                 nut = c("DHA_EPA", "Calcium", "Iron, total", "Selenium", "Zinc", "Vitamin_a_combined")
+  )
+
+# check values
+sl_ihh_nutr %>%
+  ggplot (aes (x = value)) +
+  geom_histogram() +
+  facet_wrap (~nutrient, scales = "free") +
+  theme_bw()
+# nothing too crazy
+
+# clean and add taxa
+# add taxa manually? only 10
+sl_ihh_nutr <- sl_ihh_nutr %>% 
+  filter (!is.na(value)) %>%
+  mutate (species = firstup (species),
+          nutrient = case_when (
+            nutrient == "DHA_EPA" ~ "Omega_3",
+            nutrient =="Iron, total" ~ "Iron",
+            nutrient == "Vitamin_a_combined" ~ "Vitamin_A",
+            TRUE ~ nutrient),
+          taxa =  case_when (
+    species %in% c("Octopus vulgaris", "Illex coindetii", "Sepia") ~ "Cephalopod",
+    species %in% c("Penaeus notialis",   "Penaeus kerathurus", "Callinectes","Panulirus") ~ "Crustacean",
+    species %in% c("Arius", "Gerres") ~ "Finfish",
+    species == "Cymbium" ~ "Mollusc"
+    
+  )) %>%
+  # harmonize to nonfish names
+  rename (amount = value)
+
 # compile in one dataframe----
 sau_2019_afcd_nutr <- readRDS("Data/SAU_2019_nonfish_afcd_nutrients.Rds")
 nutricast_spp_afcd_nutr <- readRDS("Data/nutricast_spp_nonfish_afcd_nutrients.Rds")
@@ -253,6 +292,11 @@ nonfish_afcd_nutr <- sau_2019_afcd_nutr %>%
   rename (amount = value) %>%
   distinct() %>%
   replace_na (list (taxa = "Other"))
+
+# 6/1/23 add sl ihh data
+nonfish_afcd_nutr <- readRDS("Data/nonfish_afcd_nutr_compiled.Rds")
+
+nonfish_afcd_nutr <- rbind (nonfish_afcd_nutr, sl_ihh_nutr) %>% distinct()
 
 saveRDS(nonfish_afcd_nutr, file = "Data/nonfish_afcd_nutr_compiled.Rds")
 
