@@ -48,6 +48,16 @@ nonfish_afcd_nutr <- readRDS("Data/nonfish_afcd_nutr_compiled.Rds") %>%
 # also duplicates?
 nonfish_afcd_nutr <- nonfish_afcd_nutr[!duplicated(nonfish_afcd_nutr), ]
 
+# Malawi fish ----
+# Per Abby email, average O. lidole and O. karongae for chambo. Also average M. inornata and c. inornata for Utaka, or maybe they're the same name?
+# M. inornata in fishnutr but not C. inornata
+chambo <- fishnutr_long %>%
+  filter (species %in% c("Oreochromis lidole", "Oreochromis karongae")) %>%
+  mutate (species = "Oreochromis lidole combined") %>%
+  group_by (species, nutrient, taxa) %>%
+  summarise (amount = mean(amount)) %>%
+  select (species, nutrient, amount, taxa)
 
-compiled_nutr <- rbind (fishnutr_long, d_gigas_nutr, nonfish_afcd_nutr)
+
+compiled_nutr <- rbind (fishnutr_long, d_gigas_nutr, nonfish_afcd_nutr, chambo)
 saveRDS(compiled_nutr, file = "Data/species_nutrients_compiled.Rds")
