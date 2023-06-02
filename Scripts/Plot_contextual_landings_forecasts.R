@@ -54,6 +54,8 @@ sl_baseline <- sl_ihh_landings %>%
 # should remove SL
 full_baseline <- rbind (sau_baseline, chl_baseline, sl_baseline)
 
+saveRDS(full_baseline, file = "Data/baseline_catch_sau_chl_ihh.Rds")
+
 # catch upside ----
 # ratio of baseline (2012-2021) to future catch for each year/scenario calculate_nutritional_upsides.R
 catch_upside_annual <- readRDS ("Data/nutricast_upside_relative_annual_ratio.Rds")
