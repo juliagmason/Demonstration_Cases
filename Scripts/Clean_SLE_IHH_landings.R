@@ -48,6 +48,24 @@ sle_landings_ihh <- rbind (sle_ssf, sle_ind) %>%
     TRUE ~ species),
     year = as.integer(year)
   )
+
+
+# attempt to add commercial group
+# start by matching with SAU
+sau_2019_taxa <- readRDS("Data/SAU_2019_taxa.Rds")
+
+sle_landings_ihh <- sle_landings_ihh %>%
+left_join (sau_2019_taxa, by = "species") %>%
+  # copy from afcd_explore 
+  mutate (
+    commercial_group =  case_when (
+      species %in% c("Octopus vulgaris", "Illex coindetii", "Sepia") ~ "Other fishes & inverts",
+      species %in% c("Penaeus notialis",   "Penaeus kerathurus", "Callinectes","Panulirus", "Holthuispenaeopsis atlantica", "Parapeneopsis atlantica") ~ "Crustaceans",
+      # maybe check these
+      species %in% c("Arius", "Gerres", "Dentex congoinsis", "Diodon holocanthus","Dactylopterus volitans", "Priacanthus arenatus", "Pseudotolithus brachygnathus", "Albula vulpes", "Sphyraena afra", "Decapturus rhonsus") ~ "Other fishes & inverts",
+      species == "Cymbium" ~ "Other fishes & inverts",
+      TRUE ~ commercial_group
+    ))
     
 
 saveRDS(sle_landings_ihh, file = "Data/SLE_landings_IHH.Rds")  

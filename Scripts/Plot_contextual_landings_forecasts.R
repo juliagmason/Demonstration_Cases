@@ -264,28 +264,11 @@ dev.off()
 
 # sierra leone ihh data comm_group ----
 
-# attempt to make taxa group
-sl_ihh_taxa <- sl_ihh_landings %>%
-  select (species) %>%
-  distinct () %>%
-  left_join (sau_2019_taxa, by = "species") %>%
-  # copy from afcd_explore 
-  mutate (
-    commercial_group =  case_when (
-      species %in% c("Octopus vulgaris", "Illex coindetii", "Sepia") ~ "Other fishes & inverts",
-      species %in% c("Penaeus notialis",   "Penaeus kerathurus", "Callinectes","Panulirus", "Holthuispenaeopsis atlantica", "Parapeneopsis atlantica") ~ "Crustaceans",
-      # maybe check these
-      species %in% c("Arius", "Gerres", "Dentex congoinsis", "Diodon holocanthus","Dactylopterus volitans", "Priacanthus arenatus", "Pseudotolithus brachygnathus", "Albula vulpes", "Sphyraena afra", "Decapturus rhonsus") ~ "Other fishes & inverts",
-      species == "Cymbium" ~ "Other fishes & inverts",
-      TRUE ~ commercial_group
-  ))
-
-# past landings, add taxa
 
 sl_landings_agg_clip_commgroup <- sl_ihh_landings %>%
   filter (sector == "Artisanal") %>%
   mutate (country = "Sierra Leone") %>%
-  left_join (sl_ihh_taxa, by = "species") %>%
+
   #clip to nutricast
   right_join (nutricast_spp, by = c("country", "species")) %>%
   #rename (commercial_group = taxa) %>%
@@ -298,11 +281,19 @@ sl_landings_agg_clip_commgroup %>%
   geom_area(position = "stack")
 
 #  specific nutricast data, add taxa
+# data frame of species and taxa/commercial group
+sl_groups <- 
+  sl_ihh_landings %>%
+  select (species, commercial_group) %>%
+  distinct () 
+
+# SL specific nutricast data, add taxa
 upside_sl_groups <- catch_upside_ts %>%
   filter (scenario == "No Adaptation", country == "Sierra Leone") %>%
-  inner_join (sl_ihh_taxa, by = "species") %>%
+  inner_join (sl_groups, by = "species") %>%
   group_by (country, rcp, year, commercial_group) %>%
   summarise (tonnes = sum (tonnes))
+
 
 # full line of landings
 ihh_agg_landings <- sl_ihh_landings %>%
