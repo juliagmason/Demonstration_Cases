@@ -157,6 +157,9 @@ chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
 # malawi landings just top 3 indicated; clean_malawi_landings.R
 mal_top <- readRDS("Data/malawi_landings_top.Rds")
 
+# Sierra Leone IHH data
+sl_landings <- readRDS("Data/SLE_landings_IHH.Rds")
+
 # nutrient data ----
 # compiled in compile_species_nutrition_data.R
 #this has Fishnutr, AFCD, and D. gigas
@@ -253,7 +256,7 @@ h <- calculate_prop_demand_met("Peru", 2022)
 
 # plot current landings ----
 
-# plot bar graph showing % population demand met, by commercial group
+# plot bar graph showing % population demand met, by commercial group ----
 
 plot_agg_bar_pop_needs_met <- function (country_name) {
   
@@ -271,6 +274,16 @@ plot_agg_bar_pop_needs_met <- function (country_name) {
         filter (Year == 2017) %>%
         mutate (country = "Malawi") %>%
         rename (commercial_group = comm_name)
+      
+  } else if (country_name == "Sierra Leone") {
+    
+    # most recent year 2017
+    landings <- sl_landings %>%
+      filter (year == 2017) %>%
+      mutate (country = "Sierra Leone") %>%
+      # dumb, have the columns named catch_mt instead of tonnes...
+      rename (tonnes = catch_mt)
+    
   
     
   } else {
@@ -314,6 +327,40 @@ plot_agg_bar_pop_needs_met <- function (country_name) {
   
 }
 
+png ("Figures/SL_aggregate_landings_Pop_demand_met_IHH.png", width = 5, height = 4, units = "in", res = 300)
+plot_agg_bar_pop_needs_met("Sierra Leone")
+dev.off()
+
+# sierra leone, compare artisanal and industrial ----
+sl_sector <- sl_landings %>%
+  filter (year == 2017) %>%
+  group_by (sector, species) %>%
+  summarise (catch_mt = sum (catch_mt, na.rm = TRUE)) %>%
+  mutate (nutr_tonnes = pmap (list (species_name = species, catch_mt = catch_mt, country_name = "Sierra Leone"), convert_catch_to_nutr_tons)) %>%
+  unnest(cols = c(nutr_tonnes),  names_repair = "check_unique") %>%
+  mutate (country = "Sierra Leone") %>%
+  left_join (filter(wpp_country_aggregate, Time == 2019), by = c("nutrient", "country")) %>%
+  mutate (prop_demand_met = nutr_tonnes / tot_nutr_annual_demand) %>%
+  group_by (sector, nutrient) %>%
+  summarise (prop_demand_met = sum (prop_demand_met, na.rm = TRUE)) 
+  
+png ("Figures/SL_aggregate_landings_Pop_demand_met_IHH_sector.png", width = 5, height = 4, units = "in", res = 300)
+sl_sector %>%
+  filter (!nutrient %in% c("Selenium", "Protein")) %>% 
+  ggplot (aes (x = nutrient, y = prop_demand_met*100, fill = sector)) +
+  geom_col() +
+  theme_bw() +
+  ggtitle ("Proportion of population demand met\nMost recent year of landings, Sierra Leone") +
+  labs (x = "", y = "% population RNI equiv.", fill = "Sector") +
+  theme (
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11),
+    axis.title = element_text (size = 16),
+    legend.text = element_text (size = 10),
+    legend.title = element_text (size = 12),
+    plot.title = element_text (size = 18)
+  )
+dev.off()
 
 png ("Figures/Malawi_aggregate_landings_Pop_demand_met.png", width = 5, height = 4, units = "in", res = 300)
 plot_agg_bar_pop_needs_met("Malawi")
@@ -358,19 +405,9 @@ catch_upside_annual_repaired <- catch_upside_annual %>%
   rbind (catch_upside_annual_missing)
 
 
-# define baselines, join sau and chl data
-sau_baseline <- sau_2019 %>%
-  filter (!country == "Chile") %>%
-  group_by (country, species) %>%
-  summarise (bl_tonnes = sum (tonnes))
-
-# take 2021 chile data and rbind to sau_baseline
-full_baseline <- chl_landings %>%
-  filter (year == 2021) %>%
-  mutate (country = "Chile") %>%
-  group_by (country, species) %>%
-  summarise (bl_tonnes = sum (catch_mt)) %>%
-  rbind (sau_baseline)
+# baseline catch from plot_contextual_landings_forecasts.R
+# this has sau for peru and indo, chl landings, sl ihh landings
+full_baseline <- readRDS("Data/baseline_catch_sau_chl_ihh.Rds")
 
 # multiply ratio by baseline
 catch_upside_ts <- catch_upside_annual_repaired %>%
@@ -378,104 +415,117 @@ catch_upside_ts <- catch_upside_annual_repaired %>%
   inner_join(full_baseline, by = c ("country", "species")) %>%
   mutate (tonnes = catch_ratio * bl_tonnes)
 
+# calculate tonnes of nutrients for each year, save
+proj_nutr_tonnes <- function (country_name) {
+  
+  tonnes_ts <- catch_upside_ts %>% filter (country == country_name)
 
-peru_tonnes_ts <- catch_upside_ts %>% filter (country == "Peru")
-
-peru_tonnes_nutr_ts <- peru_tonnes_ts %>%
+  tonnes_nutr_ts <- tonnes_ts %>%
   # convert to nutrients
   mutate (nutr_yield = pmap (list (species_name = species, catch_mt = tonnes, country_name = country), convert_catch_to_nutr_tons)) %>%
-  unnest(cols = c(nutr_yield),  names_repair = "check_unique") ; beep()
+  unnest(cols = c(nutr_yield),  names_repair = "check_unique") 
+
+  saveRDS(tonnes_nutr_ts, file = paste0("Data/", country_name, "_annual_ts_forecasted_nutrients_tonnes.Rds"))
+
+}
+
+countries <- list ("Sierra Leone", "Chile", "Indonesia")
+
+lapply (countries, proj_nutr_tonnes)
 
 
-saveRDS(peru_tonnes_nutr_ts, file = "Data/Peru_annual_ts_forecasted_nutrients_tonnes.Rds")
+# plot pop needs met ts
 
 peru_tonnes_nutr_ts <- readRDS("Data/Peru_annual_ts_forecasted_nutrients_tonnes.Rds")
 
-# tonnes of nutrients seem way off--it was bc i was multiplying by tonnes, not nutr_tonnes!!!!
-peru_tonnes_agg <- peru_tonnes_ts %>%
-  group_by (rcp, scenario, year) %>%
-  summarise (tot_tonnes = sum (tonnes))
+plot_pop_needs_met_proj <- function (country_name) {
+  
+  tonnes_nutr_ts <- readRDS(paste0("Data/", country_name, "_annual_ts_forecasted_nutrients_tonnes.Rds"))
+  
+  # aggregate by nutrient, rcp, scenario
+  tonnes_nutr_agg_ts <-  peru_tonnes_nutr_ts %>%
+    group_by (year, nutrient, rcp, scenario) %>%
+    summarise (tot_tonnes = sum (nutr_tonnes, na.rm = TRUE))
+  
+  # join to population
+ ts_perc_pop <- wpp_country_aggregate %>%
+    filter (country == country_name, Time > 2022) %>%
+    rename (year = Time) %>%
+    left_join (peru_tonnes_nutr_agg_ts, by = c ("year", "nutrient")) %>%
+    mutate (prop_demand_met = tot_tonnes / tot_nutr_annual_demand)
+  
+ # fix levels
+  ts_perc_pop$scenario  <- factor(ts_perc_pop$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
+  
+  # plot
+  plot <- ts_perc_pop %>%
+    filter (rcp == "RCP60", !nutrient %in% c("Protein")) %>%
+    ggplot (aes (x = year, y = prop_demand_met * 100, col = scenario, group = scenario)) +
+    #geom_point() +
+    geom_line() +
+    facet_wrap (~nutrient, scales = "free_y") +
+    theme_bw() +
+    labs (y = "% population RNI equiv.", x = "", col = "Mgmt\nscenario") +
+    ggtitle (paste0("Projected nutrient yield for ", country_name, ", RCP 6.0")) +
+    theme (axis.text = element_text (size = 14),
+           axis.title = element_text (size = 16),
+           strip.text = element_text (size = 16),
+           legend.text = element_text (size = 12),
+           legend.title = element_text (size = 14),
+           plot.title = element_text (size = 18))
+  
+  return (plot)
+  
+}
 
-peru_tonnes_nutr_agg_ts <-  peru_tonnes_nutr_ts %>%
-  group_by (year, nutrient, rcp, scenario) %>%
-  summarise (tot_tonnes = sum (nutr_tonnes, na.rm = TRUE))
-
-peru_ts_perc_pop <- wpp_country_aggregate %>%
-  filter (country == "Peru", Time > 2022) %>%
-  rename (year = Time) %>%
-  left_join (peru_tonnes_nutr_agg_ts, by = c ("year", "nutrient")) %>%
-  mutate (prop_demand_met = tot_tonnes / tot_nutr_annual_demand)
-
-peru_ts_perc_pop$scenario  <- factor(peru_ts_perc_pop$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
-
-
+plot_pop_needs_met_proj("Peru")
 
 png ("Figures/Peru_annual_nutr_ts_mgmt_facet_population.png", width = 10, height = 6, units = "in", res = 300)
-peru_ts_perc_pop %>%
-  filter (rcp == "RCP60", !nutrient %in% c("Protein")) %>%
-  ggplot (aes (x = year, y = prop_demand_met * 100, col = scenario, group = scenario)) +
-  #geom_point() +
-  geom_line() +
-  facet_wrap (~nutrient, scales = "free_y") +
-  theme_bw() +
-  labs (y = "% population RNI equiv.", x = "", col = "Mgmt\nscenario") +
-  ggtitle ("Projected nutrient yield for Peru, RCP 6.0") +
-  theme (axis.text = element_text (size = 14),
-         axis.title = element_text (size = 16),
-         strip.text = element_text (size = 16),
-         legend.text = element_text (size = 12),
-         legend.title = element_text (size = 14),
-         plot.title = element_text (size = 18))
+
 dev.off()
 
 
 # plot projected pop growth ----
 wpp_pop <- read_csv("Data/WPP2022_Population1JanuaryByAge5GroupSex_Medium.csv")
 
-peru_pop <- wpp_pop %>%
-  select (Location, ISO3_code, Time, AgeGrp, PopMale, PopFemale) %>%
-  filter (Location == "Peru", Time > 2010) %>%
-  rename (country = Location, age_range_wpp = AgeGrp, year= Time) %>%
-  pivot_longer (PopMale:PopFemale,
-                names_prefix = "Pop",
-                names_to = "Sex",
-                values_to = "Pop") %>%
-  group_by (year) %>%
-  summarise (population = sum (Pop))
+plot_proj_pop_growth <- function (country_name) {
+  
+  pop <- wpp_pop %>%
+    select (Location, ISO3_code, Time, AgeGrp, PopMale, PopFemale) %>%
+    filter (Location == country_name, Time > 2010) %>%
+    rename (country = Location, age_range_wpp = AgeGrp, year= Time) %>%
+    pivot_longer (PopMale:PopFemale,
+                  names_prefix = "Pop",
+                  names_to = "Sex",
+                  values_to = "Pop") %>%
+    group_by (year) %>%
+    summarise (population = sum (Pop))
+  
+  plot <-  pop %>%
+    ggplot (aes (x = year, y = population/1000)) +
+    geom_line() +
+    theme_bw() +
+    labs (x = "", y = "Projected population, millions") + 
+    theme (axis.text = element_text (size = 14),
+           axis.title = element_text (size = 16))
+  
+  return (plot)
+
+  
+}
+
 
 
 png ("Figures/Peru_population_proj.png", width = 6, height = 6, units = "in", res = 300)
-peru_pop %>%
-  ggplot (aes (x = year, y = population/1000)) +
-  geom_line() +
-  theme_bw() +
-  labs (x = "", y = "Projected population, millions") + 
-  theme (axis.text = element_text (size = 14),
-         axis.title = element_text (size = 16))
+
 dev.off()
 
 
-malawi_pop <- wpp_pop %>%
-  select (Location, ISO3_code, Time, AgeGrp, PopMale, PopFemale) %>%
-  filter (Location == "Malawi", Time > 2010) %>%
-  rename (country = Location, age_range_wpp = AgeGrp, year= Time) %>%
-  pivot_longer (PopMale:PopFemale,
-                names_prefix = "Pop",
-                names_to = "Sex",
-                values_to = "Pop") %>%
-  group_by (year) %>%
-  summarise (population = sum (Pop))
-
-
-png ("Figures/Malawi_population_proj.png", width = 6, height = 6, units = "in", res = 300)
-malawi_pop %>%
-  ggplot (aes (x = year, y = population/1000)) +
-  geom_line() +
-  theme_bw() +
-  labs (x = "", y = "Projected population, millions") + 
-  theme (axis.text = element_text (size = 14),
-         axis.title = element_text (size = 16))
+png ("Figures/SL_population_proj.png", width = 6, height = 6, units = "in", res = 300)
+print (plot_proj_pop_growth("Sierra Leone"))
 dev.off()
+
+
 
 ###################################################
 # periods ----
