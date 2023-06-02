@@ -17,6 +17,9 @@ chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
 # Clean_Malawi_landings.R
 mal_landings <- readRDS("Data/Malawi_landings_cleaned.Rds")
 
+# Sierra Leone IHH data
+sl_landings <- readRDS("Data/SLE_landings_IHH.Rds")
+
 # SAU landings data ----
 
 # as of 10/25/22 just 2019 data, suggested by Deng Palomares. Clipped in SAU_explore.R
@@ -52,7 +55,7 @@ sau_2019_taxa <- readRDS("Data/SAU_2019_taxa.Rds")
 ######################################
 
 
-# plot aggregate landings ----
+# function plot aggregate landings RNIS met ----
 plot_sau_rnis_met <- function (country_name, Selenium = FALSE) {
   
   if (country_name == "Chile") {
@@ -67,7 +70,15 @@ plot_sau_rnis_met <- function (country_name, Selenium = FALSE) {
     
     #landings$commercial_group <- factor(landings$commercial_group, levels = c ("Algae", "Cephalopod", "Crustacean", "Finfish", "Mollusc", "Other"))
     
-  } else  {
+  } else if (country_name == "Sierra Leone") {
+    landings <- sl_landings %>%
+      filter (year == 2017) %>%
+      group_by (species, commercial_group) %>%
+      summarise (catch_mt = sum (catch_mt)) %>%
+      mutate (rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = "Sierra Leone"), calc_children_fed_func)) %>%
+      unnest(cols = c(rni_equivalents),  names_repair = "check_unique") 
+    
+  } else {
 
     
     landings <- sau_2019 %>%
@@ -142,7 +153,7 @@ dev.off()
 
 
 # Sierra Leone  ----
-png ("Figures/SL_aggregate_landings_RNIs_met.png", width = 5, height = 4, units = "in", res = 300)  
+png ("Figures/SL_aggregate_landings_RNIs_met_IHH.png", width = 5, height = 4, units = "in", res = 300)  
 print(
   plot_sau_rnis_met("Sierra Leone")  +
     theme ( 
