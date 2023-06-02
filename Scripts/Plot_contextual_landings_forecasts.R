@@ -27,7 +27,7 @@ sau_10yr <- sau_full %>%
 
 sau_baseline <- sau_full %>%
   rename (species = scientific_name) %>%
-  filter (year == 2019, !country == "Chile") %>%
+  filter (year == 2019) %>%
   group_by (country, species) %>%
   summarise (bl_tonnes = sum (tonnes))
 
@@ -68,9 +68,7 @@ catch_upside_ts <- catch_upside_annual %>%
   inner_join(full_baseline, by = c ("country", "species")) %>%
   mutate (tonnes = catch_ratio * bl_tonnes)
 
-# quick single line graph, aggregated species ----
-
-# need to clip sau data to nutricast
+# clip sau data to nutricast
 nutricast_spp <- catch_upside_ts %>%
   select (country, species) %>%
   distinct()
@@ -87,6 +85,9 @@ upside_ts_bau_agg <- catch_upside_ts %>%
   filter (scenario == "No Adaptation") %>%
   group_by (country, rcp, year) %>%
   summarise (tonnes = sum (tonnes))
+
+
+# quick single line graph, aggregated species ----
 
 # sau_10yr_nutricast_clip %>%
 #   group_by(country, year) %>%
@@ -160,53 +161,31 @@ png (paste0("Figures/contextual_agg_catch_line_", country_name,".png"), width = 
 
 
 ######
-# by commercial group??
+# by commercial group ----
 sau_2019_taxa <- readRDS("Data/SAU_2019_taxa.Rds")
 
-sau_10yr_nutricast_clip %>%
-  filter (country == "Peru") %>%
-  group_by(year, commercial_group) %>%
-  summarise (tonnes = sum (tonnes)) %>%
-  ggplot (aes (x = year, y = tonnes, fill = commercial_group)) +
-  geom_area(position = "stack") +
-  theme_bw()
-
-
+# aggregate future projections by comm group to simplify
 upside_ts_bau_agg_comm_group <- catch_upside_ts %>%
   filter (scenario == "No Adaptation") %>%
   inner_join (sau_2019_taxa, by = "species") %>%
   group_by (country, rcp, year, commercial_group) %>%
   summarise (tonnes = sum (tonnes))
 
-upside_ts_bau_agg_comm_group %>%
-  filter (country == "Peru") %>%
-  ggplot (aes (x = year, y = tonnes, fill = commercial_group)) +
-  geom_area(position = "stack") +
-  theme_bw() +
-  facet_wrap (~rcp)
-
-
-sau_10yr_nutricast_clip %>%
-  filter (country == "Peru") %>%
-  group_by(year, commercial_group) %>%
-  summarise (tonnes = sum (tonnes)) %>%
-  ggplot (aes (x = year, y = tonnes, fill = commercial_group)) +
-  geom_area(position = "stack") +
-  theme_bw() +
-  geom_area(data = filter(upside_ts_bau_agg_comm_group, country == "Peru"), position = "stack") +
-  theme_bw() +
-  facet_wrap (~rcp)
 
 for (country_name in sau_countries) {
   
+  # take past time series, clipped to nutricast species, plot by commercial group
   p <-  sau_10yr_nutricast_clip %>%
     filter (country == country_name) %>%
     group_by(year, commercial_group) %>%
     summarise (tonnes = sum (tonnes)) %>%
     ggplot (aes (x = year, y = tonnes/1000000)) +
     geom_area(aes (fill = commercial_group), position = "stack") +
+    
+    # add future time series, plot by commercial group, only two scenarios
     geom_area (data = filter(upside_ts_bau_agg_comm_group, country == country_name, rcp %in% c("RCP26", "RCP60")), aes (fill = commercial_group), position = "stack") +
-    # add line of aggregated landings
+    
+    # add line of aggregated past landings to show what's missing
     geom_line (data = filter (sau_10yr_agg, country == country_name)) +
     facet_wrap (~rcp) +
     guides (fill = "none") +
@@ -226,7 +205,7 @@ for (country_name in sau_countries) {
 
 # Chile comm group ----
 
-# try to trick color scale
+# try to trick color scale, match with other chile graphs. 6 colors instead of SAU 8. 
 library(scales)
 show_col(hue_pal()(6))
 
@@ -256,13 +235,22 @@ upside_chile_groups <- catch_upside_ts %>%
   group_by (country, rcp, year, commercial_group) %>%
   summarise (tonnes = sum (tonnes))
 
+# line of aggregated landings
+chl_landings_agg <- chl_landings %>%
+  group_by (year) %>%
+  summarise (tonnes = sum (catch_mt)) %>% 
+  ungroup() %>%
+  mutate (year = as.integer(year))
+
 png ("Figures/contextual_agg_catch_area_comm_group_Chile.png", width = 6, height = 4, units = "in", res = 300)
 # plot past landings
 chl_landings_agg_clip_commgroup %>%
-  ggplot (aes (x = year, y = tonnes/1000000, fill = commercial_group)) +
-  geom_area(position = "stack") +
+  ggplot (aes (x = year, y = tonnes/1000000)) +
+  geom_area(aes (fill = commercial_group), position = "stack") +
   # add future landings
-  geom_area (data = filter (upside_chile_groups, rcp %in% c("RCP26", "RCP60")), position = "stack") +
+  geom_area (data = filter (upside_chile_groups, rcp %in% c("RCP26", "RCP60")), aes (fill = commercial_group), position = "stack") +
+  # add line of aggregated past landings to show what's missing
+  geom_line (data = chl_landings_agg ) +
   facet_wrap (~rcp) +
   labs (y ="Catch, million tonnes", x = "", col = "Climate\nscenario")+
   theme (axis.text = element_text (size = 10),
@@ -283,13 +271,13 @@ sl_ihh_taxa <- sl_ihh_landings %>%
   left_join (sau_2019_taxa, by = "species") %>%
   # copy from afcd_explore 
   mutate (
-    Commercial_group =  case_when (
-      species %in% c("Octopus vulgaris", "Illex coindetii", "Sepia") ~ "Cephalopods",
+    commercial_group =  case_when (
+      species %in% c("Octopus vulgaris", "Illex coindetii", "Sepia") ~ "Other fishes & inverts",
       species %in% c("Penaeus notialis",   "Penaeus kerathurus", "Callinectes","Panulirus", "Holthuispenaeopsis atlantica", "Parapeneopsis atlantica") ~ "Crustaceans",
       # maybe check these
       species %in% c("Arius", "Gerres", "Dentex congoinsis", "Diodon holocanthus","Dactylopterus volitans", "Priacanthus arenatus", "Pseudotolithus brachygnathus", "Albula vulpes", "Sphyraena afra", "Decapturus rhonsus") ~ "Other fishes & inverts",
-      species == "Cymbium" ~ "Other fihses & inverts",
-      TRUE ~ Commercial_group
+      species == "Cymbium" ~ "Other fishes & inverts",
+      TRUE ~ commercial_group
   ))
 
 # past landings, add taxa
@@ -316,10 +304,14 @@ upside_sl_groups <- catch_upside_ts %>%
   group_by (country, rcp, year, commercial_group) %>%
   summarise (tonnes = sum (tonnes))
 
+# full line of landings
+ihh_agg_landings <- sl_ihh_landings %>%
+  filter (sector == "Artisanal") %>%
+  group_by (year) %>%
+  summarise (tonnes = sum (catch_mt, na.rm = TRUE)) %>%
+  # take out 0 at 2018, confusing
+  filter (year < 2018)
 
-sl_landings_agg_clip_commgroup %>%
-  ggplot (aes (x = year, y = tonnes/1000000, fill = commercial_group)) +
-  geom_area(position = "stack")
 
 # trick colors
 library(scales)
@@ -328,10 +320,13 @@ show_col(hue_pal()(8))
 png ("Figures/contextual_agg_catch_area_comm_group_Sierra_Leone_IHH_SSF.png", width = 6, height = 4, units = "in", res = 300)
 # plot past landings
 sl_landings_agg_clip_commgroup %>%
-  ggplot (aes (x = year, y = tonnes/1000000, fill = commercial_group)) +
-  geom_area(position = "stack") +
+  ggplot (aes (x = year, y = tonnes/1000000)) +
+  geom_area(aes(fill = commercial_group), position = "stack") +
   # add future landings
-  geom_area (data = filter (upside_sl_groups, rcp %in% c("RCP26", "RCP60")), position = "stack") +
+  geom_area (data = filter (upside_sl_groups, rcp %in% c("RCP26", "RCP60")), aes(fill = commercial_group), position = "stack") +
+  
+  # add line of aggregated past landings to show what's missing
+  geom_line (data = ihh_agg_landings ) +
   facet_wrap (~rcp) +
   labs (y ="Catch, million tonnes", x = "")+
  
