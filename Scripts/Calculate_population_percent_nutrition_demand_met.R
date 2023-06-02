@@ -478,10 +478,22 @@ plot_pop_needs_met_proj <- function (country_name) {
   
 }
 
-plot_pop_needs_met_proj("Peru")
+
 
 png ("Figures/Peru_annual_nutr_ts_mgmt_facet_population.png", width = 10, height = 6, units = "in", res = 300)
+plot_pop_needs_met_proj("Peru")
+dev.off()
 
+png ("Figures/SierraLeone_annual_nutr_ts_mgmt_facet_population.png", width = 10, height = 6, units = "in", res = 300)
+plot_pop_needs_met_proj("Sierra Leone")
+dev.off()
+
+png ("Figures/Indo_annual_nutr_ts_mgmt_facet_population.png", width = 10, height = 6, units = "in", res = 300)
+plot_pop_needs_met_proj("Indonesia")
+dev.off()
+
+png ("Figures/Chile_annual_nutr_ts_mgmt_facet_population.png", width = 10, height = 6, units = "in", res = 300)
+plot_pop_needs_met_proj("Chile")
 dev.off()
 
 
