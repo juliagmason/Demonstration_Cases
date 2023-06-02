@@ -14,9 +14,9 @@ library (rfishbase)
 
 # function for copying R output tables into word/excel----
 #https://stackoverflow.com/questions/24704344/copy-an-r-data-frame-to-an-excel-spreadsheet
-write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
-  write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
-}
+# write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
+#   write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
+# }
 
 # updating 3/21/23 since we decided on aggregate data. 
 #alter nutricast to match landings data where possible.
@@ -88,18 +88,18 @@ chl_landings_spp <- chl_landings %>%
   select (country, species) %>%
   distinct()
 
-# sau_peru <- sau_2019_country_spp %>% filter (country == "Peru")
-# 
-# peru_nutricast_missing <- nutricast_peru %>% 
-#   filter (!species %in% sau_peru$species)
-# 
-# peru_sau_missing <- sau_peru %>%
-#   filter (!species %in% nutricast_peru $species)
+# 6/2/23 updating with SierraLeone IHH data
+sl_landings_ihh <- readRDS("Data/SLE_landings_IHH.Rds")
+sl_ihh_spp <- sl_landings_ihh %>%
+  mutate (country == "Sierra Leone") %>%
+  select (country, species) %>%
+  distinct()
 
 
+# Function to take landed species name and match to nutricast spp by genus or  ----
 
 match_nutricast_taxa <- function (species_name, country_name) {
-  # send SAU species name into nutricast df
+  # send SAU or lande species name into nutricast df
   
   catch_upside_country <- catch_upside_relative_fam %>%
     filter (country == country_name) 
@@ -136,30 +136,14 @@ match_nutricast_taxa <- function (species_name, country_name) {
   
 }
 
-# match_nutricast_taxa("Caranx", "Peru")
-# 
-# peru_match_taxa_nutricast <- peru_sau_missing %>%
-#   mutate (nutricast = pmap(list(species_name = species, country = "Peru"), match_nutricast_taxa)
-#   ) %>% 
-#   unnest (cols = c(nutricast), names_repair = "check_unique")
-# 
-# length (unique (peru_match_taxa_nutricast$species)) # 17 of 65
-
-# # can I combine missing and non-missing
-# mega_peru <- sau_peru %>%
-#   left_join (catch_upside_relative, by = c("country", "species")) %>%
-#   mutate (nutricast = case_when (
-#     is.na (rcp) ~ pmap(list(species_name = species, country = "Peru"), match_nutricast_taxa), 
-#     TRUE ~ "NA"
-#   ))
-# # no...
-
-# what is a smooth way of doing this all at once? making the missing data with 
+# Function to grab missing species that don't match nutricast ----
 check_missing_nutricast_spp <- function (country_name) {
   
   if (country_name == "Chile") {
     
     landed_spp <- chl_landings_spp 
+  } else if (country_name == "Sierra Leone") {
+    landed_spp <- sl_ihh_spp
   } else {
     
     landed_spp <- sau_2019_country_spp %>% filter (country == country_name)
@@ -187,6 +171,20 @@ nutricast_repair <- nutricast_missing_spp %>%
  mutate (nutricast = pmap(list(species_name = species, country_name = country), match_nutricast_taxa)
   ) %>% 
     unnest (cols = c(nutricast), names_repair = "check_unique")
+
+# update with ihh
+sl_ihh_missing_spp <- check_missing_nutricast_spp("Sierra Leone")
+sl_ihh_repair <- sl_ihh_missing_spp %>%
+  mutate (nutricast = pmap(list(species_name = species, country_name = country), match_nutricast_taxa)
+  ) %>% 
+  unnest (cols = c(nutricast), names_repair = "check_unique")
+
+nutricast_repair <- readRDS("Data/catch_upside_relative_repair_missing.Rds")
+
+nutricast_repair_ihh <- rbind (nutricast_repair, sl_ihh_repair)
+
+# remove duplicates
+nutricast_repair_ihh <- nutricast_repair_ihh [!duplicated(nutricast_repair_ihh ), ]
 
 saveRDS(nutricast_repair, file = "Data/catch_upside_relative_repair_missing.Rds")
 
@@ -248,134 +246,22 @@ nutricast_repair_annual <- nutricast_missing_spp %>%
   unnest (cols = c(nutricast), names_repair = "check_unique")
 
 saveRDS(nutricast_repair_annual, file = "Data/nutricast_upside_relative_annual_repair_missing.Rds")
+
+# update with ihh
+sl_ihh_missing_spp <- check_missing_nutricast_spp("Sierra Leone")
+sl_ihh_repair_annual <- sl_ihh_missing_spp %>%
+  mutate (nutricast = pmap(list(species_name = species, country_name = country), match_nutricast_taxa_annual)
+  ) %>% 
+  unnest (cols = c(nutricast), names_repair = "check_unique")
+
+nutricast_repair_annual <- readRDS("Data/nutricast_upside_relative_annual_repair_missing.Rds")
+
+nutricast_repair_annual_ihh <- rbind (nutricast_repair_annual, sl_ihh_repair_annual)
+
+# remove duplicates
+nutricast_repair_annual_ihh <- nutricast_repair_annual_ihh [!duplicated(nutricast_repair_annual_ihh), ]
+
+saveRDS(nutricast_repair_annual, file = "Data/nutricast_upside_relative_annual_repair_missing.Rds")
+
 #######################################################################################
 
-# Peru, SAU ----
-# no merluccius at all in nutricast. 
-# biggest missing species identified to species level are Argopecten purpuratus, Cynoscion analyis, Doryteuthis gah, Merluccius gayi peruanus
-
-# families
-#ignore chondrychthes, just 0.4 tonnes
-sau_peru_catch <- sau_2019 %>%
-  filter (country == "Peru") %>%
-  group_by (species) %>%
-  summarise (tot_catch = sum (tonnes, na.rm = TRUE))
-
-write.excel(sau_peru_catch)
-
-# not sure what to do about sau Seriola
-sau_peru_match <- sau_2019 %>%
-  filter (country == "Peru") %>%
-  mutate (species = 
-            case_when (
-              species == "Coryphaena" ~ "Coryphaena hippurus",
-              species == "Istiophorus" ~ "Istiophorus platypterus",
-            species == "Paralabrax" ~ "Paralabrax humeralis",
-              TRUE ~ species
-              
-            ))
-
-sau_peru_match %>%
-  group_by (species) %>%
-  # can just take the sum because I'm combining species?
-  summarise (tot_catch = sum (tonnes, na.rm = TRUE)) %>%
-  write.excel()
-
-  
-
-nutricast_peru_match <- catch_upside_relative %>%
-  filter (country == "Peru") %>%
-  # manually fix species, change nutricast if in same genus
-  mutate (species = 
-            case_when (
-              species == "Aulacomya ater" ~ "Aulacomya atra",
-              species %in% c("Caranx melampygus", "Caranx sexfasciatus") ~ "Caranx",
-              species %in% c("Elagatis bipinnulata","Naucrates ductor","Pseudocaranx dentex","Scomberoides tol") ~ "Carangidae",
-              species == "Farfantepenaeus brevirostris" ~ "Farfantepenaeus californiensis",
-              grepl ("Genypterus", species) ~ "Genypterus",
-              grepl ("Holothuria", species) ~ "Holothuriidae",
-              species == "Penaeus monodon" ~ "Penaeidae",
-              species == "Rhinobatos planiceps" ~ "Pseudobatos planiceps",
-              species == "Sarda orientalis" ~ "Sarda chiliensis",
-              species %in% c("Acanthocybium solandri", "Gasterochisma melampus") ~ "Scombridae"
-              TRUE ~ species
-              
-              
-              
-              
-            )) %>%
-  group_by (rcp, species, country) %>%
-  # take mean of grouped species
-  summarise_at (vars(-group_cols()),mean, na.rm = TRUE)
-
-write.excel (sort(unique(nutricast_peru_match$species)))
-
-# Indonesia, SAU ----
-indo_sau <-  sau_2019 %>%
-  filter (country == "Indonesia") %>%
-  group_by (species) %>%
-  summarise (tot_catch = sum (tonnes, na.rm = TRUE)) %>%
-  write.excel()
-
-nutricast_indo_match <- catch_upside_relative %>%
-  filter (country == "Indonesia") %>%
-  pull (species) %>%
-  unique () %>%
-  write.excel()
-  # manually fix species, change nutricast if in same genus
-  mutate (species = 
-            case_when (
-              species == "Aulacomya ater" ~ "Aulacomya atra",
-              species %in% c("Caranx melampygus", "Caranx sexfasciatus") ~ "Caranx",
-              species == "Farfantepenaeus brevirostris" ~ "Farfantepenaeus californiensis",
-              grepl ("Genypterus", species) ~ "Genypterus",
-              grepl ("Holothuria", species) ~ "Holothuriidae",
-              species == "Penaeus monodon" ~ "Penaeidae",
-              species == "Sarda orientalis" ~ "Sarda chiliensis",
-              TRUE ~ species
-
-
-
-
-#For Chile: Brama australis--> Brama brama? Atlantic pomfret. different resilience and temperature...Just the one other fish in teh genus
-
-#Merluccius gayi---M. australis?
-  
-#For Peru: 
-# Sarda chiliensis do have nutrient info. In fishcast. So is M. gayi
-# have Sarda orientalis, and sarda (atlantic)
-
-ds_spp <- readRDS("Data/Free_etal_2020_country_level_outcomes_time_series_for_julia.Rds")
-
-
-merluc <- ds_spp %>%
-  filter (grepl ("Merluccius", species), country %in% c ("Chile", "Peru"), catch_mt > 0)
-
-
-merluc %>%
-  filter (country == "Chile") %>%
-  ggplot() +
-  geom_line (aes (x = year, y = catch_mt, col = species)) +
-  facet_grid(scenario ~ rcp) +
-  theme_bw()
-
-merluc %>%
-  filter (country == "Peru") %>%
-  ggplot() +
-  geom_line (aes (x = year, y = catch_mt, col = species)) +
-  facet_grid(scenario ~ rcp) +
-  theme_bw()
-# no catch for peru
-
-sarda <- ds_spp %>%
-  filter (grepl ("Sarda", species))
-
-sarda %>%
-  #filter (country == "Chile") %>%
-  filter (species == "Sarda orientalis", country %in% c ("Chile", "Peru")) %>%
-  ggplot() +
-  geom_line (aes (x = year, y = catch_mt, col = country)) +
-  facet_grid(scenario ~ rcp) +
-  theme_bw()
-
-# no catch of sarda sarda in chile obv. Sarda doesn't show in nutricast so I don't know what to compare it to?
