@@ -62,10 +62,14 @@ mal_landings <- rbind (mal_ind, mal_ssf)
 
 saveRDS(mal_landings, file= "Data/Malawi_landings_cleaned.Rds")
 
+
+
+# Plot time series ----
+
 mal_landings <- readRDS("Data/Malawi_landings_cleaned.Rds")
 
-# Plot time series:
 png ("Figures/Malawi_landings_all_spp.png", width = 10, height = 8, res = 300, units = "in")
+
 mal_landings %>%
   filter (!comm_name %in% c("Chisawasawa", "Kambuzi")) %>%
   ggplot (aes (x= Year, y = tonnes/1000,fill = comm_name)) +
@@ -99,12 +103,22 @@ mal_top$comm_name = factor(mal_top$comm_name, levels = c("Chambo", "Ndunduma", "
 # save this as R object
 saveRDS(mal_top, file = "Data/malawi_landings_top.Rds")
 
+mal_top <- readRDS("Data/malawi_landings_top.Rds")
+
+# trick color scale so we keep species consistent
+library (scales)
+show_col(brewer_pal(palette = "Dark2")(6))
+
 png ("Figures/Malawi_landings_top_spp.png", width = 10, height = 8, res = 300, units = "in")
 
 mal_top %>%
+  group_by (comm_name, sector, Year) %>%
+  summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
   ggplot (aes (x= Year, y = tonnes/1000,fill = comm_name)) +
   geom_area(position = "stack") +
   facet_wrap (~sector, scales = "free_y", nrow = 2) +
+  #scale_fill_brewer(palette = "Dark2") +
+  scale_fill_manual(values = c("#D95F02", "#7570b3", "#e7298a", "#66A61E", "#E6AB02")) +
   theme_bw() +
   labs (y = "Catch, 1000 tonnes", fill = "Species", x = "") +
   ggtitle("Malawi fish production by sector") +
