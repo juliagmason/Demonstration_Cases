@@ -32,6 +32,8 @@ sau_baseline <- sau_full %>%
   summarise (bl_tonnes = sum (tonnes))
 
 # chl landings
+
+# note: as of 6/6/23, have added commercial_group column but very preliminary, just lumped all the fish that weren't in SAU into "other"
 chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
 
 chl_baseline <- chl_landings %>% 
@@ -150,9 +152,10 @@ for (country_name in sau_countries) {
     geom_line (data = filter(upside_ts_bau_agg, country == country_name), aes(x = year, y = tonnes/1000000, col = rcp)) +
     geom_line (data = filter (sau_10yr_agg, country == country_name), aes (x = year, y = tonnes/1000000)) +
    labs (y ="Catch, million tonnes", x = "", col = "Climate\nscenario")+
-      theme (axis.text = element_text (size = 10),
-             axis.title = element_text (size = 14),
-             plot.title = element_text(size = 18)) +
+   theme (axis.text = element_text (size = 10),
+          axis.title = element_text (size = 14),
+          strip.text = element_text (size = 14),
+          plot.title = element_text(size = 16)) +
     theme_bw() +
    ggtitle (paste0("Recent and projected total landings, ", country_name))
     
@@ -166,10 +169,17 @@ png (paste0("Figures/contextual_agg_catch_line_", country_name,".png"), width = 
 # by commercial group ----
 sau_2019_taxa <- readRDS("Data/SAU_2019_taxa.Rds")
 
+# cut to 8 commercial groups, get rid of scorpionfishies and flatfishes
+sau_2019_taxa_8 <- sau_2019_taxa %>%
+  mutate (commercial_group = case_when (
+    commercial_group %in% c("Flatfishes", "Scorpionfishes", "Cod-likes") ~ "Other fishes & inverts",
+    TRUE ~ commercial_group
+  ))
+
 # aggregate future projections by comm group to simplify
 upside_ts_bau_agg_comm_group <- catch_upside_ts %>%
   filter (scenario == "No Adaptation") %>%
-  inner_join (sau_2019_taxa, by = "species") %>%
+  inner_join (sau_2019_taxa_8, by = "species") %>%
   group_by (country, rcp, year, commercial_group) %>%
   summarise (tonnes = sum (tonnes))
 
@@ -179,8 +189,15 @@ for (country_name in sau_countries) {
   # take past time series, clipped to nutricast species, plot by commercial group
   p <-  sau_10yr_nutricast_clip %>%
     filter (country == country_name) %>%
+    # cut to 8 comm groups
+    mutate (commercial_group = case_when (
+      commercial_group %in% c("Flatfishes", "Scorpionfishes", "Cod-likes") ~ "Other fishes & inverts",
+      TRUE ~ commercial_group
+    )) %>%
     group_by(year, commercial_group) %>%
-    summarise (tonnes = sum (tonnes)) %>%
+    summarise (tonnes = sum (tonnes))
+  
+  p_plot <- p %>%
     ggplot (aes (x = year, y = tonnes/1000000)) +
     geom_area(aes (fill = commercial_group), position = "stack") +
     
@@ -194,13 +211,16 @@ for (country_name in sau_countries) {
     labs (y ="Catch, million tonnes", x = "", fill = "Commercial group")+
     theme (axis.text = element_text (size = 10),
            axis.title = element_text (size = 14),
-           plot.title = element_text(size = 18),
-           legend.position = "none") +
+           strip.text = element_text (size = 14),
+           plot.title = element_text(size = 16)) +
     theme_bw() +
+    
+    # qualitative color scale for species, Dark1
+    scale_fill_brewer(palette = "Dark2") +
     ggtitle (paste0("Recent and projected total landings, ", country_name))
   
-  png (paste0("Figures/contextual_agg_catch_area_comm_group_2scen", country_name,".png"), width = 6, height = 4, units = "in", res = 300)
-  print (p)
+  png (paste0("Figures/contextual_agg_catch_area_comm_group_2scen", country_name,".png"), width = 6, height = 3, units = "in", res = 300)
+  print (p_plot)
   dev.off()
 }
 
@@ -209,26 +229,34 @@ for (country_name in sau_countries) {
 
 # try to trick color scale, match with other chile graphs. 6 colors instead of SAU 8. 
 library(scales)
-show_col(hue_pal()(6))
+show_col(brewer_pal(palette = "Dark2")(6))
 
 # past landings
 chl_landings_agg_clip_commgroup <- chl_landings %>%
   mutate (country = "Chile") %>%
   # clips to nutricast spp
   right_join (nutricast_spp, by = c("country", "species")) %>%
-  rename (commercial_group = taxa) %>%
+  
+  # condense to 8 commercial groups
+  # cut to 8 comm groups
+  mutate (commercial_group = case_when (
+    commercial_group %in% c("Flatfishes", "Scorpionfishes", "Cod-likes") ~ "Other fishes & inverts",
+    TRUE ~ commercial_group
+  )) %>%
   group_by (year, commercial_group) %>%
   summarise (tonnes = sum (catch_mt))%>%
   filter (!is.na(year)) %>%
   ungroup()%>%
   mutate (year = as.integer(year))
 
-# data frame of species and taxa/commercial group
+# data frame of species and taxa/commercial group to match to nutricast data
 chl_groups <- 
   chl_landings %>%
-  select (species, taxa) %>%
-  distinct () %>%
-  rename (commercial_group = taxa)
+  select (species, commercial_group) %>%
+  mutate (commercial_group = case_when (
+    commercial_group %in% c("Flatfishes", "Scorpionfishes", "Cod-likes") ~ "Other fishes & inverts",
+    TRUE ~ commercial_group)) %>%
+  distinct ()
 
 # chile specific nutricast data, add taxa
 upside_chile_groups <- catch_upside_ts %>%
@@ -244,7 +272,7 @@ chl_landings_agg <- chl_landings %>%
   ungroup() %>%
   mutate (year = as.integer(year))
 
-png ("Figures/contextual_agg_catch_area_comm_group_Chile.png", width = 6, height = 4, units = "in", res = 300)
+png ("Figures/contextual_agg_catch_area_comm_group_Chile.png", width = 6, height = 3, units = "in", res = 300)
 # plot past landings
 chl_landings_agg_clip_commgroup %>%
   ggplot (aes (x = year, y = tonnes/1000000)) +
@@ -257,15 +285,19 @@ chl_landings_agg_clip_commgroup %>%
   labs (y ="Catch, million tonnes", x = "", col = "Climate\nscenario")+
   theme (axis.text = element_text (size = 10),
          axis.title = element_text (size = 14),
-         plot.title = element_text(size = 18)) +
+         strip.text = element_text (size = 14),
+         plot.title = element_text(size = 16)) +
   theme_bw() +
-  scale_fill_manual(values = c("#B79F00", "#00BA38", "#00BFC4", "#619CFF", "#F564E3")) +
+  # qualitative color scale for species, Dark1
+  scale_fill_brewer(palette = "Dark2") +
+  # remove legend
+  guides (fill = "none") +
   ggtitle (paste0("Recent and projected total landings, ", "Chile"))
 
 dev.off()
 
 # sierra leone ihh data comm_group ----
-
+show_col(brewer_pal(palette = "Dark2")(8))
 
 sl_landings_agg_clip_commgroup <- sl_ihh_landings %>%
   filter (sector == "Artisanal") %>%
@@ -277,10 +309,10 @@ sl_landings_agg_clip_commgroup <- sl_ihh_landings %>%
   group_by (year, commercial_group) %>%
   summarise (tonnes = sum (catch_mt, na.rm = TRUE))
 
-# trial plot
-sl_landings_agg_clip_commgroup %>%
-  ggplot (aes (x = year, y = tonnes/1000000, fill = commercial_group)) +
-  geom_area(position = "stack")
+# # trial plot
+# sl_landings_agg_clip_commgroup %>%
+#   ggplot (aes (x = year, y = tonnes/1000000, fill = commercial_group)) +
+#   geom_area(position = "stack")
 
 #  specific nutricast data, add taxa
 # data frame of species and taxa/commercial group
@@ -308,9 +340,9 @@ ihh_agg_landings <- sl_ihh_landings %>%
 
 # trick colors
 library(scales)
-show_col(hue_pal()(8))
+#show_col(hue_pal()(8))
 
-png ("Figures/contextual_agg_catch_area_comm_group_Sierra_Leone_IHH_SSF.png", width = 6, height = 4, units = "in", res = 300)
+png ("Figures/contextual_agg_catch_area_comm_group_Sierra_Leone_IHH_SSF.png", width = 6, height = 3, units = "in", res = 300)
 # plot past landings
 sl_landings_agg_clip_commgroup %>%
   ggplot (aes (x = year, y = tonnes/1000000)) +
@@ -322,12 +354,14 @@ sl_landings_agg_clip_commgroup %>%
   geom_line (data = ihh_agg_landings ) +
   facet_wrap (~rcp) +
   labs (y ="Catch, million tonnes", x = "")+
+  guides (fill = "none") +
  
   theme_bw() +
-  scale_fill_manual(values = c("#F8766D", "#7CAE00", "#00BFC4", "#00A9FF", "#C77CFF", "#FF61CC", "gray50")) +
+  scale_fill_manual(values = c("#1B9E77", "#7570b3", "#66A61E", "#E6AB02", "#A6761D", "#666666")) +
   theme (axis.text = element_text (size = 10),
         axis.title = element_text (size = 14),
-        plot.title = element_text(size = 18),
-        legend.position = "none") +
-  ggtitle (paste0("Recent and projected total landings, Sierra Leone\n IHH SSF"))
+        strip.text = element_text (size = 14),
+        plot.title = element_text(size = 16)) +
+  ggtitle (paste0("Recent and projected total landings, Sierra Leone\nIHH SSF"))
+
 dev.off()

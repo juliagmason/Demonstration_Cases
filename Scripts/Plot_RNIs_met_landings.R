@@ -39,6 +39,15 @@ sau_2019 <- readRDS("Data/SAU_2019.Rds")
 # join to commercial group
 sau_2019_taxa <- readRDS("Data/SAU_2019_taxa.Rds")
 
+# cut to 8 commercial groups, get rid of scorpionfishies and flatfishes
+sau_2019_taxa_8 <- sau_2019_taxa %>%
+  mutate (commercial_group = case_when (
+    commercial_group %in% c("Flatfishes", "Scorpionfishes", "Cod-likes") ~ "Other fishes & inverts",
+    TRUE ~ commercial_group
+  ))
+
+# note, m. gayi is cod-like
+
 
 # Priority species ----
 
@@ -62,35 +71,54 @@ plot_sau_rnis_met <- function (country_name, Selenium = FALSE) {
     
     landings <- chl_landings %>%
       filter (year == 2021) %>%
-      rename (commercial_group = taxa) %>%
+      # cut to 8 commercial groups
+      mutate (commercial_group = case_when (
+        commercial_group %in% c("Flatfishes", "Scorpionfishes", "Cod-likes") ~ "Other fishes & inverts",
+        TRUE ~ commercial_group
+      )) %>%
       group_by (species, commercial_group) %>%
       summarise (catch_mt = sum (catch_mt)) %>%
       mutate (rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = "Chile"), calc_children_fed_func)) %>%
       unnest(cols = c(rni_equivalents),  names_repair = "check_unique") 
     
+    # set levels to deal with algae? maybe don't have to?
     #landings$commercial_group <- factor(landings$commercial_group, levels = c ("Algae", "Cephalopod", "Crustacean", "Finfish", "Mollusc", "Other"))
     
   } else if (country_name == "Sierra Leone") {
     landings <- sl_landings %>%
       filter (year == 2017) %>%
+      # cut to 8 commercial groups
+      mutate (commercial_group = case_when (
+        commercial_group %in% c("Flatfishes", "Scorpionfishes") ~ "Other fishes & inverts",
+        TRUE ~ commercial_group
+      )) %>%
       group_by (species, commercial_group) %>%
       summarise (catch_mt = sum (catch_mt)) %>%
       mutate (rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = "Sierra Leone"), calc_children_fed_func)) %>%
       unnest(cols = c(rni_equivalents),  names_repair = "check_unique") 
     
+    # standardize color scale, dark1
+    landings$commercial_group <- factor (landings$commercial_group, levels = c("Anchovies", "Crustaceans","Herring-likes", "Molluscs", "Other fishes & inverts", "Perch-likes","Sharks & rays", "Tuna & billfishes") )
+    
+    
   } else {
 
     
     landings <- sau_2019 %>%
-      left_join (sau_2019_taxa, by = "species") %>%
+      left_join (sau_2019_taxa_8, by = "species") %>%
       filter(country == country_name) %>%
       group_by (species, commercial_group) %>%
       summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
       mutate (rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = country_name), calc_children_fed_func)) %>%
       unnest(cols = c(rni_equivalents),  names_repair = "check_unique")
     
+    # standardize color scale, dark1
+    landings$commercial_group <- factor (landings$commercial_group, levels = c("Anchovies", "Crustaceans","Herring-likes", "Molluscs", "Other fishes & inverts", "Perch-likes","Sharks & rays", "Tuna & billfishes") )
+    
+    
   }
   
+ 
   # not working?? omit_nutrients <- ifelse (Selenium == TRUE, c("Protein", "Selenium"), "Protein")
   if (Selenium == TRUE) {omit_nutrients <- "Protein"} else {omit_nutrients <- c("Protein", "Selenium")}
   
@@ -105,26 +133,25 @@ plot_sau_rnis_met <- function (country_name, Selenium = FALSE) {
     #ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000, fill = commercial_group)) +
     geom_col() +
     theme_bw() +
-    ggtitle (paste0("Child RNI equivalents, ", country_name, "\nMost recent year of landings")) +
+    #ggtitle (paste0("Child RNI equivalents, ", country_name, "\nMost recent year of landings")) +
     labs (x = "", y = "Child RNI equivalents, millions", fill = "Comm. group") 
   
 }
 
+
+
+
 i <-  plot_sau_rnis_met("Indonesia")
-png ("Figures/Indo_aggregate_landings_RNIs_met.png", width = 5, height = 4, units = "in", res = 300)  
+png ("Figures/Indo_aggregate_landings_RNIs_met.png", width = 4, height = 4, units = "in", res = 300)  
 print(
   i +
-    theme ( 
-      axis.text.y = element_text (size = 13),
-      axis.text.x = element_text (size = 11),
-      axis.title = element_text (size = 16),
-      strip.text = element_text(size = 16),
-      legend.text = element_text (size = 10),
-      legend.title = element_text (size = 12),
-      plot.title = element_text (size = 18),
-      #legend.position = "none"
-      #legend.position = c(0.8, 0.6))
-    ))
+    scale_fill_brewer(palette = "Dark2") +
+    guides (fill = "none") +
+    ggtitle ("Potential nutrient provisioning\n2019 reconstructed catch") +
+    theme (axis.text = element_text (size = 10),
+           axis.title = element_text (size = 10),
+           plot.title = element_text(size = 12))
+)
 dev.off()
 
 # what are the perch-likes contributing so much in indo? R. brachysoma, decapturus, Selaroides leptolepis
@@ -135,57 +162,53 @@ sau_2019 %>%
   View()
 
 # Peru  ----
-png ("Figures/Peru_aggregate_landings_RNIs_met.png", width = 5, height = 4, units = "in", res = 300)  
+png ("Figures/Peru_aggregate_landings_RNIs_met.png", width = 4, height = 4, units = "in", res = 300)  
 print(
   plot_sau_rnis_met("Peru") +
-    theme ( 
-      axis.text.y = element_text (size = 13),
-      axis.text.x = element_text (size = 11),
-      axis.title = element_text (size = 16),
-      strip.text = element_text(size = 16),
-      legend.text = element_text (size = 10),
-      legend.title = element_text (size = 12),
-      plot.title = element_text (size = 18),
-      legend.position = "none"
-    )
+    scale_fill_brewer(palette = "Dark2") +
+    ggtitle ("Potential nutrient provisioning\n2019 reconstructed catch") +
+    guides (fill = "none") +
+    theme (axis.text = element_text (size = 10),
+           axis.title = element_text (size = 10),
+           plot.title = element_text(size = 12))
 )
 dev.off()
 
 
 # Sierra Leone  ----
-png ("Figures/SL_aggregate_landings_RNIs_met_IHH.png", width = 5, height = 4, units = "in", res = 300)  
+
+library(scales)
+show_col(brewer_pal(palette = "Dark2")(8))
+show_col(brewer_pal(palette = "GnBu")(10))
+
+png ("Figures/SL_aggregate_landings_RNIs_met_IHH.png", width = 4, height = 4, units = "in", res = 300)  
 print(
   plot_sau_rnis_met("Sierra Leone")  +
-    theme ( 
-    axis.text.y = element_text (size = 13),
-    axis.text.x = element_text (size = 11),
-    axis.title = element_text (size = 16),
-    strip.text = element_text(size = 16),
-    legend.text = element_text (size = 10),
-    legend.title = element_text (size = 12),
-    plot.title = element_text (size = 18),
-    legend.position = "none"
-  )
+    scale_fill_manual(values = c("#1B9E77", "#D95F02", "#7570b3", "#66A61E", "#E6AB02", "#A6761D", "#666666")) +
+    ggtitle ("Potential nutrient provisioning, 2017 landings") +
+    guides (fill = "none") +
+    theme (axis.text = element_text (size = 10),
+             axis.title = element_text (size = 10),
+             plot.title = element_text(size = 12)) 
 )
+
 dev.off()
 
 
 
 # Chl  ----
 #png ("Figures/Chl_aggregate_landings_RNIs_met_no_algae.png", width = 5, height = 4, units = "in", res = 300)  
-png ("Figures/Chl_aggregate_landings_RNIs_met.png", width = 5, height = 4, units = "in", res = 300)  
+c <- plot_sau_rnis_met("Chile")
+png ("Figures/Chl_aggregate_landings_RNIs_met.png", width = 5.5, height = 4, units = "in", res = 300)  
 print(
-  plot_sau_rnis_met("Chile")  +
-    theme (
-      axis.text.y = element_text (size = 13),
-      axis.text.x = element_text (size = 11),
-      axis.title = element_text (size = 16),
-      strip.text = element_text(size = 16),
-      legend.text = element_text (size = 10),
-      legend.title = element_text (size = 12),
-      plot.title = element_text (size = 18),
-      legend.position = "none"
-    )
+  c  +
+    ggtitle ("Potential nutrient provisioning, 2021 landings") +
+    #guides (fill = "none") +
+    # have to add a color for algae
+    scale_fill_manual(values = c("#4EB3D3", "#1B9E77", "#D95F02", "#7570b3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D", "#666666")) +
+    theme (axis.text = element_text (size = 10),
+           axis.title = element_text (size = 10),
+           plot.title = element_text(size = 12)) 
 )
 dev.off()
 
@@ -193,42 +216,34 @@ dev.off()
 # plot separately
 # ssf has 2018 but industrial most recent is 2017
 # Clean_Malawi_landings.R
-mal_landings <- readRDS("Data/Malawi_landings_cleaned.Rds")
-
-top_spp <- mal_landings %>% 
-  filter (!comm_name %in% c("Chisawasawa", "Kambuzi")) %>%
-  group_by (sector,comm_name) %>%
-  summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
-  slice_max (tonnes, n= 3) 
-
-mal_top <- mal_landings %>%
-  filter (!comm_name %in% c("Chisawasawa", "Kambuzi")) %>%
-  mutate (comm_name = ifelse (comm_name %in% top_spp$comm_name, comm_name, "Others"))
-mal_top$comm_name = factor(mal_top$comm_name, levels = c("Chambo", "Ndunduma", "Usipa", "Utaka", "Others"))
+mal_top <- readRDS("Data/malawi_landings_top.Rds")
 
 mal_nutr <- mal_top %>%
   filter (Year == 2017) %>%
   mutate (rni_equivalents = pmap (list (species = species, amount = tonnes, country_name = "Malawi"), calc_children_fed_func)) %>%
   unnest(cols = c(rni_equivalents),  names_repair = "check_unique") 
 
+# keep colors consistent, don't have data for ndunduma
+show_col(brewer_pal(palette = "Dark2")(6))
 
-png ("Figures/Mal_aggregate_landings_RNIs_met.png", width = 5, height = 4, units = "in", res = 300)  
+png ("Figures/Mal_aggregate_landings_RNIs_met.png", width = 6, height = 3, units = "in", res = 300)  
 mal_nutr %>%
   filter (!nutrient %in% c("Protein", "Selenium")) %>%
   ggplot (aes (x = nutrient, y = rni_equivalents/1000000, fill = comm_name)) +
   #ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000, fill = commercial_group)) +
   geom_col() +
+  scale_fill_manual(values = c("#D95F02", "#e7298a", "#66A61E", "#E6AB02")) +
   theme_bw() +
-  ggtitle (paste0("Child RNI equivalents, Malawi\nMost recent year of landings")) +
+  ggtitle (paste0("Potential nutrient provisioning, 2017 landings")) +
   labs (x = "", y = "Child RNI equivalents, millions", fill = "Species") +
 theme (
-  axis.text.y = element_text (size = 13),
-  axis.text.x = element_text (size = 11),
-  axis.title = element_text (size = 16),
+  axis.text.y = element_text (size = 10),
+  axis.text.x = element_text (size = 10),
+  axis.title = element_text (size = 12),
   strip.text = element_text(size = 16),
   legend.text = element_text (size = 10),
   legend.title = element_text (size = 12),
-  plot.title = element_text (size = 18)
+  plot.title = element_text (size = 16)
 )
 
 dev.off()
