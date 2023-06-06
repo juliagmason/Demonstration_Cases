@@ -74,4 +74,42 @@ chl_landings  <- t %>%
 
 saveRDS (chl_landings, file = "Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
 
+# add SAU commercial group
+chl_landings <- readRDS("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
 
+#https://www.rdocumentation.org/packages/seaaroundus/versions/1.2.0
+devtools::install_github("ropensci/seaaroundus")
+
+# noooo not available
+sau_2019_taxa <- readRDS("Data/SAU_2019_taxa.Rds")
+
+chl_spp <- chl_landings %>%
+  select (species, taxa) %>%
+  distinct() %>%
+  rename (chl_taxa = taxa) %>%
+  left_join (sau_2019_taxa, by = "species") %>%
+  # fix missing
+  mutate (
+    commercial_group = case_when (
+      chl_taxa == "Algae" ~ "Algae",
+      chl_taxa == "Crustacean" ~ "Crustaceans",
+      chl_taxa ==  "Mollusc" ~ "Mollusc", 
+      chl_taxa == "Cephalopod" ~ "Other fishes & inverts",
+      species %in% c("Sphyraena spp", "Callorhinchus callorhynchus") ~ "Sharks & rays",
+      species %in% c("Anisotremus scapularis") ~ "Perch-likes",
+      # haven't gone through to correct this yet
+      is.na (commercial_group) & chl_taxa == "Finfish" ~ "Other fishes & inverts",
+      TRUE ~ commercial_group)
+    )
+
+chl_spp %>% filter (is.na(commercial_group)) %>% View()
+
+View (chl_spp)
+
+# join to landings data
+chl_landings <- chl_landings %>%
+  #remove repeated chl_taxa column
+  select (-taxa) %>%
+  left_join (chl_spp, by = "species")
+
+saveRDS (chl_landings, file = "Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
