@@ -194,7 +194,30 @@ print(
 
 dev.off()
 
+# plot industrial vs. artisanal
+sl_nutr_sector <- sl_landings %>%
+  filter (year == 2017) %>%
+  mutate (rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = "Sierra Leone"), calc_children_fed_func)) %>%
+  unnest(cols = c(rni_equivalents),  names_repair = "check_unique") 
 
+png ("Figures/SL_aggregate_landings_RNIs_met_IHH_sector.png", width = 6, height = 4, units = "in", res = 300)  
+sl_nutr_sector %>%
+  mutate (commercial_group = ifelse (commercial_group == "Flatfishes", "Other fishes & inverts", commercial_group)) %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  ggplot (aes (x = nutrient, y = rni_equivalents/1000000, fill = commercial_group)) +
+  facet_wrap (~sector) +
+  
+  geom_col() +
+  theme_bw() +
+  scale_fill_manual(values = c("#1B9E77", "#D95F02", "#7570b3", "#66A61E", "#E6AB02", "#A6761D", "#666666")) +
+  ggtitle ("Potential nutrient provisioning, 2017 landings") +
+  guides (fill = "none") +
+  theme (axis.text = element_text (size = 10),
+         axis.title = element_text (size = 10),
+         strip.text = element_text (size = 11),
+         plot.title = element_text(size = 12)) +
+  labs (x = "", y = "Child RNI equivalents, millions") 
+dev.off()
 
 # Chl  ----
 #png ("Figures/Chl_aggregate_landings_RNIs_met_no_algae.png", width = 5, height = 4, units = "in", res = 300)  
