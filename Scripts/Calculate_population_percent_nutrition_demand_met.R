@@ -434,16 +434,16 @@ countries <- list ("Sierra Leone", "Chile", "Indonesia")
 lapply (countries, proj_nutr_tonnes)
 
 
-# plot pop needs met ts
-
-peru_tonnes_nutr_ts <- readRDS("Data/Peru_annual_ts_forecasted_nutrients_tonnes.Rds")
+# plot pop needs met ts ----
+# if running from here:
+wpp_country_aggregate <- readRDS("Data/annual_nutr_demand_rni_by_country.Rds")
 
 plot_pop_needs_met_proj <- function (country_name) {
   
   tonnes_nutr_ts <- readRDS(paste0("Data/", country_name, "_annual_ts_forecasted_nutrients_tonnes.Rds"))
   
   # aggregate by nutrient, rcp, scenario
-  tonnes_nutr_agg_ts <-  peru_tonnes_nutr_ts %>%
+  tonnes_nutr_agg_ts <-  tonnes_nutr_ts %>%
     group_by (year, nutrient, rcp, scenario) %>%
     summarise (tot_tonnes = sum (nutr_tonnes, na.rm = TRUE))
   
@@ -451,7 +451,7 @@ plot_pop_needs_met_proj <- function (country_name) {
  ts_perc_pop <- wpp_country_aggregate %>%
     filter (country == country_name, Time > 2022) %>%
     rename (year = Time) %>%
-    left_join (peru_tonnes_nutr_agg_ts, by = c ("year", "nutrient")) %>%
+    left_join (tonnes_nutr_agg_ts, by = c ("year", "nutrient")) %>%
     mutate (prop_demand_met = tot_tonnes / tot_nutr_annual_demand)
   
  # fix levels
@@ -480,20 +480,20 @@ plot_pop_needs_met_proj <- function (country_name) {
 
 
 
-png ("Figures/Peru_annual_nutr_ts_mgmt_facet_population.png", width = 10, height = 6, units = "in", res = 300)
-plot_pop_needs_met_proj("Peru")
+png ("Figures/Peru_annual_nutr_ts_mgmt_facet_population.png", width = 8, height = 6, units = "in", res = 300)
+plot_pop_needs_met_proj(country_name = "Peru") + theme(legend.position="bottom")
 dev.off()
 
-png ("Figures/SierraLeone_annual_nutr_ts_mgmt_facet_population.png", width = 10, height = 6, units = "in", res = 300)
-plot_pop_needs_met_proj("Sierra Leone")
+png ("Figures/SierraLeone_annual_nutr_ts_mgmt_facet_population.png", width = 8, height = 6, units = "in", res = 300)
+plot_pop_needs_met_proj("Sierra Leone")+ theme(legend.position="bottom")
 dev.off()
 
-png ("Figures/Indo_annual_nutr_ts_mgmt_facet_population.png", width = 10, height = 6, units = "in", res = 300)
-plot_pop_needs_met_proj("Indonesia")
+png ("Figures/Indo_annual_nutr_ts_mgmt_facet_population.png", width = 8, height = 6, units = "in", res = 300)
+plot_pop_needs_met_proj("Indonesia")+ theme(legend.position="bottom")
 dev.off()
 
-png ("Figures/Chile_annual_nutr_ts_mgmt_facet_population.png", width = 10, height = 6, units = "in", res = 300)
-plot_pop_needs_met_proj("Chile")
+png ("Figures/Chile_annual_nutr_ts_mgmt_facet_population.png", width = 8, height = 6, units = "in", res = 300)
+plot_pop_needs_met_proj("Chile")+ theme(legend.position="bottom")
 dev.off()
 
 
@@ -529,7 +529,7 @@ plot_proj_pop_growth <- function (country_name) {
 
 
 png ("Figures/Peru_population_proj.png", width = 6, height = 6, units = "in", res = 300)
-
+print (plot_proj_pop_growth("Peru"))
 dev.off()
 
 
@@ -537,7 +537,93 @@ png ("Figures/SL_population_proj.png", width = 6, height = 6, units = "in", res 
 print (plot_proj_pop_growth("Sierra Leone"))
 dev.off()
 
+png ("Figures/Indo_population_proj.png", width = 6, height = 6, units = "in", res = 300)
+print (plot_proj_pop_growth("Indonesia"))
+dev.off()
 
+png ("Figures/Chile_population_proj.png", width = 6, height = 6, units = "in", res = 300)
+print (plot_proj_pop_growth("Chile"))
+dev.off()
+
+
+##################################################
+# Malawi plot past landings as RNIs met ----
+wpp_country_aggregate <- readRDS("Data/annual_nutr_demand_rni_by_country.Rds")
+
+# plot past population growth
+wpp_pop <- read_csv("Data/WPP2022_Population1JanuaryByAge5GroupSex_Medium.csv")
+mal_pop <- wpp_pop %>%
+  select (Location, ISO3_code, Time, AgeGrp, PopMale, PopFemale) %>%
+  filter (Location == "Malawi") %>%
+  rename (country = Location, age_range_wpp = AgeGrp, year= Time) %>%
+  pivot_longer (PopMale:PopFemale,
+                names_prefix = "Pop",
+                names_to = "Sex",
+                values_to = "Pop") %>%
+  group_by (year) %>%
+  summarise (population = sum (Pop)) %>%
+  ggplot (aes (x = year, y = population/1000)) +
+  geom_line() +
+  theme_bw() +
+  labs (x = "", y = "Past/Projected population, millions") + 
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16))
+
+png ("Figures/Malawi_population_total.png", width = 6, height = 6, units = "in", res = 300)
+print (mal_pop) +ggtitle ("Malawi estimated population trend")
+dev.off()
+
+png ("Figures/Malawi_population_landings_ts.png", width = 6, height = 6, units = "in", res = 300)
+print (mal_pop) + xlim (c(2007, 2018)) + ylim (c(10, 20)) + labs (y = "Population, millions") +ggtitle ("Malawi estimated population trend")
+dev.off()
+
+# translate past landings to RNIs met
+
+mal_landings <- readRDS("Data/Malawi_landings_cleaned.Rds")
+
+# convert to nutrient yield, tonnes
+mal_nutr_ts <- mal_landings %>%
+  group_by (Year, species) %>%
+  summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  # convert to nutrients
+  mutate (nutr_yield = pmap (list (species_name = species, catch_mt = tonnes, country_name = "Malawi"), convert_catch_to_nutr_tons)) %>%
+  unnest(cols = c(nutr_yield),  names_repair = "check_unique") 
+
+
+# aggregate by nutrient
+mal_nutr_agg_ts <-  mal_nutr_ts %>%
+  group_by (Year, nutrient) %>%
+  summarise (tot_tonnes = sum (nutr_tonnes, na.rm = TRUE))
+
+# join to population
+mal_ts_perc_pop <- wpp_country_aggregate %>%
+  filter (country == "Malawi") %>%
+  rename (Year = Time) %>%
+  # right join to clip ts?
+  right_join (mal_nutr_agg_ts, by = c ("Year", "nutrient")) %>%
+  mutate (prop_demand_met = tot_tonnes / tot_nutr_annual_demand)
+
+# plot
+
+plot <- mal_ts_perc_pop %>%
+  filter (!nutrient %in% c("Protein")) %>%
+  ggplot (aes (x = Year, y = prop_demand_met * 100, col = nutrient)) +
+  #geom_point() +
+  geom_line(lwd = 1.5) +
+  #facet_wrap (~nutrient, scales = "free_y") +
+  theme_bw() +
+  labs (y = "% population RNI equiv.", x = "", col = "Nutrient") +
+  #ggtitle (paste0("Projected nutrient yield for ", country_name, ", RCP 6.0")) +
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16),
+         strip.text = element_text (size = 16),
+         legend.text = element_text (size = 12),
+         legend.title = element_text (size = 14),
+         plot.title = element_text (size = 18))
+
+png ("Figures/Malawi_population_needs_met_past_ts.png", width = 6, height = 6, units = "in", res = 300)
+print (plot)
+dev.off()
 
 ###################################################
 # periods ----
