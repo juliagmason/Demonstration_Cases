@@ -58,6 +58,8 @@ full_baseline <- rbind (sau_baseline, chl_baseline, sl_baseline)
 
 saveRDS(full_baseline, file = "Data/baseline_catch_sau_chl_ihh.Rds")
 
+full_baseline <- readRDS("DAta/baseline_catch_sau_chl_ihh.Rds")
+
 # catch upside ----
 # ratio of baseline (2012-2021) to future catch for each year/scenario calculate_nutritional_upsides.R
 catch_upside_annual <- readRDS ("Data/nutricast_upside_relative_annual_ratio.Rds")
@@ -300,7 +302,7 @@ dev.off()
 show_col(brewer_pal(palette = "Dark2")(8))
 
 sl_landings_agg_clip_commgroup <- sl_ihh_landings %>%
-  filter (sector == "Artisanal") %>%
+ # filter (sector == "Artisanal") %>%
   mutate (country = "Sierra Leone") %>%
 
   #clip to nutricast
@@ -331,7 +333,7 @@ upside_sl_groups <- catch_upside_ts %>%
 
 # full line of landings
 ihh_agg_landings <- sl_ihh_landings %>%
-  filter (sector == "Artisanal") %>%
+  #filter (sector == "Artisanal") %>%
   group_by (year) %>%
   summarise (tonnes = sum (catch_mt, na.rm = TRUE)) %>%
   # take out 0 at 2018, confusing
@@ -342,7 +344,7 @@ ihh_agg_landings <- sl_ihh_landings %>%
 library(scales)
 #show_col(hue_pal()(8))
 
-png ("Figures/contextual_agg_catch_area_comm_group_Sierra_Leone_IHH_SSF.png", width = 6, height = 3, units = "in", res = 300)
+png ("Figures/contextual_agg_catch_area_comm_group_Sierra_Leone_IHH_all.png", width = 6, height = 3, units = "in", res = 300)
 # plot past landings
 sl_landings_agg_clip_commgroup %>%
   ggplot (aes (x = year, y = tonnes/1000000)) +
@@ -362,6 +364,6 @@ sl_landings_agg_clip_commgroup %>%
         axis.title = element_text (size = 14),
         strip.text = element_text (size = 14),
         plot.title = element_text(size = 16)) +
-  ggtitle (paste0("Recent and projected total landings, Sierra Leone\nIHH SSF"))
+  ggtitle ("Recent and projected total landings, Sierra Leone")
 
 dev.off()
