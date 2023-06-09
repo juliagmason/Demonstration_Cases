@@ -106,20 +106,44 @@ mal_names <- read.csv ("Data/Malawi_names.csv") %>%
     TRUE ~ species
   ))
 
-mal_top <- mal_names %>%
+mal_top_names <- mal_names %>%
   filter (comm_name %in% c("Chambo", "Usipa", "Utaka"))
 
-png ("Figures/Malawi_top_spp_nutr_dodge_bar.png", width = 6, height = 6, units = "in", res = 300)
+png ("Figures/Malawi_top_spp_nutr_dodge_bar.png", width = 6, height = 3, units = "in", res = 300)
 print(
-plot_colorful_spp_nutr_dodge_bar(mal_top$species, Selenium = FALSE) +
+plot_colorful_spp_nutr_dodge_bar(mal_top_names$species, Selenium = FALSE) +
+  # scale_x_discrete(labels = c ())
   theme ( 
-    axis.text.y = element_text (size = 12),
-    axis.text.x = element_text (size = 11),
-    axis.title = element_text (size = 16),
+    axis.text.y = element_text (size = 10),
+    axis.text.x = element_text (size = 10),
+    axis.title = element_text (size = 12),
     strip.text = element_text(size = 16),
-    legend.text = element_text (size = 12),
-    legend.title = element_text (size = 14),
-    plot.title = element_text (size = 18))
+    legend.text = element_text (size = 10),
+    legend.title = element_text (size = 12),
+    plot.title = element_text (size = 16))
+)
+dev.off()
+
+# sierra leone, priority species
+
+#sl_pri <- priority_spp %>% filter (country == "Sierra Leone")
+sl_landings <- readRDS("Data/SLE_landings_IHH.Rds")
+
+# top landed species
+sl_top <- sl_landings %>%
+  group_by (species, sector) %>%
+  summarise (tonnes = sum(catch_mt, na.rm = TRUE)) %>%
+  ungroup() %>%
+  slice_max (n=6, order_by = "tonnes") # this gets 3 identifiable spp? big drop after P. elongatus
+
+png ("Figures/SL_spp_nutr_dodge_bar.png", width = 5, height = 4, units = "in", res = 300)
+print (
+  plot_colorful_spp_nutr_dodge_bar(sl_top$species, Selenium  = FALSE) +
+    theme (axis.text = element_text (size = 10),
+           axis.title = element_text (size = 10),
+           plot.title = element_text(size = 12),
+           legend.text = element_text (size = 10),
+           legend.title = element_text (size = 12)) 
 )
 dev.off()
 
@@ -134,11 +158,7 @@ print (
 dev.off()
 
 
-png ("Figures/SL_pri_spp_nutr_dodge_bar.png", width = 10, height = 5, units = "in", res = 300)
-print (
-  plot_colorful_spp_nutr_dodge_bar("Sierra Leone")
-)
-dev.off()
+
 
 png ("Figures/CHL_pri_spp_nutr_dodge_bar.png", width = 10, height = 5, units = "in", res = 300)
 print (
@@ -158,88 +178,3 @@ print (
 )
 dev.off()
 
-# Malawi ----
-
-# from abby landings/fishnutrients
-
-
-
-# malawi
-library (googlesheets4)
-gs_id <- "1_apQe54xNsP0-bGHkGBUa75hJR5WX0pd"
-# nutrition info in species_nutrition_info
-mwi_nutr <- read_sheet(ss = gs_id, sheet = "Species_nutrition_info") 
-# gargle error...do manually
-mwi_nutr <- read.csv("Data/MWI_spp_nutr.csv")
-
-png ("Figures/MWI_pri_spp_nutr_dodge_bar.png", width = 10, height = 5, units = "in", res = 300)
-mwi_nutr %>%
-  # nutrients in different format
-  mutate (nutrient = gsub (" ", "_", nutrient),
-          nutrient = ifelse (nutrient == "Vit_A", "Vitamin_A", nutrient)) %>%
-  # join to rni data
-  left_join (rni_child, by = "nutrient") %>%
-  
-  # this would be the percentage of your daily requirement you could get from a 100g serving of each species. cap at 100%
-  mutate (perc_rni = amount/RNI * 100,
-          perc_rni = ifelse (perc_rni > 100, 100, perc_rni),
-          nutrient = 
-            case_when (nutrient == "Vitamin_A" ~ "Vit A",
-                       nutrient == "Omega_3" ~ "Omega 3",
-                       TRUE ~ nutrient)) %>%
-  ungroup() %>%
-  filter (!nutrient %in% c("Protein", "Selenium")) %>%
-  group_by (species) %>%
-  mutate (micronutrient_density = sum (perc_rni),
-          spp_short = ifelse (
-            species != "Stolephorus",
-            paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
-            species)
-  ) %>%
-  ungroup() %>%
-  
-  ggplot (aes (x = reorder(spp_short, -micronutrient_density), fill = nutrient, y = perc_rni)) +
-  geom_col (position = "dodge") +
-  theme_bw() +
-  labs (x = "", y = "% Child RNI met per 100g serving", fill = "Nutrient") +
-  ylim (c(0,100)) +
-  ggtitle ("Nutrient content of selected species, Malawi") +
-  theme ( 
-    axis.text.y = element_text (size = 13),
-    axis.text.x = element_text (size = 11),
-    axis.title = element_text (size = 16),
-    strip.text = element_text(size = 16),
-    legend.text = element_text (size = 12),
-    legend.title = element_text (size = 14),
-    plot.title = element_text (size = 18))
-dev.off()
-
-# facet ----
-png ("Figures/Facet_pri_spp_nutr_dodge_bar.png", width = 11, height = 12, units = "in", res = 300)
-pri_spp_nutr %>%
-  filter (!nutrient %in% c("Protein", "Selenium")) %>%
-  group_by (species) %>%
-  mutate (micronutrient_density = sum (perc_rni),
-          spp_short = ifelse (
-            species != "Stolephorus",
-            paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
-            species)
-  ) %>%
-  ungroup() %>%
-  filter (!country == "Mexico", !is.na(nutrient)) %>%
-  ggplot (aes (x = reorder(spp_short, -micronutrient_density), fill = nutrient, y = perc_rni)) +
-  geom_col (position = "dodge") +
-  theme_bw() +
-  facet_wrap (~country, ncol = 1, scales = "free_x") +
-  labs (x = "", y = "% Child RNI met per 100g serving", fill = "Nutrient") +
-  ylim (c(0,100)) +
-  #ggtitle (country_name)+
-  theme ( 
-    axis.text.y = element_text (size = 12),
-    axis.text.x = element_text (size = 11),
-    axis.title = element_text (size = 16),
-    strip.text = element_text(size = 16),
-    legend.text = element_text (size = 12),
-    legend.title = element_text (size = 14),
-    plot.title = element_text (size = 18))
-dev.off()
