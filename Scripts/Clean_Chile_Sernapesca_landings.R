@@ -18,7 +18,7 @@
 library (tidyverse)
 library (readxl)
 
-chl_spp <- read.csv("Data/Chile_spp_names_key.csv") %>% 
+chl_spp_names <- read.csv("Data/Chile_spp_names_key.csv") %>% 
   mutate (ESPECIE = tolower (ESPECIE))
 
 # functions 
@@ -63,14 +63,20 @@ t <- map_dfr (chl_files, clean_chl_data)
 # got all of the 2021 species. still 53 that don't match, some due to typos/small differences. 
 
 chl_landings  <- t %>%
-  left_join (chl_spp, by = "ESPECIE") %>%
+  left_join (chl_spp_names, by = "ESPECIE") %>%
   select (species, catch_mt, year, sector, taxa) %>%
   filter (!is.na (species)) %>%
   # fix some species names
   mutate (species = 
-            case_when (species == "Mujil cephalus" ~ "Mugil cephalus", 
+            case_when (species == "Kiphosus sandwicensis" ~ "Kyphosus sandwicensis",
+                       species == "Mujil cephalus" ~ "Mugil cephalus", 
+                       species == "Scomberesox saurus scombroides" ~ "Scomberesox saurus",
+                       
+                       # THIS ISN'T WORKING...but only 6 tonnes....
+                       species == "Kiphosus sandwicensis" ~ "Kyphosus sandwicensis",
                        # trim white spaces
-                       TRUE ~ trimws(species)))
+                       TRUE ~ trimws(species))) %>%
+  rename (chl_taxa = taxa)
 
 saveRDS (chl_landings, file = "Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
 
@@ -83,10 +89,23 @@ devtools::install_github("ropensci/seaaroundus")
 # noooo not available
 sau_2019_taxa <- readRDS("Data/SAU_2019_taxa.Rds")
 
+# SAU comm groups search
+# https://www.seaaroundus.org/data/#/topic/biodiversity
+
+# ones I classified without SAU:
+#Gaterochisma melampus -- is a scombrid, therefore perch-like https://www.fishbase.se/summary/100
+# Kiphosus--other spelling kyphosus. perch like. fix above...
+# Sicyases sanguineus is a goby, perch-like
+# Congiopodus peruvianus is scorpionfish? not sure, keep with other https://www.fishbase.se/summary/8398
+
+# Genypterus is rightly in other fishes (cusk eel), as is Odonthestes regia, silverside, Cheilopogon rapanouiensis flying fish
+
+#can't find Navodon paschalis
+
+
 chl_spp <- chl_landings %>%
-  select (species, taxa) %>%
+  select (species, chl_taxa) %>%
   distinct() %>%
-  rename (chl_taxa = taxa) %>%
   left_join (sau_2019_taxa, by = "species") %>%
   # fix missing
   mutate (
@@ -96,20 +115,25 @@ chl_spp <- chl_landings %>%
       chl_taxa ==  "Mollusc" ~ "Mollusc", 
       chl_taxa == "Cephalopod" ~ "Other fishes & inverts",
       species %in% c("Sphyraena spp", "Callorhinchus callorhynchus") ~ "Sharks & rays",
-      species %in% c("Anisotremus scapularis") ~ "Perch-likes",
-      # haven't gone through to correct this yet
+      # change Kiphosus to Kyphosus here if can successfully change above
+      species %in% c("Anisotremus scapularis", "Caranx georgianus", "Eleginops maclovinus", "Epigonus crassicaudus", "Nemadactylus gayi", "Polyprion oxygeneios", "Sciaena deliciosa", "Micropogonias manni", "Menticirrhus ophicephalus", "Gaterochisma melampus", "Kiphosus sandwicensis", "Sicyases sanguineus") ~ "Perch-likes",
+      species %in% c("Cheilopogon rapanouiensis, Genypterus chilensis", "Gymnothorax porphyreus", "Scomberesox saurus", "Ophichthus remiger", "Eptatretus polytrema") ~ "Other fishes & inverts",
+      species %in% c("Hippoglossina macrops", "Paralichthys spp") ~ "Flatfishes",
+      species %in% c("Oncorhynchus tshawytscha") ~ "Salmon, smelts, etc",
+      species %in% c("Sebastes capensis", "Helicolenus lengerichi") ~ "Scorpionfishes",
+      species %in% c("Tetrapturus audax", "Tetrapturus spp") ~ "Tuna & billfishes",
+      #species %in% c("Argobuccinum spp.", "Aulacomya ater") ~ "Molluscs",
       is.na (commercial_group) & chl_taxa == "Finfish" ~ "Other fishes & inverts",
       TRUE ~ commercial_group)
     )
 
-chl_spp %>% filter (is.na(commercial_group)) %>% View()
+chl_spp %>% filter (is.na(commercial_group)) %>% arrange (species) %>% View()
 
-View (chl_spp)
 
 # join to landings data
 chl_landings <- chl_landings %>%
   #remove repeated chl_taxa column
-  select (-taxa) %>%
+  select (-chl_taxa) %>%
   left_join (chl_spp, by = "species")
 
 saveRDS (chl_landings, file = "Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
