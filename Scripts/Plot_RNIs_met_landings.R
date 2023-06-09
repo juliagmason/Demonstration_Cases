@@ -174,6 +174,43 @@ print(
 )
 dev.off()
 
+# Peru, without anchovy----
+# not sure how to facet, just do one without anchovy
+peru_no_anchovy <- sau_2019 %>%
+  left_join (sau_2019_taxa_8, by = "species") %>%
+  filter(country == "Peru") %>%
+  group_by (species, commercial_group) %>%
+  summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
+  mutate (rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = "Peru"), calc_children_fed_func)) %>%
+  unnest(cols = c(rni_equivalents),  names_repair = "check_unique")
+
+# standardize color scale, dark1
+peru_no_anchovy$commercial_group <- factor (peru_no_anchovy$commercial_group, levels = c("Anchovies", "Crustaceans","Herring-likes", "Molluscs", "Other fishes & inverts", "Perch-likes","Sharks & rays", "Tuna & billfishes") )
+
+png ("Figures/Peru_aggregate_landings_RNIs_met_noanchov.png", width = 4, height = 4, units = "in", res = 300)
+
+peru_no_anchovy %>%
+  
+  filter (species != "Engraulis ringens", !nutrient %in% c("Protein", "Selenium")) %>%
+  # #set algae to zero?
+  # mutate (rni_equivalents = ifelse (commercial_group == "Algae", 0, rni_equivalents)) %>%
+  
+  # just have alphabetical so nutrients are always in the same order
+  ggplot (aes (x = nutrient, y = rni_equivalents/1000000, fill = commercial_group)) +
+  #ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000, fill = commercial_group)) +
+  geom_col() +
+  #scale_fill_manual(values = c("#D95F02", "#7570b3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D", "#666666")) +
+  theme_bw() +
+  #ggtitle (paste0("Child RNI equivalents, ", country_name, "\nMost recent year of landings")) +
+  labs (x = "", y = "Child RNI equivalents, millions", fill = "Comm. group")  +
+  scale_fill_brewer(palette = "Dark2") +
+  ggtitle ("Potential nutrient provisioning, Anchovy omitted\n2019 reconstructed catch") +
+  guides (fill = "none") +
+  theme (axis.text = element_text (size = 10),
+         axis.title = element_text (size = 10),
+         plot.title = element_text(size = 12))
+
+dev.off()
 
 # Sierra Leone  ----
 
@@ -220,8 +257,7 @@ sl_nutr_sector %>%
 dev.off()
 
 # Chl  ----
-#png ("Figures/Chl_aggregate_landings_RNIs_met_no_algae.png", width = 5, height = 4, units = "in", res = 300)  
-c <- plot_sau_rnis_met("Chile")
+
 png ("Figures/Chl_aggregate_landings_RNIs_met.png", width = 5.5, height = 4, units = "in", res = 300)  
 print(
   c  +
@@ -234,6 +270,37 @@ print(
            plot.title = element_text(size = 12)) 
 )
 dev.off()
+
+# remove algae
+
+landings <- chl_landings %>%
+  filter (year == 2021, !commercial_group == "Algae") %>%
+  # cut to 8 commercial groups
+  mutate (commercial_group = case_when (
+    commercial_group %in% c("Flatfishes", "Scorpionfishes", "Cod-likes") ~ "Other fishes & inverts",
+    TRUE ~ commercial_group
+  )) %>%
+  group_by (species, commercial_group) %>%
+  summarise (catch_mt = sum (catch_mt)) %>%
+  mutate (rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = "Chile"), calc_children_fed_func)) %>%
+  unnest(cols = c(rni_equivalents),  names_repair = "check_unique") 
+
+png ("Figures/Chl_aggregate_landings_RNIs_met_no_algae.png", width = 5.5, height = 4, units = "in", res = 300)  
+landings %>%
+  
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  ggplot (aes (x = nutrient, y = rni_equivalents/1000000, fill = commercial_group)) +
+  geom_col() +
+  theme_bw() +
+  labs (x = "", y = "Child RNI equivalents, millions", fill = "Comm. group") +
+  scale_fill_brewer(palette = "Dark2") +
+  ggtitle ("Potential nutrient provisioning, Algae omitted\n2021 landings") +
+  guides (fill = "none") +
+  theme (axis.text = element_text (size = 10),
+         axis.title = element_text (size = 10),
+         plot.title = element_text(size = 12))
+dev.off()
+
 
 # Malawi----
 # plot separately
