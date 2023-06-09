@@ -444,8 +444,10 @@ plot_pop_needs_met_proj <- function (country_name) {
   
   # aggregate by nutrient, rcp, scenario
   tonnes_nutr_agg_ts <-  tonnes_nutr_ts %>%
+    filter (species != "Engraulis ringens") %>%
     group_by (year, nutrient, rcp, scenario) %>%
     summarise (tot_tonnes = sum (nutr_tonnes, na.rm = TRUE))
+
   
   # join to population
  ts_perc_pop <- wpp_country_aggregate %>%
@@ -481,8 +483,14 @@ plot_pop_needs_met_proj <- function (country_name) {
 
 
 png ("Figures/Peru_annual_nutr_ts_mgmt_facet_population.png", width = 8, height = 6, units = "in", res = 300)
-plot_pop_needs_met_proj(country_name = "Peru") + theme(legend.position="bottom")
+plot_pop_needs_met_proj("Peru") + theme(legend.position="bottom")
 dev.off()
+
+# Peru plot without anchovy
+png ("Figures/Peru_annual_nutr_ts_mgmt_facet_population_noanchov.png", width = 8, height = 6, units = "in", res = 300)
+plot + theme(legend.position="bottom") +   ggtitle ("Projected nutrient yield for Peru, RCP 6.0, Anchovy removed") 
+dev.off()
+
 
 png ("Figures/SierraLeone_annual_nutr_ts_mgmt_facet_population.png", width = 8, height = 6, units = "in", res = 300)
 plot_pop_needs_met_proj("Sierra Leone")+ theme(legend.position="bottom")
