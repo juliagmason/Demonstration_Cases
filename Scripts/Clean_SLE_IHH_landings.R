@@ -20,7 +20,7 @@ sle_ssf <- read_excel("Data/IHH Siera Leone SSF and LSF data for paper.xlsx", sh
                 #names_sep = "_",
                 values_to = "catch_mt") %>%
   mutate (country = "Sierra Leone",
-          sector = "Artisanal")
+          sector = "Small-scale")
 
 sle_ind <- read_excel("Data/IHH Siera Leone SSF and LSF data for paper.xlsx", sheet = "SierraLeone_LSF") %>%
   select (
@@ -28,7 +28,7 @@ sle_ind <- read_excel("Data/IHH Siera Leone SSF and LSF data for paper.xlsx", sh
   ) %>%
   rename (species = Lowest_taxonomic_id, catch_mt = total_LSF_catch) %>%
   mutate (country = "Sierra Leone",
-          sector = "Industrial")
+          sector = "Large-scale")
 
 sle_landings_ihh <- rbind (sle_ssf, sle_ind) %>%
   # change species to match SAU/fish nutrients

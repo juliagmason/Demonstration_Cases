@@ -38,7 +38,7 @@ mal_ind <- read.csv("Data/Malawi_industrial.csv", header = T) %>%
                 names_to = "comm_name",
                 values_to = "tonnes") %>%
   left_join (mal_names, by = "comm_name") %>%
-  mutate (sector = "Industrial")
+  mutate (sector = "Large-scale")
 
 # missing sci names for Mlamba and Kampango
 
@@ -55,7 +55,7 @@ mal_ssf <- mal_ssf[1:12,] %>%
           Year = as.integer(Year)) %>%
   replace_na (list (tonnes = 0)) %>%
   left_join (mal_names, by = "comm_name") %>%
-  mutate (sector ="Artisanal")
+  mutate (sector ="Small-scale")
 
 
 mal_landings <- rbind (mal_ind, mal_ssf)
@@ -104,6 +104,7 @@ mal_top$comm_name = factor(mal_top$comm_name, levels = c("Chambo", "Ndunduma", "
 saveRDS(mal_top, file = "Data/malawi_landings_top.Rds")
 
 mal_top <- readRDS("Data/malawi_landings_top.Rds")
+mal_top$sector <- factor (mal_top$sector, levels = c("Small-scale", "Large-scale"))
 
 # trick color scale so we keep species consistent
 library (scales)
