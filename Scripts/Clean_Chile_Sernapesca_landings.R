@@ -78,7 +78,7 @@ chl_landings  <- t %>%
                        TRUE ~ trimws(species))) %>%
   rename (chl_taxa = taxa)
 
-saveRDS (chl_landings, file = "Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
+#saveRDS (chl_landings, file = "Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
 
 # add SAU commercial group
 chl_landings <- readRDS("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
@@ -112,7 +112,7 @@ chl_spp <- chl_landings %>%
     commercial_group = case_when (
       chl_taxa == "Algae" ~ "Algae",
       chl_taxa == "Crustacean" ~ "Crustaceans",
-      chl_taxa ==  "Mollusc" ~ "Mollusc", 
+      chl_taxa ==  "Mollusc" ~ "Molluscs", 
       chl_taxa == "Cephalopod" ~ "Other fishes & inverts",
       species %in% c("Sphyraena spp", "Callorhinchus callorhynchus") ~ "Sharks & rays",
       # change Kiphosus to Kyphosus here if can successfully change above
