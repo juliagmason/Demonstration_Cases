@@ -67,7 +67,7 @@ dris <- readRDS("Data/dietary_reference_intake_data.Rds")
 
 # no RDA for omega 3, only AI, adequate intake. 
 ai_omega <- dris %>%
-  filter (grepl("Linolenic", nutrient)) %>%
+  filter (grepl("Linolenic", nutrient)) %>% View()
   mutate (group = 
             case_when (
               age_range %in% c("6-12 mo",  "1-3 yr",  "4-8 yr") ~ "Child",
