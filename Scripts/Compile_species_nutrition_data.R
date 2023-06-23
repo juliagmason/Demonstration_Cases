@@ -58,6 +58,9 @@ chambo <- fishnutr_long %>%
   summarise (amount = mean(amount)) %>%
   select (species, nutrient, amount, taxa)
 
+# malawi fish aren't matching up. downloaded from lookup tool on 6/23/23
+malawi_nutr <- read.csv("Data/FishNutrients_country/NUTRIENT_PREDICTED_DATA_OF_SPECIES_IN_MALAWI.csv")
+#no, they do match up. missing data for most of the species. 
 
 compiled_nutr <- rbind (fishnutr_long, d_gigas_nutr, nonfish_afcd_nutr, chambo)
 saveRDS(compiled_nutr, file = "Data/species_nutrients_compiled.Rds")
