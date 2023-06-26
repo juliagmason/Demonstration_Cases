@@ -10,135 +10,209 @@ library (tidyverse)
 # joins to nutrient data in shiny/v3/page3_Fig2c at the bottom
 
 #pop_proj_req_supply <- readRDS("../nutrient_endowment/output/1960_2100_nutrient_demand_by_country.Rds")
-# this is nutrient supply required (in metric tons) to meet projected and historical nutrient demand of 50 and 95% of the population, sensitive to age and sex. 
+# this is nutrient supply required (in metric tons) to meet projected and historical nutrient demand of 50 and 95% of the population, sensitive to age and sex.
 # based on EARs and excludes children
 # this is per year, has been multiplied by 365
 
-# # full rnis, not just child
-# # rni.rds emailed by Rachel Zuercher on 5 oct 2022
-# rni <- readRDS("Data/RNI.RDA.Rds")
-# # add folate and riboflavin for philippines 5/5/23
-# rni <- rni %>%
-#   mutate (Folate_mcg_day = c(rep(c(80,80,150,200,300,400,400,400, 400),each = 2), rep(c(600,500), each = 3)),
-#           Riboflavin_mg_day = c(rep(c(0.3, 0.4, 0.5, 0.6, 0.9), each = 2), c(1, 1.3, 1.1, 1.1, 1.3, 1.3, 1.1, 1.3), rep (c(1.4, 1.6), each = 3))
-#   )
-# 
+# full rnis, not just child
+# rni.rds emailed by Rachel Zuercher on 5 oct 2022
+# these are RNI values from WHO 2004
+rni <- readRDS("Data/RNI.RDA.Rds")
+# add folate and riboflavin for philippines 5/5/23
+rni <- rni %>%
+  mutate (Folate_mcg_day = c(rep(c(80,80,150,200,300,400,400,400, 400),each = 2), rep(c(600,500), each = 3)),
+          Riboflavin_mg_day = c(rep(c(0.3, 0.4, 0.5, 0.6, 0.9), each = 2), c(1, 1.3, 1.1, 1.1, 1.3, 1.3, 1.1, 1.3), rep (c(1.4, 1.6), each = 3)),
+          # add omega 
+  )
 
-# 
-# # updated WPP data
-# # https://population.un.org/wpp/Download/Standard/CSV/
-# # chose option population -1 January by 5 yr age groups, medium variant
-# # numbers are in 1000s
-# wpp_pop <- read_csv("Data/WPP2022_Population1JanuaryByAge5GroupSex_Medium.csv")
-# 
-# 
-# # Build age matching key----
-# # not perfect. take average RNI for 0-3 years to match 0-4
-# # for MOST micronutrients, level for 7-9 is higher than 4-6. so using 7-9 level for ages 5-9 is conservative.
-# 
-# # first do avg of rni for infants? probably a better way to do this
-# rni_merge_infants <- rni %>%
-#   mutate (age_infant = case_when (
-#     Age %in% c("0-6 months", "7-12 months","1-3 years") ~ "0-3",
-#     TRUE ~ Age
-#   )) %>% 
-#   group_by (Sex, age_infant) %>%
-#   #summarise (across(Calcium_mg_day:Omega3_PUFA_g_day, ~mean(.x, na.rm = TRUE))) %>%
-#   summarise (across(Calcium_mg_day:Riboflavin_mg_day, ~mean(.x, na.rm = TRUE))) %>%
-#   # rename age range to match
-#   rename (age_range_rni = age_infant) %>%
-#   # pivot longer
-#   pivot_longer(Calcium_mg_day:Riboflavin_mg_day,
-#                names_to = "nutrient",
-#                values_to = "amount") %>%
-#   # fix names
-#   mutate (nutrient = sub("_.*", "", nutrient),
-#           nutrient = case_when (nutrient == "VitaminA" ~ "Vitamin_A",
-#                                 nutrient == "Omega3" ~ "Omega_3",
-#                               TRUE ~ nutrient )) %>%
-#   filter (!nutrient == "fish")
-# 
-# 
-# age_range_key <- tibble(age_range_wpp=unique(wpp_pop$AgeGrp)) %>% 
-#   mutate(age_range_wpp=factor(age_range_wpp, levels = c ("0-4",
-#                                                          "5-9",
-#                                                          "10-14",
-#                                                          "15-19",
-#                                                          "20-24",
-#                                                          "25-29",
-#                                                          "30-34",
-#                                                          "35-39",
-#                                                          "40-44",
-#                                                          "45-49",
-#                                                          "50-54",
-#                                                          "55-59",
-#                                                          "60-64",
-#                                                          "65-69",
-#                                                          "70-74",
-#                                                          "75-79",
-#                                                          "80-84",
-#                                                          "85-89",
-#                                                          "90-94",
-#                                                          "95-99",
-#                                                          "100+")),
-#          age_range_rni = case_when(
-#            age_range_wpp == "0-4" ~ "0-3",
-#            age_range_wpp ==   "5-9" ~ "7-9 years",
-#            age_range_wpp %in% c("10-14", "15-19") ~ "10-18 years",
-#            age_range_wpp %in% c("20-24",
-#                                 "25-29",
-#                                 "30-34",
-#                                 "35-39",
-#                                 "40-44",
-#                                 "45-49")~ "19-50 years",
-#            age_range_wpp %in% c("50-54",
-#                                 "55-59",
-#                                 "60-64") ~ "51-65 years",
-#            age_range_wpp %in% c("65-69",
-#                                 "70-74",
-#                                 "75-79",
-#                                 "80-84",
-#                                 "85-89",
-#                                 "90-94",
-#                                 "95-99",
-#                                 "100+") ~  "65+"
-#   ))
-# 
-# 
-# # calculate annual nutrition demand ----
-# # reshape and join population data to 
-# wpp_long <- wpp_pop %>%
-#   filter (!is.na(ISO3_code)) %>%
-#   select (Location, ISO3_code, Time, AgeGrp, PopMale, PopFemale) %>%
-#   rename (country = Location, age_range_wpp = AgeGrp) %>%
-#   pivot_longer (PopMale:PopFemale,
-#                 names_prefix = "Pop",
-#                 names_to = "Sex",
-#                 values_to = "Pop") %>%
-#   # cut to first letter to match rni
-#   mutate (Sex = substr(Sex, 1, 1)) %>%
-#   # join to age key
-#   left_join (age_range_key, by = "age_range_wpp") %>%
-#   # join to rni data
-#   left_join (rni_merge_infants, by = c ("Sex", "age_range_rni")) %>%
-#   # multiply population by amount needed. this is in native units so need to convert to tons
-#   mutate (scalar = case_when (
-#             nutrient %in% c("Protein", "Omega_3") ~ 1,
-#             nutrient %in% c("Calcium", "Zinc", "Iron", "Riboflavin") ~ 1/1000,
-#             nutrient %in% c("Vitamin_A", "Selenium", "Folate") ~ 1/1e6),
-#           #multiply population by 1000
-#           nutr_annual_demand = Pop * 1000 * amount * scalar/1000/1000*365) 
-#           
-# 
-# saveRDS(wpp_long, "Data/annual_nutr_demand_rni_by_country_age_sex.Rds")
-# 
-# # also calculate total for each country
-# wpp_country_aggregate <- wpp_long %>%
-#   group_by (country, Time, nutrient) %>%
-#   summarise (tot_pop = sum (Pop),
-#              tot_nutr_annual_demand = sum (nutr_annual_demand))
-# 
-# saveRDS(wpp_country_aggregate, "Data/annual_nutr_demand_rni_by_country.Rds")
+# use full omega 3 Adequate Intake values from US National Institute of Medicine
+# https://nap.nationalacademies.org/read/10490/chapter/1
+# https://ods.od.nih.gov/factsheets/Omega3FattyAcids-HealthProfessional/
+
+rni_omega <- readRDS("Data/dietary_reference_intake_data.Rds") %>%
+  filter (grepl("Linolenic", nutrient)) %>%
+  # match nutrient names; assume linolenic is omega 3
+  mutate (nutrient = "Omega_3",
+          # merge infant/child 0-3 years to match wpp data
+          age_range_omega = case_when (
+            age_range %in% c("0-6 mo", "6-12 mo","1-3 yr") ~ "0-3",
+            TRUE ~ age_range),
+          # harmonize sex categories
+          Sex = case_when (
+            sex == "Females" ~ "F",
+            sex == "Males" ~ "M",
+            # children categorized as "both", change to F for now and then add identical M dataframe
+            sex == "Both" ~ "F"
+          )) %>%
+  group_by (age_range_omega, Sex) %>%
+  # make nutrient column to match other ds
+  summarise (nutrient = "Omega_3",
+             amount = mean (value))
+
+# make new ds for male children
+rni_omega_M <- rni_omega %>%
+  filter (age_range_omega %in% c("0-3", "4-8 yr")) %>%
+  mutate (Sex = "M")
+
+rni_omega <- rbind (rni_omega, rni_omega_M) 
+
+#
+# updated WPP data
+# https://population.un.org/wpp/Download/Standard/CSV/
+# chose option population -1 January by 5 yr age groups, medium variant
+# numbers are in 1000s
+wpp_pop <- read_csv("Data/WPP2022_Population1JanuaryByAge5GroupSex_Medium.csv")
+
+
+# Build age matching key----
+# not perfect. take average RNI for 0-3 years to match 0-4
+# for MOST micronutrients, level for 7-9 is higher than 4-6. so using 7-9 level for ages 5-9 is conservative.
+
+# first do avg of rni for infants? probably a better way to do this
+rni_merge_infants <- rni %>%
+  mutate (age_infant = case_when (
+    Age %in% c("0-6 months", "7-12 months","1-3 years") ~ "0-3",
+    TRUE ~ Age
+  )) %>%
+  group_by (Sex, age_infant) %>%
+  #summarise (across(Calcium_mg_day:Omega3_PUFA_g_day, ~mean(.x, na.rm = TRUE))) %>%
+  summarise (across(Calcium_mg_day:Riboflavin_mg_day, ~mean(.x, na.rm = TRUE))) %>%
+  # rename age range to match
+  rename (age_range_rni = age_infant) %>%
+  # pivot longer
+  pivot_longer(Calcium_mg_day:Riboflavin_mg_day,
+               names_to = "nutrient",
+               values_to = "amount") %>%
+  # fix names
+  mutate (nutrient = sub("_.*", "", nutrient),
+          nutrient = case_when (nutrient == "VitaminA" ~ "Vitamin_A",
+                                nutrient == "Omega3" ~ "Omega_3",
+                              TRUE ~ nutrient )) %>%
+  # filter out omegas and "fish
+  filter (!nutrient %in% c("fish", "Omega_3"))
+
+
+age_range_key <- tibble(age_range_wpp=unique(wpp_pop$AgeGrp)) %>%
+  mutate(age_range_wpp=factor(age_range_wpp, levels = c ("0-4",
+                                                         "5-9",
+                                                         "10-14",
+                                                         "15-19",
+                                                         "20-24",
+                                                         "25-29",
+                                                         "30-34",
+                                                         "35-39",
+                                                         "40-44",
+                                                         "45-49",
+                                                         "50-54",
+                                                         "55-59",
+                                                         "60-64",
+                                                         "65-69",
+                                                         "70-74",
+                                                         "75-79",
+                                                         "80-84",
+                                                         "85-89",
+                                                         "90-94",
+                                                         "95-99",
+                                                         "100+")),
+         age_range_rni = case_when(
+           age_range_wpp == "0-4" ~ "0-3",
+           age_range_wpp ==   "5-9" ~ "7-9 years",
+           age_range_wpp %in% c("10-14", "15-19") ~ "10-18 years",
+           age_range_wpp %in% c("20-24",
+                                "25-29",
+                                "30-34",
+                                "35-39",
+                                "40-44",
+                                "45-49")~ "19-50 years",
+           age_range_wpp %in% c("50-54",
+                                "55-59",
+                                "60-64") ~ "51-65 years",
+           age_range_wpp %in% c("65-69",
+                                "70-74",
+                                "75-79",
+                                "80-84",
+                                "85-89",
+                                "90-94",
+                                "95-99",
+                                "100+") ~  "65+"),
+         # new key for omega dris
+         age_range_omega = case_when (
+           age_range_wpp == "0-4" ~ "0-3",
+           age_range_wpp ==   "5-9" ~ "4-8 yr",
+           age_range_wpp ==   "10-14" ~ "9-13 yr",
+           age_range_wpp == "15-19" ~ "14-18 yr",
+           age_range_wpp %in% c("20-24", "25-29") ~ "19-30 yr",
+           age_range_wpp %in% c("30-34",
+                                "35-39",
+                                "40-44",
+                                "45-49")~ "31-50 yr",
+           age_range_wpp %in% c("50-54",
+                                "55-59",
+                                "60-64",
+                                "65-69") ~ "51-70 yr",
+           age_range_wpp %in% c("65-69",
+                                "70-74",
+                                "75-79",
+                                "80-84",
+                                "85-89",
+                                "90-94",
+                                "95-99",
+                                "100+") ~  ">70 yr"),
+         )
+
+
+# I can't figure out how to merge the omega and rnis cleanly with the different left_join. just do separately and rbind
+
+# calculate annual nutrition demand ----
+# reshape and join population data to
+wpp_pop_sm <- wpp_pop %>% tail (100)
+wpp_long <- wpp_pop %>%
+  filter (!is.na(ISO3_code)) %>%
+  select (Location, ISO3_code, Time, AgeGrp, PopMale, PopFemale) %>%
+  rename (country = Location, age_range_wpp = AgeGrp) %>%
+  pivot_longer (PopMale:PopFemale,
+                names_prefix = "Pop",
+                names_to = "Sex",
+                values_to = "Pop") %>%
+  # cut to first letter to match rni
+  mutate (Sex = substr(Sex, 1, 1)) 
+
+# join to RNIs
+wpp_long_nutr <- wpp_long %>%
+  # join to age key
+  left_join (age_range_key, by = "age_range_wpp") %>%
+  # join to rni data
+  left_join (rni_merge_infants, by = c ("Sex", "age_range_rni")) 
+
+# make separate omega
+wpp_long_omega <- wpp_long %>%
+  # join to age key
+  left_join (age_range_key, by = "age_range_wpp") %>%
+  # join to rni data
+  left_join (rni_omega, by = c ("Sex", "age_range_omega")) 
+
+# join and harmonize units
+wpp_long <- rbind (wpp_long_nutr, wpp_long_omega) %>%
+  
+  
+  # multiply population by amount needed. this is in native units so need to convert to tons
+  mutate (scalar = case_when (
+            nutrient %in% c("Protein", "Omega_3") ~ 1,
+            nutrient %in% c("Calcium", "Zinc", "Iron", "Riboflavin") ~ 1/1000,
+            nutrient %in% c("Vitamin_A", "Selenium", "Folate") ~ 1/1e6),
+          #multiply population by 1000
+          nutr_annual_demand = Pop * 1000 * amount * scalar/1000/1000*365)
+
+
+saveRDS(wpp_long, "Data/annual_nutr_demand_rni_by_country_age_sex.Rds")
+
+# also calculate total for each country
+wpp_country_aggregate <- wpp_long %>%
+  group_by (country, Time, nutrient) %>%
+  summarise (tot_pop = sum (Pop),
+             tot_nutr_annual_demand = sum (nutr_annual_demand))
+
+saveRDS(wpp_country_aggregate, "Data/annual_nutr_demand_rni_by_country.Rds")
 
 
 # relate landings to nutrition demand ----
