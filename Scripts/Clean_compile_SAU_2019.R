@@ -61,11 +61,12 @@ sau_2019 <- rbind (sau_2019, sau_indo_2019)
 # proportion of domestic catch going to fishmeal in 2018
 
 
-# find overall 2019 totals 
+# find overall 2019 total catch by sector and foreign/domestic
 peru_anchov_2019_totals <- sau_2019 %>%
   filter (country == "Peru", species == "Engraulis ringens") %>%
   group_by (fishing_sector, fleet) %>%
   summarise (tot = sum (tonnes))
+
 
 # find 2018 proportions and multiply by 2019 totals
 peru_anchov_2018_correction <- sau_2015_2019 %>%
@@ -100,6 +101,23 @@ sau_anchov_join <- sau_2019 %>%
 
 
 saveRDS (sau_anchov_join , file = "Data/SAU_2019.Rds")
+
+# calculate totals from previous 10 years to justify
+totals_10yr <- sau_2019_download %>%
+  filter (country == "Peru", species == "Engraulis ringens", between (year, 2009, 2018)) %>%
+  group_by (fishing_sector, fleet, year) %>%
+  summarise (tot = sum (tonnes))
+  
+total_end_use <- sau_2019_download %>%
+  filter (country == "Peru", species == "Engraulis ringens", between (year, 2009, 2018)) %>%
+  group_by (fishing_sector, fleet, end_use_type, year) %>%
+  summarise (tot_use = sum (tonnes)) %>%
+  left_join (totals_10yr, by = c ("fishing_sector", "fleet", "year")) %>%
+  mutate (prop_use = tot_use / tot)
+
+total_end_use %>%
+  group_by (fishing_sector, fleet, end_use_type) %>%
+  summarise (mean_prop = mean (prop_use))
 
 # make species to taxa conversion df ----
 c <- read.csv("Data/SAU EEZ 2019.csv")
