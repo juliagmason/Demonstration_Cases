@@ -13,8 +13,425 @@ library (ggalluvial)
 source ("Scripts/Function_convert_catch_amt_children_fed.R")
 
 
-# Start with separate charts for exports and SAU data
+#  SAU data
 sau_2019 <- readRDS ("Data/SAU_2019.Rds")
+
+# country landings data
+#Clean_Chile_Sernapesca_landings.R
+chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
+
+# Sierra Leone IHH data
+sl_landings <- readRDS("Data/SLE_landings_IHH.Rds")
+
+# exports ARTIS ----
+# full data emailed 6/23/2023
+# not taking five year mean, this is just 2019 data. so just need to fix countries and species names
+# export percent production is in percentage points, convert
+exports <- read_csv ("Data/20230622_edf_ARTIS_full_spp.csv") %>%
+  mutate (species = str_to_sentence(sciname),
+          prop_exp = export_percent_production/100,
+          # just doing country names by hand...
+          country = case_when (
+            exporter_iso3c == "CHL" ~ "Chile",
+            exporter_iso3c == "IDN" ~ "Indonesia",
+            exporter_iso3c == "PER" ~ "Peru", 
+            exporter_iso3c == "MEX" ~ "Mexico",
+            exporter_iso3c == "SLE" ~ "Sierra Leone"
+          ), .keep = "unused") %>%
+  # remove aquaculture and inland
+  filter (habitat == "marine", method == "capture")
+
+# Sierra Leone ----
+# try to do large scale and small scale as domestic, add SAU foriegn. Then have domestic go into exports.
+
+
+sl_landings_2017 <- sl_landings %>%
+  filter (year == 2017, !is.na(catch_mt)) %>%
+  select (country, species, sector, catch_mt) 
+
+# make sep ds for exports
+sl_exports <- sl_landings_2017 %>%
+  left_join(exports, by = c("species", "country")) %>%
+  #for species missing data, assume zero exports
+  replace_na (list(prop_exp = 0)) %>%
+  mutate (Exported = catch_mt * prop_exp,
+                 Kept = catch_mt * (1-prop_exp)) %>%
+  # cut unnecessary columns
+  select (species, sector, Exported, Kept) %>%
+  # pivot longer
+  pivot_longer (Exported:Kept, 
+              names_to = "exports",
+              values_to = "tonnes") 
+
+#subset just the foreign catch for SL
+sl_foreign <- sau_2019 %>%
+  ungroup () %>%
+  filter (country == "Sierra Leone", fleet == "Foreign catch") %>%
+  # all foreign catch is industrial catch. but what I'm going to do is name the sector "Foreign catch" so it's in one column. 
+  # also have to group to combine end_use_types
+  group_by (species) %>%
+  #rename to match sl_landings--make sector column that says foreign, and exports column that ALSO says foreign??
+  summarise (sector = "Foreign catch",
+             exports = NA,
+             tonnes = sum (tonnes))
+
+
+# join exports and foreign, then calculate nutrient yield
+ihh_ds <- sl_exports %>%
+  rbind (sl_foreign) %>%
+  #calculate nutrient yield
+  mutate(rni_equivalents = pmap (list (species = species, amount = tonnes, country_name = "Sierra Leone"), calc_children_fed_func)) %>%
+  unnest (cols = c(rni_equivalents)) %>%
+  
+  # group by nutrient, this makes it slightly cleaner
+  group_by (sector, exports, nutrient) %>%
+  summarise (rni_equivalents = sum (rni_equivalents, na.rm = TRUE))
+
+# set levels
+# ihh_ds$sector <- factor(ihh_ds$sector, levels = c ("Small-scale", "Large-scale", "Foreign catch"))
+
+# I'm not sure why this works, but this makes the foreign catch export flow disappear!
+ihh_ds$exports <- factor(ihh_ds$exports, levels = c ("Exported","Kept",  "Foreign catch"))
+
+png("Figures/Sankey_SL_sector_exports.png", width = 8, height = 6, units = "in", res = 300)
+ihh_ds %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  ggplot (aes (axis1 = nutrient,
+               axis2 = sector,
+               axis3 = exports,
+               y = rni_equivalents/1000000)) +
+  scale_x_discrete (limits = c ("nutrient", "sector", "exports"), expand = c(.15, .05)) +
+  labs(y = "RNI equivalents, millions", x = "Allocation levers") +
+  geom_flow(aes(fill = nutrient)) +
+  geom_stratum(aes(fill = nutrient)) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 5) +
+  #geom_text (stat = "flow", nudge_x = 0.2, aes (label = round(rni_equivalents/1000000, 1))) +
+  theme_minimal() +
+  ggtitle("Nutrient flows, Sierra Leone") +
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16),
+         plot.title = element_text (size = 18),
+         legend.position = "none")
+dev.off()
+
+# Indonesia--just exports ----
+
+plot_export_sankey <- function (country_name) {
+  
+  ds <- sau_2019 %>%
+    # filter to country, remove recreational and subsistence
+    filter (country == country_name, fleet == "Domestic catch") %>%
+    group_by (country, species) %>%
+    summarise (tonnes = sum (tonnes)) %>%
+    left_join (exports, by = c("species", "country")) %>%
+    replace_na (list(prop_exp = 0)) %>%
+    # mutate, calculate exports 
+    mutate (Exported = tonnes * prop_exp,
+            Kept = tonnes * (1-prop_exp), .keep = "unused") %>%
+    # pivot longer
+    pivot_longer (Exported:Kept, 
+                  names_to = "Exports",
+                  values_to = "tonnes") %>%
+    #calculate nutrient yield
+    mutate(rni_equivalents = pmap (list (species = species, amount = tonnes, country_name = country_name), calc_children_fed_func)) %>%
+    unnest (cols = c(rni_equivalents)) %>%
+    
+    # group by nutrient, this makes it slightly cleaner
+    group_by (Exports, nutrient) %>%
+    summarise (rni_equivalents = sum (rni_equivalents, na.rm = TRUE))
+  
+  
+  # plot
+  p <- ds %>%
+    filter (!nutrient %in% c("Protein", "Selenium")) %>%
+    ggplot (aes (axis1 = nutrient,
+                 axis2 = Exports,
+                 y = rni_equivalents/1000000,
+                 fill = nutrient)) +
+    scale_x_discrete (limits = c ("nutrient", "Exports"), expand = c(.2, .05)) +
+    labs(y = "RNI equivalents, millions", x = "Allocation levers") +
+    geom_alluvium() +
+    geom_stratum() +
+    geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
+    #geom_text(stat = "stratum", aes(label = after_stat(round(prop, 2)))) +
+    theme_minimal() +
+    ggtitle(paste0("Nutrient flows, ", country_name, " Domestic catch")) +
+    theme (axis.text = element_text (size = 14),
+           axis.title = element_text (size = 16),
+           plot.title = element_text (size = 18),
+           legend.position = "none")
+  
+  return (p)
+  
+}
+
+
+iex <- plot_export_sankey("Indonesia")
+png("Figures/Sankey_Indo_exports.png", width = 8, height = 6, units = "in", res = 300)
+print (iex)
+dev.off()
+
+# Peru ----
+# 3 axis domestic foreign/dhc vs fishmeal, with domestic broken into industrial/artisanal. 
+# do for just anchovy and then everything but anchovy. 
+
+peru_sau <- sau_2019 %>% 
+
+  filter (country == "Peru", !end_use_type == "Other") %>%
+  # remove rec/subsistence 
+  # separate into foreign/artisanal/industrial
+  mutate (fishing_sector =
+            case_when (fishing_sector %in% c("Subsistence","Recreational") ~ "Artisanal",
+                       fleet == "Foreign catch" ~ "Foreign catch",
+                       TRUE ~ fishing_sector)
+          ) %>%
+  group_by (country, species, fishing_sector, end_use_type) %>%
+  summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  rename (sector = fishing_sector,
+          end_use = end_use_type)
+
+  
+
+# join to exports -- if using
+peru_exports <- peru_sau %>%
+  # just domestic
+  #filter (fishing_sector != "Foreign catch") %>%
+  left_join(exports, by = c("species", "country")) %>%
+  #for species missing data, assume zero exports
+  replace_na (list(prop_exp = 0)) %>%
+  mutate (Exported = ifelse (sector == "Foreign catch", NA, tonnes * prop_exp),
+          Kept = ifelse (sector == "Foreign catch", NA, tonnes * (1-prop_exp)),
+          Foreign_catch = ifelse (sector == "Foreign catch", tonnes, NA)
+          ) %>%
+  # cut unnecessary columns
+  select (species, sector, end_use, Exported, Kept, Foreign_catch) %>%
+  # pivot longer
+  pivot_longer (Exported:Foreign_catch, 
+                names_to = "exports",
+                values_to = "tonnes") 
+
+# calculate nutrient content
+peru_nutr_ds <- peru_exports %>%
+  mutate(rni_equivalents = pmap (list (species = species, amount = tonnes, country_name = "Peru"), calc_children_fed_func)) %>%
+  unnest (cols = c(rni_equivalents)) 
+  
+# don't group by nutrient yet so can remove anchovy
+  
+peru_nutr_ds$sector <-factor (peru_nutr_ds$sector, levels = c("Foreign catch", "Artisanal", "Industrial")) 
+peru_nutr_ds$end_use <-factor (peru_nutr_ds$end_use, levels = c("Direct human consumption", "Fishmeal and fish oil"))
+
+# end use sankey without anchovy----
+png("Figures/Sankey_Peru_sector_end_use_NOanchov.png", width = 8, height = 6, units = "in", res = 300)
+peru_nutr_ds %>%
+  filter (!nutrient %in% c("Protein", "Selenium"),
+          species != "Engraulis ringens") %>%
+  
+  # group by nutrient to clean
+  group_by (sector, end_use, exports, nutrient) %>%
+  summarise (rni_equivalents = sum (rni_equivalents, na.rm = TRUE)) %>%
+  ggplot (aes (axis1 = nutrient,
+               axis2 = sector,
+               axis3 = end_use,
+               y = rni_equivalents/1000000)) +
+  scale_x_discrete (limits = c ("nutrient", "sector", "end_use"), expand = c(.15, .05)) +
+  labs(y = "RNI equivalents, millions", x = "Allocation levers") +
+  geom_flow(aes(fill = nutrient)) +
+  geom_stratum(aes(fill = nutrient)) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 5) +
+  #geom_text (stat = "flow", nudge_x = 0.2, aes (label = round(rni_equivalents/1000000, 1))) +
+  theme_minimal() +
+  ggtitle("Nutrient flows, Peru; Anchovy removed") +
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16),
+         plot.title = element_text (size = 18),
+         legend.position = "none")
+dev.off()
+
+# end use sankey with just anchovy----
+png("Figures/Sankey_Peru_sector_enduse_anchov.png", width = 8, height = 6, units = "in", res = 300)
+peru_nutr_ds %>%
+  filter (!nutrient %in% c("Protein", "Selenium"),
+          species == "Engraulis ringens") %>%
+  
+  # group by nutrient to clean
+  group_by (sector, end_use, exports, nutrient) %>%
+  summarise (rni_equivalents = sum (rni_equivalents, na.rm = TRUE)) %>%
+  ggplot (aes (axis1 = nutrient,
+               axis2 = sector,
+               axis3 = end_use,
+               y = rni_equivalents/1000000)) +
+  scale_x_discrete (limits = c ("nutrient", "sector", "end_use"), expand = c(.15, .05)) +
+  labs(y = "RNI equivalents, millions", x = "Allocation levers") +
+  geom_flow(aes(fill = nutrient)) +
+  geom_stratum(aes(fill = nutrient)) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 5) +
+  #geom_text (stat = "flow", nudge_x = 0.2, aes (label = round(rni_equivalents/1000000, 1))) +
+  theme_minimal() +
+  ggtitle("Nutrient flows, Peru; Anchovy only") +
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16),
+         plot.title = element_text (size = 18),
+         legend.position = "none")
+
+dev.off()
+
+
+# exports sankey, no anchovy ----
+peru_nutr_ds$exports <- factor(peru_nutr_ds$exports, levels = c ("Exported","Kept",  "Foreign catch"))
+
+png("Figures/Sankey_Peru_sector_exports_NOanchov.png", width = 8, height = 6, units = "in", res = 300)
+peru_nutr_ds %>%
+  filter (!nutrient %in% c("Protein", "Selenium"),
+          species != "Engraulis ringens") %>%
+  
+  # group by nutrient to clean
+  group_by (sector, end_use, exports, nutrient) %>%
+  summarise (rni_equivalents = sum (rni_equivalents, na.rm = TRUE)) %>%
+  ggplot (aes (axis1 = nutrient,
+               axis2 = sector,
+               axis3 = exports,
+               y = rni_equivalents/1000000)) +
+  scale_x_discrete (limits = c ("nutrient", "sector", "exports"), expand = c(.15, .05)) +
+  labs(y = "RNI equivalents, millions", x = "Allocation levers") +
+  geom_flow(aes(fill = nutrient)) +
+  geom_stratum(aes(fill = nutrient)) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 5) +
+  #geom_text (stat = "flow", nudge_x = 0.2, aes (label = round(rni_equivalents/1000000, 1))) +
+  theme_minimal() +
+  ggtitle("Nutrient flows, Peru; Anchovy removed") +
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16),
+         plot.title = element_text (size = 18),
+         legend.position = "none")
+dev.off()
+
+# exports just anchovy ----
+png("Figures/Sankey_Peru_sector_exports_anchov.png", width = 8, height = 6, units = "in", res = 300)
+peru_nutr_ds %>%
+  filter (!nutrient %in% c("Protein", "Selenium"),
+          species == "Engraulis ringens") %>%
+  
+  # group by nutrient to clean
+  group_by (sector, end_use, exports, nutrient) %>%
+  summarise (rni_equivalents = sum (rni_equivalents, na.rm = TRUE)) %>%
+  ggplot (aes (axis1 = nutrient,
+               axis2 = sector,
+               axis3 = exports,
+               y = rni_equivalents/1000000)) +
+  scale_x_discrete (limits = c ("nutrient", "sector", "exports"), expand = c(.15, .05)) +
+  labs(y = "RNI equivalents, millions", x = "Allocation levers") +
+  geom_flow(aes(fill = nutrient)) +
+  geom_stratum(aes(fill = nutrient)) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 5) +
+  #geom_text (stat = "flow", nudge_x = 0.2, aes (label = round(rni_equivalents/1000000, 1))) +
+  theme_minimal() +
+  ggtitle("Nutrient flows, Peru; Anchovy removed") +
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16),
+         plot.title = element_text (size = 18),
+         legend.position = "none")
+dev.off()
+
+# exports only no anchov ----
+png("Figures/Sankey_Peru_exports_NOanchov.png", width = 8, height = 6, units = "in", res = 300)
+peru_nutr_ds %>%
+  filter (!nutrient %in% c("Protein", "Selenium"),
+          species != "Engraulis ringens", 
+          !sector == "Foreign catch") %>%
+  
+  # group by nutrient to clean
+  group_by (exports, nutrient) %>%
+  summarise (rni_equivalents = sum (rni_equivalents, na.rm = TRUE)) %>%
+  ggplot (aes (axis1 = nutrient,
+               axis2 = exports,
+               y = rni_equivalents/1000000)) +
+  scale_x_discrete (limits = c ("nutrient", "exports"), expand = c(.15, .05)) +
+  labs(y = "RNI equivalents, millions", x = "Allocation levers") +
+  geom_flow(aes(fill = nutrient)) +
+  geom_stratum(aes(fill = nutrient)) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 5) +
+  #geom_text (stat = "flow", nudge_x = 0.2, aes (label = round(rni_equivalents/1000000, 1))) +
+  theme_minimal() +
+  ggtitle("Nutrient flows, Peru; Domestic catch, Anchovy removed") +
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16),
+         plot.title = element_text (size = 18),
+         legend.position = "none")
+dev.off()
+
+# exports, just anchov ----
+png("Figures/Sankey_Peru_exports_anchov.png", width = 8, height = 6, units = "in", res = 300)
+peru_nutr_ds %>%
+  filter (!nutrient %in% c("Protein", "Selenium"),
+          species == "Engraulis ringens", 
+          !sector == "Foreign catch") %>%
+  
+  # group by nutrient to clean
+  group_by (exports, nutrient) %>%
+  summarise (rni_equivalents = sum (rni_equivalents, na.rm = TRUE)) %>%
+  ggplot (aes (axis1 = nutrient,
+               axis2 = exports,
+               y = rni_equivalents/1000000)) +
+  scale_x_discrete (limits = c ("nutrient", "exports"), expand = c(.15, .05)) +
+  labs(y = "RNI equivalents, millions", x = "Allocation levers") +
+  geom_flow(aes(fill = nutrient)) +
+  geom_stratum(aes(fill = nutrient)) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 5) +
+  #geom_text (stat = "flow", nudge_x = 0.2, aes (label = round(rni_equivalents/1000000, 1))) +
+  theme_minimal() +
+  ggtitle("Nutrient flows, Peru; Domestic catch, Anchovy only") +
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16),
+         plot.title = element_text (size = 18),
+         legend.position = "none")
+dev.off()
+
+# Chile ----
+# same as sierra leone, industrial/artisanal and then exports??
+chl_ds <- chl_landings %>%
+  filter (year == 2021, chl_taxa != "Algae") %>%
+  mutate (country = "Chile") %>%
+  left_join (exports, by = c("species", "country")) %>%
+  replace_na (list(prop_exp = 0)) %>%
+  # mutate, calculate exports 
+  mutate (Exported = catch_mt * prop_exp,
+          Kept = catch_mt * (1-prop_exp), .keep = "unused") %>%
+  # pivot longer
+  pivot_longer (Exported:Kept, 
+                names_to = "exports",
+                values_to = "tonnes") %>%
+  #calculate nutrient yield
+  mutate(rni_equivalents = pmap (list (species = species, amount = tonnes, country_name = "Chile"), calc_children_fed_func)) %>%
+  unnest (cols = c(rni_equivalents)) %>%
+  
+  # group by nutrient, this makes it slightly cleaner
+  group_by (sector, exports, nutrient) %>%
+  summarise (rni_equivalents = sum (rni_equivalents, na.rm = TRUE))
+
+png("Figures/Sankey_Chl_sector_exports.png", width = 8, height = 6, units = "in", res = 300)
+chl_ds %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  ggplot (aes (axis1 = nutrient,
+               axis2 = sector,
+               axis3 = exports,
+               y = rni_equivalents/1000000)) +
+  scale_x_discrete (limits = c ("nutrient", "sector", "exports"), expand = c(.15, .05)) +
+  labs(y = "RNI equivalents, millions", x = "Allocation levers") +
+  geom_flow(aes(fill = nutrient)) +
+  geom_stratum(aes(fill = nutrient)) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 5) +
+  #geom_text (stat = "flow", nudge_x = 0.2, aes (label = round(rni_equivalents/1000000, 1))) +
+  theme_minimal() +
+  ggtitle("Nutrient flows, Chile") +
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16),
+         plot.title = element_text (size = 18),
+         legend.position = "none")
+
+dev.off()
+
+
+
 
 
 # 4 axis: SAU artisanal/industrial, foreign/domestic, end use----
@@ -361,7 +778,6 @@ exports <- read_csv ("Data/20230622_edf_ARTIS_full_spp.csv") %>%
   # remove aquaculture and inland
   filter (habitat == "marine", method == "capture")
 
-
 plot_export_sankey <- function (country_name) {
   
   ds <- sau_2019 %>%
@@ -410,6 +826,7 @@ plot_export_sankey <- function (country_name) {
   return (p)
   
 }
+
 
 pex <- plot_export_sankey("Peru")
 png("Figures/Sankey_Peru_exports.png", width = 8, height = 6, units = "in", res = 300)
@@ -530,7 +947,7 @@ dev.off()
 # Sierra Leone IHH data
 sl_landings <- readRDS("Data/SLE_landings_IHH.Rds")
 
-ihh_ds <- sl_landings %>%
+ihh_ds_temp <- sl_landings %>%
 filter (year == 2017) %>%
   left_join (exports, by = c("species", "country")) %>%
   replace_na (list(prop_exp = 0)) %>%
@@ -550,7 +967,7 @@ filter (year == 2017) %>%
   summarise (rni_equivalents = sum (rni_equivalents, na.rm = TRUE))
 
 png("Figures/Sankey_SL_exports_IHH.png", width = 8, height = 6, units = "in", res = 300)
-ihh_ds %>%
+ihh_ds_temp %>%
   filter (!nutrient %in% c("Protein", "Selenium")) %>%
   ggplot (aes (axis1 = nutrient,
                axis2 = Exports,
