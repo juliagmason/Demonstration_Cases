@@ -367,3 +367,125 @@ sl_landings_agg_clip_commgroup %>%
   ggtitle ("Recent and projected total landings, Sierra Leone")
 
 dev.off()
+
+# old code: plot overall catch by comm_group bar ----
+sau_2019_taxa <- readRDS("Data/SAU_2019_taxa.Rds")
+
+png ("Figures/Peru_SAU_catch_commgroup.png", width = 5, height = 5, units = "in", res = 300)
+sau_2019 %>%
+  filter(country == "Peru") %>%
+  left_join(sau_2019_taxa, by = "species") %>%
+  group_by (commercial_group) %>%
+  summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  ggplot (aes (y = tonnes/1000000, x = reorder(commercial_group, -tonnes, na.rm = TRUE), fill = commercial_group)) +
+  geom_col() +
+  theme_bw() +
+  ggtitle ("Peru aggregate catch, 2019, SAU") +
+  labs (x = "", y = "Catch, million metric tonnes", fill = "Group") +
+  
+  theme ( 
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11, angle = 60, hjust = 1),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 12),
+    legend.title = element_text (size = 14),
+    plot.title = element_text (size = 18),
+    legend.position = "none")
+dev.off ()
+
+png ("Figures/Indo_SAU_catch_commgroup.png", width = 5, height = 5, units = "in", res = 300)
+sau_2019 %>%
+  filter(country == "Indonesia") %>%
+  left_join(sau_2019_taxa, by = "species") %>%
+  group_by (commercial_group) %>%
+  summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  ggplot (aes (y = tonnes/1000000, x = reorder(commercial_group, -tonnes, na.rm = TRUE), fill = commercial_group)) +
+  geom_col() +
+  theme_bw() +
+  ggtitle ("Indonesia aggregate catch, 2019, SAU") +
+  labs (x = "", y = "Catch, million metric tonnes", fill = "Group") +
+  
+  theme ( 
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11, angle = 60, hjust = 1),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 12),
+    legend.title = element_text (size = 14),
+    plot.title = element_text (size = 18),
+    legend.position = "none")
+dev.off ()
+
+png ("Figures/SL_SAU_catch_commgroup.png", width = 5, height = 5, units = "in", res = 300)
+sau_2019 %>%
+  filter(country == "Sierra Leone") %>%
+  left_join(sau_2019_taxa, by = "species") %>%
+  group_by (commercial_group) %>%
+  summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  ggplot (aes (y = tonnes/1000000, x = reorder(commercial_group, -tonnes, na.rm = TRUE), fill = commercial_group)) +
+  geom_col() +
+  theme_bw() +
+  ggtitle ("Sierra Leone aggregate catch, 2019, SAU") +
+  labs (x = "", y = "Catch, million metric tonnes", fill = "Group") +
+  
+  theme ( 
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11, angle = 60, hjust = 1),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 12),
+    legend.title = element_text (size = 14),
+    plot.title = element_text (size = 18),
+    legend.position = "none")
+dev.off ()
+
+
+# also plot time series for dicastery presentation
+sau_2015_2019 <- readRDS("Data/SAU_2015_2019.Rds")
+
+sl <- sau_2015_2019 %>%
+  filter (country == "Sierra Leone") %>%
+  left_join (sau_2019_taxa, by = "species") %>%
+  # high-level groups
+  mutate (group = case_when (
+    commercial_group %in% c("Anchovies", "Herring-likes") ~ "Anchovies and sardines",
+    commercial_group == "Tuna & billfishes" ~ "Tunas",
+    commercial_group == "Crustaceans" ~ "Crustaceans",
+    TRUE ~ "Other"
+  ))
+
+sl$group <- factor (sl$group, levels = c ("Anchovies and sardines", "Tunas", "Crustaceans", "Other"))
+
+png ("F")
+sl %>%
+  ggplot (aes (x = year, y = tonnes/1000, fill = group)) +
+  geom_col() +
+  theme_bw() + 
+  labs (x = "", fill = "", y = "Catch, 1000 tonnes") +
+  theme (axis.text = element_text (size = 18),
+         axis.title = element_text (size = 24),
+         legend.text = element_text (size = 18)
+  )
+
+
+png ("Figures/Chl_aggregate_catch_taxa.png", width = 5, height = 4, units = "in", res = 300)
+chl_landings %>%
+  filter (year == 2021) %>%
+  group_by (taxa) %>%
+  summarise (catch_mt = sum (catch_mt, na.rm = TRUE)) %>%
+  ggplot (aes (x = reorder(taxa, -catch_mt, na.rm = TRUE), y = catch_mt/1000000, fill = taxa)) +
+  geom_col () +
+  theme_bw() +
+  ggtitle ("Official landings, 2021, Chile") +
+  labs (x = "", y = "Catch, million metric tonnes", fill = "Taxa") +
+  theme ( 
+    axis.text.y = element_text (size = 13),
+    axis.text.x = element_text (size = 11),
+    axis.title = element_text (size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text (size = 12),
+    legend.title = element_text (size = 14),
+    plot.title = element_text (size = 18),
+    legend.position = "none")
+dev.off()
