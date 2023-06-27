@@ -20,8 +20,7 @@ fish_taxamatch_nutr <- readRDS("Data/Matched_finfish_nutr.Rds")
 
 # use WHO RNI
 rni_child <- readRDS("Data/RNI_child.Rds") 
-
-spp_nutr <-  
+ 
 
 # Clean_Malawi_landings.R
 mal_landings <- readRDS("Data/Malawi_landings_cleaned.Rds")
@@ -46,7 +45,7 @@ mal_spp_nutr <- compiled_nutr %>%
   ungroup() %>%
   select (species, nutrient, amount, nutr_units, RNI, perc_rni)
 
-write.csv(mal_spp_nutr, file = "Data/Malawi_spp_nutrient_content_20230623.csv", row.names = FALSE)
+write.csv(mal_spp_nutr, file = "Data/Malawi_spp_nutrient_content_20230626.csv", row.names = FALSE)
 
 
 spp_nutr %>%
