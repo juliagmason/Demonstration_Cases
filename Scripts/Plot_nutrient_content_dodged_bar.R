@@ -95,19 +95,9 @@ plot_colorful_spp_nutr_dodge_bar(indo_spp$species, Selenium = TRUE)
 
 
 # Malawi top spp ----
-mal_names <- read.csv ("Data/Malawi_names.csv") %>%
-  rename (comm_name = Common.name,
-          species = Scientific.name) %>%
-  select (-Notes) %>%
-  # replace species names to match fishnutr
-  mutate (species = case_when (
-    comm_name == "Chambo" ~ "Oreochromis lidole combined",
-    comm_name == "Utaka" ~ "Mchenga inornata",
-    TRUE ~ species
-  ))
 
-mal_top_names <- mal_names %>%
-  filter (comm_name %in% c("Chambo", "Usipa", "Utaka"))
+# cleaned names from clean_malawi_landings
+mal_top_names <- mal_names %>% filter (comm_name %in% c("Chambo", "Usipa", "Utaka", "Ndunduma"))
 
 png ("Figures/Malawi_top_spp_nutr_dodge_bar.png", width = 6, height = 3, units = "in", res = 300)
 print(
@@ -126,28 +116,9 @@ dev.off()
 
 # sierra leone ----
 
-#sl_pri <- priority_spp %>% filter (country == "Sierra Leone")
 sl_landings <- readRDS("Data/SLE_landings_IHH.Rds")
 
-# top landed species
-sl_top <- sl_landings %>%
-  group_by (species) %>%
-  summarise (tonnes = sum(catch_mt, na.rm = TRUE)) %>%
-  ungroup() %>%
-  slice_max (n=6, order_by = "tonnes") # this gets 3 identifiable spp? big drop after P. elongatus
-
-png ("Figures/SL_spp_nutr_dodge_bar.png", width = 5, height = 4, units = "in", res = 300)
-print (
-  plot_colorful_spp_nutr_dodge_bar(sl_top$species, Selenium  = FALSE) +
-    theme (axis.text = element_text (size = 10),
-           axis.title = element_text (size = 10),
-           plot.title = element_text(size = 12),
-           legend.text = element_text (size = 10),
-           legend.title = element_text (size = 12)) 
-)
-dev.off()
-
-# john wanted top industrial vs. artisanal?
+# john wanted top industrial vs. artisanal
 sl_top_sector <- sl_landings %>%
   filter (year == 2017) %>%
   #summarise (tonnes = sum(catch_mt, na.rm = TRUE)) %>%
@@ -288,34 +259,3 @@ print(
       plot.title = element_text (size = 16))
 )
 dev.off()
-
-##### Priority species plots ----
-# quick peru plot
-peru_spp <- priority_spp %>% filter (country == "Peru", rank <6)
-png ("Figures/Peru_pri_spp_nutr_dodge_bar_sm.png", width = 7, height = 4, units = "in", res = 300)
-print (
-  plot_colorful_spp_nutr_dodge_bar(peru_spp$species, Selenium = FALSE)
-)
-dev.off()
-
-
-
-
-png ("Figures/CHL_pri_spp_nutr_dodge_bar.png", width = 10, height = 5, units = "in", res = 300)
-print (
-  plot_colorful_spp_nutr_dodge_bar("Chile")
-)
-dev.off()
-
-png ("Figures/PER_pri_spp_nutr_dodge_bar.png", width = 10, height = 5, units = "in", res = 300)
-print (
-  plot_colorful_spp_nutr_dodge_bar("Peru")
-)
-dev.off()
-
-png ("Figures/IDN_pri_spp_nutr_dodge_bar.png", width = 10, height = 5, units = "in", res = 300)
-print (
-  plot_colorful_spp_nutr_dodge_bar("Indonesia")
-)
-dev.off()
-
