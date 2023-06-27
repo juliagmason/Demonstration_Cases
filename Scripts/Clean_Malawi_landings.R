@@ -13,19 +13,29 @@
 
 # greyed out: kambuzi, chisawasawa
 
-# missing: Mlamba"        "Kampango"      "Others"        "Sanjika"       "Ntchila"       "Mpasa"    "Other.Tilapia"
+# missing:           "Others"       "Ntchila"       "Mpasa"    "Other.Tilapia"
 
 library (tidyverse)
 
-# common name/scientific name key
-mal_names <- read.csv ("Data/Malawi_names.csv") %>%
+# common name/scientific name key; re-sent on 6/26/23 with more species
+mal_names <- read.csv ("Data/Malawi_names.csv") 
+
+# cut additiional notes
+mal_names <- mal_names[1:18,1:2] %>%
   rename (comm_name = Common.name,
           species = Scientific.name) %>%
-  select (-Notes) %>%
   # replace species names to match fishnutr
   mutate (species = case_when (
     comm_name == "Chambo" ~ "Oreochromis lidole combined",
     comm_name == "Utaka" ~ "Mchenga inornata",
+    comm_name == "Ntchila" ~ "Labeo mesops",
+    species == "Barbus paludinosus" ~ "Enteromius paludinosus", 
+    # fix typos
+    species == "Oreochromis squampinnis" ~ "Oreochromis squamipinnis",
+    species == "Opsardidium micxrocephalum" ~ "Opsaridium microcephalum",
+    # there's something messed up about D. argenteus and it's not matching...same with o. microlepis
+    comm_name == "Ndunduma" ~ "Diplotaxodon argenteus",
+    comm_name == "Mpasa" ~ "Opsaridium microlepis",
     TRUE ~ species
   ))
 
