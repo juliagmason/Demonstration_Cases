@@ -210,6 +210,11 @@ peru_exports <- peru_sau %>%
                 names_to = "exports",
                 values_to = "tonnes") 
 
+# calculate mean percent of non-anchovy exports
+exports %>%
+  filter (country == "Peru", species != "Engraulis ringens") %>%
+  summarise (mean_kept = 1- mean (prop_exp))
+
 # calculate nutrient content
 peru_nutr_ds <- peru_exports %>%
   mutate(rni_equivalents = pmap (list (species = species, amount = tonnes, country_name = "Peru"), calc_children_fed_func)) %>%
