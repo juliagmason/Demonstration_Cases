@@ -318,4 +318,70 @@ mal_nutr %>%
   theme_bw() +
   ggtitle (paste0("Child RNI equivalents, Malawi\nMost recent year of landings")) +
   labs (x = "", y = "Child RNI equivalents, millions", fill = "Species") 
-  
+
+# results reporting, make table of relative contribution to catch vs. RNIs for each commercial group ----
+# i know there is a better way to do this!! ahhhhh!!
+mal_tot_tonnes <- mal_top %>% filter (Year == 2017) %>% summarise (tot_tonnes = sum (tonnes))
+mal_nutr_rnis <- mal_nutr %>%
+  group_by (nutrient) %>% summarise (tot_rnis = sum (rni_equivalents))
+
+mal_nutr %>%
+  group_by(comm_name, nutrient) %>%
+  summarise (tonnes = sum (tonnes),
+             rnis = sum (rni_equivalents)) %>%
+  left_join (mal_nutr_rnis, by = "nutrient") %>%
+  mutate (prop_catch = tonnes/mal_tot_tonnes$tot_tonnes,
+          prop_rnis = rnis / tot_rnis) %>% write.excel()
+
+sl_tot_tonnes <- sl_landings %>% filter (year == 2017) %>% summarise (tot_tonnes = sum (catch_mt, na.rm = TRUE))
+sl_nutr_rnis <- landings %>% group_by (nutrient) %>% summarise (tot_rnis = sum (rni_equivalents, na.rm = TRUE))
+
+landings %>%
+  group_by (commercial_group, nutrient) %>%
+  summarise (tonnes = sum (catch_mt, na.rm = TRUE),
+             rnis = sum (rni_equivalents, na.rm = TRUE)) %>%
+  left_join (sl_nutr_rnis, by = "nutrient") %>%
+  mutate (prop_catch = tonnes/sl_tot_tonnes$tot_tonnes,
+          prop_rnis = rnis / tot_rnis) %>% write.excel()
+
+chl_tot_tonnes <- chl_landings %>% filter (year == 2021) %>% summarise (tot_tonnes = sum (catch_mt, na.rm = TRUE))
+chl_nutr_rnis <- landings %>% group_by (nutrient) %>% summarise (tot_rnis = sum (rni_equivalents, na.rm = TRUE))
+landings %>%
+  group_by (commercial_group, nutrient) %>%
+  summarise (tonnes = sum (catch_mt, na.rm = TRUE),
+             rnis = sum (rni_equivalents, na.rm = TRUE)) %>%
+  left_join (chl_nutr_rnis, by = "nutrient") %>%
+  mutate (prop_catch = tonnes/chl_tot_tonnes$tot_tonnes,
+          prop_rnis = rnis / tot_rnis) %>% write.excel()
+
+chl_tot_tonnes <- chl_landings %>% filter (year == 2021, commercial_group != "Algae") %>% summarise (tot_tonnes = sum (catch_mt, na.rm = TRUE))
+chl_nutr_rnis <- landings %>% filter (commercial_group != "Algae") %>% group_by (nutrient) %>% summarise (tot_rnis = sum (rni_equivalents, na.rm = TRUE))
+landings %>%
+  filter (commercial_group != "Algae") %>%
+  group_by (commercial_group, nutrient) %>%
+  summarise (tonnes = sum (catch_mt, na.rm = TRUE),
+             rnis = sum (rni_equivalents, na.rm = TRUE)) %>%
+  left_join (chl_nutr_rnis, by = "nutrient") %>%
+  mutate (prop_catch = tonnes/chl_tot_tonnes$tot_tonnes,
+          prop_rnis = rnis / tot_rnis) %>% write.excel()
+
+peru_tot_tonnes <- landings %>% ungroup() %>% summarise (tot_tonnes = sum (catch_mt, na.rm = TRUE))
+peru_nutr_rnis <- landings %>% group_by (nutrient) %>% summarise (tot_rnis = sum (rni_equivalents, na.rm = TRUE))
+landings %>%
+  group_by (commercial_group, nutrient) %>%
+  summarise (tonnes = sum (catch_mt, na.rm = TRUE),
+             rnis = sum (rni_equivalents, na.rm = TRUE)) %>%
+  left_join (peru_nutr_rnis, by = "nutrient") %>%
+  mutate (prop_catch = tonnes/peru_tot_tonnes$tot_tonnes,
+          prop_rnis = rnis / tot_rnis) %>% write.excel()
+
+
+indo_tot_tonnes <- landings %>% ungroup() %>% summarise (tot_tonnes = sum (catch_mt, na.rm = TRUE))
+indo_nutr_rnis <- landings %>% group_by (nutrient) %>% summarise (tot_rnis = sum (rni_equivalents, na.rm = TRUE))
+landings %>%
+  group_by (commercial_group, nutrient) %>%
+  summarise (tonnes = sum (catch_mt, na.rm = TRUE),
+             rnis = sum (rni_equivalents, na.rm = TRUE)) %>%
+  left_join (indo_nutr_rnis, by = "nutrient") %>%
+  mutate (prop_catch = tonnes/indo_tot_tonnes$tot_tonnes,
+          prop_rnis = rnis / tot_rnis) %>% write.excel()
