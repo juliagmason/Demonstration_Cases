@@ -42,9 +42,87 @@ exports <- read_csv ("Data/20230622_edf_ARTIS_full_spp.csv") %>%
   filter (habitat == "marine", method == "capture")
 
 # Sierra Leone ----
-# try to do large scale and small scale as domestic, add SAU foriegn. Then have domestic go into exports.
+
+# actually not defensible to break up large and small scale. do domestic/foreign and exports
+sl_landings_2017_dom <- sl_landings %>%
+  filter (year == 2017, !is.na(catch_mt)) %>%
+  select (country, species, catch_mt) %>%
+  left_join(exports, by = c("species", "country")) %>%
+  #for species missing data, assume zero exports
+  replace_na (list(prop_exp = 0)) %>%
+  mutate (sector = "Domestic catch",
+          Exported = catch_mt * prop_exp,
+          Kept = catch_mt * (1-prop_exp)) %>%
+  # cut unnecessary columns
+  select (species, sector, Exported, Kept) %>%
+  # pivot longer
+  pivot_longer (Exported:Kept, 
+                names_to = "exports",
+                values_to = "tonnes") 
+
+#subset just the foreign catch for SL
+sl_foreign <- sau_2019 %>%
+  ungroup () %>%
+  filter (country == "Sierra Leone", fleet == "Foreign catch") %>%
+  # all foreign catch is industrial catch. but what I'm going to do is name the sector "Foreign catch" so it's in one column. 
+  # also have to group to combine end_use_types
+  group_by (species) %>%
+  #rename to match sl_landings--make sector column that says foreign, and exports column that ALSO says foreign??
+  summarise (sector = "Foreign catch",
+             exports = NA,
+             tonnes = sum (tonnes))
+  
+# join and calculate nutrient yield
+
+ihh_ds <- sl_landings_2017_dom %>%
+  rbind (sl_foreign) %>%
+  #calculate nutrient yield
+  mutate(rni_equivalents = pmap (list (species = species, amount = tonnes, country_name = "Sierra Leone"), calc_children_fed_func)) %>%
+  unnest (cols = c(rni_equivalents)) %>%
+  
+  # group by nutrient, this makes it slightly cleaner
+  group_by (sector, exports, nutrient) %>%
+  summarise (rni_equivalents = sum (rni_equivalents, na.rm = TRUE))
+
+# I'm not sure why this works, but this makes the foreign catch export flow disappear!
+ihh_ds$sector <- factor (ihh_ds$sector, levels = c ("Foreign catch", "Domestic catch"))
+ihh_ds$exports <- factor(ihh_ds$exports, levels = c ("Exported","Kept",  "Foreign catch"))
+
+png("Figures/Sankey_SL_foreign_exports.png", width = 8, height = 6, units = "in", res = 300)
+ihh_ds %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  ggplot (aes (axis1 = nutrient,
+               axis2 = sector,
+               axis3 = exports,
+               y = rni_equivalents/1000000)) +
+  scale_x_discrete (limits = c ("nutrient", "sector", "exports"), expand = c(.15, .05)) +
+  labs(y = "RNI equivalents, millions", x = "Allocation levers") +
+  geom_flow(aes(fill = nutrient)) +
+  geom_stratum(aes(fill = nutrient)) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 5) +
+  #geom_text (stat = "flow", nudge_x = 0.2, aes (label = round(rni_equivalents/1000000, 1))) +
+  theme_minimal() +
+  ggtitle("Nutrient flows, Sierra Leone") +
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16),
+         plot.title = element_text (size = 18),
+         legend.position = "none")
+dev.off()
+
+# report values?
+ihh_ds %>%
+  group_by (sector, nutrient) %>%
+  summarise (rni_equivalents = sum(rni_equivalents)) %>%
+  write.excel()
+
+ihh_ds %>%
+  group_by (exports, nutrient) %>%
+  summarise (rni_equivalents = sum(rni_equivalents)) %>%
+  write.excel()
 
 
+############################################################
+# try to do large scale and small scale as domestic, add SAU foreign. Then have domestic go into exports.
 sl_landings_2017 <- sl_landings %>%
   filter (year == 2017, !is.na(catch_mt)) %>%
   select (country, species, sector, catch_mt) 
@@ -74,6 +152,7 @@ sl_foreign <- sau_2019 %>%
   summarise (sector = "Foreign catch",
              exports = NA,
              tonnes = sum (tonnes))
+
 
 
 # join exports and foreign, then calculate nutrient yield
@@ -113,6 +192,12 @@ ihh_ds %>%
          plot.title = element_text (size = 18),
          legend.position = "none")
 dev.off()
+
+# report large scale vs small scale values
+ihh_ds %>%
+  group_by (sector, nutrient) %>%
+  summarise (rni_equivalents = sum (rni_equivalents)) %>%
+  write.excel()
 
 # Indonesia--just exports ----
 
@@ -210,7 +295,7 @@ peru_exports <- peru_sau %>%
                 names_to = "exports",
                 values_to = "tonnes") 
 
-# calculate mean percent of non-anchovy exports
+# calculate mean percent of non-anchovy exports to report in results
 exports %>%
   filter (country == "Peru", species != "Engraulis ringens") %>%
   summarise (mean_kept = 1- mean (prop_exp))
@@ -435,7 +520,28 @@ chl_ds %>%
 
 dev.off()
 
+# just sector ----
+png("Figures/Sankey_Chl_sector.png", width = 8, height = 6, units = "in", res = 300)
+chl_ds %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  ggplot (aes (axis1 = nutrient,
+               axis2 = sector,
+              
+               y = rni_equivalents/1000000)) +
+  scale_x_discrete (limits = c ("nutrient", "sector"), expand = c(.15, .05)) +
+  labs(y = "RNI equivalents, millions", x = "Allocation levers") +
+  geom_flow(aes(fill = nutrient)) +
+  geom_stratum(aes(fill = nutrient)) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 5) +
+  #geom_text (stat = "flow", nudge_x = 0.2, aes (label = round(rni_equivalents/1000000, 1))) +
+  theme_minimal() +
+  ggtitle("Nutrient flows, Chile") +
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 16),
+         plot.title = element_text (size = 18),
+         legend.position = "none")
 
+dev.off()
 
 
 
@@ -917,7 +1023,8 @@ ds <- chl_landings %>%
   group_by (Exports, nutrient) %>%
   summarise (rni_equivalents = sum (rni_equivalents, na.rm = TRUE))
 
-
+# report values
+ds %>% write.excel()
 # plot
 png("Figures/Sankey_Chl_exports_sernapesca.png", width = 8, height = 6, units = "in", res = 300)
 ds %>%
