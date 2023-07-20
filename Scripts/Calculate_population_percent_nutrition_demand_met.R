@@ -661,6 +661,74 @@ png ("Figures/Peru_annual_nutr_ts_mgmt_facet_population_anchov.png", width = 8, 
 print(plot_anchov + theme(legend.position="bottom"))
 dev.off()
 
+
+# Calculate values to report in results ----
+# function for copying R output tables into word/excel----
+#https://stackoverflow.com/questions/24704344/copy-an-r-data-frame-to-an-excel-spreadsheet
+write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
+  write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
+}
+
+report_perc_pop_met_values <- function (country_name, anchovy = TRUE) {
+  
+  tonnes_nutr_ts <- readRDS(paste0("Data/", country_name, "_annual_ts_forecasted_nutrients_tonnes.Rds"))
+  
+  # aggregate by nutrient, rcp, scenario
+  # for peru, default without anchovy
+  if (country_name == "Peru") {
+    
+    if (anchovy == TRUE) {
+      tonnes_nutr_agg_ts <-  tonnes_nutr_ts %>%
+        filter (species == "Engraulis ringens") %>%
+        group_by (year, nutrient, rcp, scenario) %>%
+        summarise (tot_tonnes = sum (nutr_tonnes, na.rm = TRUE))
+    } else if (anchovy == FALSE) {
+      tonnes_nutr_agg_ts <-  tonnes_nutr_ts %>%
+        filter (species != "Engraulis ringens") %>%
+        group_by (year, nutrient, rcp, scenario) %>%
+        summarise (tot_tonnes = sum (nutr_tonnes, na.rm = TRUE))
+    }  # end country ifelse
+    } else {  
+      # if not peru, don't worry about anchovy
+      tonnes_nutr_agg_ts <-  tonnes_nutr_ts %>%
+        group_by (year, nutrient, rcp, scenario) %>%
+        summarise (tot_tonnes = sum (nutr_tonnes, na.rm = TRUE))
+    }
+ 
+    
+  # join to population
+  ts_perc_pop <- wpp_country_aggregate %>%
+    filter (country == country_name, Time > 2022) %>%
+    rename (year = Time) %>%
+    left_join (tonnes_nutr_agg_ts, by = c ("year", "nutrient")) %>%
+    mutate (prop_demand_met = tot_tonnes / tot_nutr_annual_demand,
+            # make midcentury and endcentury period
+            period = case_when (year %in% 2051:2060 ~ "midcentury",
+                                year %in% 2091:2100 ~ "endcentury")
+            ) %>%
+    # cut to periods of interest
+    filter (!is.na (period)) %>%
+    # take mean per period
+    group_by (country, nutrient, rcp, scenario, period) %>%
+    summarise (tot_pop_thousands = first (tot_pop),
+               tot_demand_tonnes = first (tot_nutr_annual_demand),
+               mean_nutr_provided_tonnes = mean (tot_tonnes),
+               mean_prop_demand_met = mean (prop_demand_met))
+  
+  ts_perc_pop %>%
+    filter (rcp == "RCP60") %>%
+    write.excel()
+
+  
+}
+
+
+report_perc_pop_met_values("Peru")
+report_perc_pop_met_values("Peru", anchovy = FALSE)
+report_perc_pop_met_values("Chile")
+report_perc_pop_met_values("Indonesia")
+report_perc_pop_met_values("Sierra Leone")
+
 # plot projected pop growth ----
 wpp_pop <- read_csv("Data/WPP2022_Population1JanuaryByAge5GroupSex_Medium.csv")
 
