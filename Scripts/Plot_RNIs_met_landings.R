@@ -201,6 +201,19 @@ sl_nutr_sector <- sl_landings %>%
 
 sl_nutr_sector$sector <- factor (sl_nutr_sector$sector, levels = c ("Small-scale", "Large-scale"))
 
+# Abby question: Do SSF or LSF provide any nutrient in particular in disproportionate amounts (compared to volume)? 
+sl_sector_prop <- sl_landings %>% summarise (prop_ssf = sum (catch_mt[which (sector == "Small-scale")], na.rm = TRUE)/sum (catch_mt, na.rm = TRUE) * 100,
+                           prop_lsf = sum (catch_mt[which (sector == "Large-scale")], na.rm = TRUE)/sum (catch_mt, na.rm = TRUE) * 100)
+
+sl_landings %>% filter (year == 2017) %>% group_by (sector) %>% summarise (catch = sum(catch_mt, na.rm = TRUE)) %>% write.excel()
+# SSF catches 87.9%, lsf catches 12.1% by volume
+
+sl_nutr_sector_prop <- sl_nutr_sector %>%
+  group_by (nutrient) %>%
+  summarise (prop_ssf = sum (rni_equivalents[which (sector == "Small-scale")], na.rm = TRUE)/sum (rni_equivalents, na.rm = TRUE) * 100,
+                       prop_lsf = sum (rni_equivalents[which (sector == "Large-scale")], na.rm = TRUE)/sum (rni_equivalents, na.rm = TRUE) * 100)
+write.excel(sl_nutr_sector_prop)
+
 png ("Figures/SL_aggregate_landings_RNIs_met_IHH_sector.png", width = 6, height = 4, units = "in", res = 300)  
 sl_nutr_sector %>%
   mutate (commercial_group = ifelse (commercial_group == "Flatfishes", "Other fishes & inverts", commercial_group)) %>%
