@@ -40,7 +40,7 @@ catch_upside_tonnes <- catch_upside_relative_repaired %>%
 colnames (catch_upside_tonnes) <- gsub ("_ratio", "", colnames (catch_upside_tonnes))
 
 catch_upside_tonnes_long <- catch_upside_tonnes %>%
-  filter (-bl_tonnes) %>%
+  select (-bl_tonnes) %>%
   pivot_longer(-c(country, rcp, species),
                names_to = c("scenario", "period"),
                names_sep = "_",
@@ -48,18 +48,36 @@ catch_upside_tonnes_long <- catch_upside_tonnes %>%
   mutate(rni_equivalents = pmap (list (species = species, amount = tonnes, country_name = country), calc_children_fed_func)) %>%
   unnest (cols = c(rni_equivalents)) 
 
+# summarise by nutrient 
+catch_upside_rni_summarize <- catch_upside_tonnes_long %>%
+  group_by (country, rcp, scenario, period, nutrient) %>%
+  summarise (tot_future_rni = sum (rni_equivalents, na.rm = TRUE))
+
 # make separate one for bl_tonnes???!? doing this in a dumb way
+# but need to clip to the species in the projection data
 bl_nutr <- full_baseline %>%
   mutate(rni_equivalents= pmap (list (species = species, amount = bl_tonnes, country_name = country), calc_children_fed_func)) %>%
   unnest (cols = c(rni_equivalents)) %>%
   rename (baseline_rni_equivalents = rni_equivalents)
 
+bl_nutr_summarize <- bl_nutr %>%
+  group_by (country, nutrient) %>%
+  summarise (tot_baseline_rni = sum (baseline_rni_equivalents, na.rm = TRUE))
+
+catch_upside_rni_compare <- catch_upside_rni_summarize %>%
+  left_join (bl_nutr_summarize, by = c("country", "nutrient"))
+
 catch_upside_tonnes_long_compare <- catch_upside_tonnes_long %>%
   left_join (bl_nutr, by = c ("country", "species", "nutrient"))
 
 
+
+
+bl_nutr_summarize %>% filter (country == "Indonesia")
+catch_upside_rni_compare %>% filter (country == "Indonesia", rcp == "RCP60")
+
 # for Abby, make table of percent change for rcp 6.0
-#not summarisizing so I can filter out anchovy
+#not summarizing so I can filter out anchovy
 
 indo <- catch_upside_tonnes_long_compare %>%
   filter (country == "Indonesia", rcp == "RCP60") %>%
@@ -69,6 +87,13 @@ indo <- catch_upside_tonnes_long_compare %>%
   mutate (perc_change = (future_rni - baseline_rni)/baseline_rni * 100)
 
 write.excel(indo)
+
+indo26 <- catch_upside_tonnes_long_compare %>%
+  filter (country == "Indonesia", rcp == "RCP26") %>%
+  group_by (country, scenario, period, nutrient) %>%
+  summarise (baseline_rni = sum (baseline_rni_equivalents, na.rm = TRUE), 
+             future_rni = sum (rni_equivalents, na.rm = TRUE)) %>%
+  mutate (perc_change = (future_rni - baseline_rni)/baseline_rni * 100)
 
 chile <- catch_upside_tonnes_long_compare %>%
   filter (country == "Chile", rcp == "RCP60") %>%
