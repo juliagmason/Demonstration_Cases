@@ -8,6 +8,13 @@
 library (tidyverse)
 library (ggalluvial)
 
+# function for writing values to excel (For paper reporting)
+# function for copying R output tables into word/excel----
+#https://stackoverflow.com/questions/24704344/copy-an-r-data-frame-to-an-excel-spreadsheet
+write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
+  write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
+}
+
 
 # function for converting catch in mt to children fed ----
 source ("Scripts/Function_convert_catch_amt_children_fed.R")
@@ -520,6 +527,8 @@ chl_ds %>%
 
 dev.off()
 
+
+
 # just sector ----
 png("Figures/Sankey_Chl_sector.png", width = 8, height = 6, units = "in", res = 300)
 chl_ds %>%
@@ -542,6 +551,17 @@ chl_ds %>%
          legend.position = "none")
 
 dev.off()
+
+# report values
+chl_sector_nutr <- chl_landings %>%
+  filter (year == 2021, chl_taxa != "Algae") %>%
+  #calculate nutrient yield
+  mutate(rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = "Chile"), calc_children_fed_func)) %>%
+  unnest (cols = c(rni_equivalents)) %>%
+  
+  # group by nutrient, this makes it slightly cleaner
+  group_by (sector, nutrient) %>%
+  summarise (rni_equivalents = sum (rni_equivalents, na.rm = TRUE))
 
 
 
@@ -828,7 +848,7 @@ dev.off()
 
 
 # Chile ----
-# foreign catch negligible
+# foreign catch negligible, look at end use by sector (use SAU data)
 
 ds <- sau_2019 %>%
   # filter to country, remove recreational and subsistence
