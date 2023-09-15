@@ -33,7 +33,7 @@ sau_2019 <- readRDS("Data/SAU_2019.Rds")
 # plot as full time series ----
 # these are identical for the nutrients....
 # annual nutricast time series
-catch_upside_annual <- readRDS ("Data/nutricast_upside_relative_annual_ratio.Rds")
+catch_upside_annual <- readRDS ("Data/nutricast_upside_relative_annual_ratio_full_ts.Rds")
 # repaired missing species, this is in a slightly different format (check_sau_nutricast_species.R)
 catch_upside_annual_missing <- readRDS("Data/nutricast_upside_relative_annual_repair_missing.Rds")
 
@@ -73,8 +73,8 @@ calc_nutr_upside_tonnes_annual <- function (country_name) {
 }
 
 # this takes several minutes
-indo <-   calc_nutr_upside_tonnes_annual ("Indonesia"); beep()
-saveRDS(indo, file = "Data/annual_nutr_upside_childRNI_Indonesia.Rds")
+indo_fullts <-   calc_nutr_upside_tonnes_annual ("Indonesia"); beep()
+saveRDS(indo_fullts, file = "Data/annual_nutr_upside_childRNI_Indonesia_full_timeseries.Rds")
 
 peru <-   calc_nutr_upside_tonnes_annual ("Peru"); beep()
 saveRDS(peru, file = "Data/annual_nutr_upside_childRNI_Peru.Rds")
@@ -96,7 +96,7 @@ plot_child_RNI_proj <- function (country_name, RCP) {
   nutr_ts <- readRDS(paste0("Data/annual_nutr_upside_childRNI_", country_name, ".Rds"))
   
   # aggregate by rcp, scenario, year, nutrient
-  nutr_agg_ts <- nutr_ts %>%
+  nutr_agg_ts <- indo_fullts %>%
     group_by (rcp, scenario, year, nutrient) %>%
     summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
     filter (rcp == RCP, !nutrient %in% c("Protein"))
@@ -185,8 +185,55 @@ for (RCP in c("RCP26", "RCP45", "RCP60", "RCP85")) {
 }
     
     
-  
+################################################################################################################
+# Calculate values to report in results ----
+# function for copying R output tables into word/excel----
+#https://stackoverflow.com/questions/24704344/copy-an-r-data-frame-to-an-excel-spreadsheet
+write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
+  write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
+}
 
+report_RNI_met_values <- function (country_name, anchovy = TRUE) {
+  
+  rni_nutr_ts <- readRDS(paste0("Data/annual_nutr_upside_childRNI_", country_name, ".Rds"))
+  
+  # aggregate by nutrient, rcp, scenario
+  # for peru, default without anchovy
+  if (country_name == "Peru") {
+    
+    if (anchovy == TRUE) {
+      rni_nutr_agg_ts <-  rni_nutr_ts %>%
+        filter (species == "Engraulis ringens") %>%
+        group_by (country, year, nutrient, rcp, scenario) %>%
+        summarise (tot_rni = sum (rni_equivalents, na.rm = TRUE))
+    } else if (anchovy == FALSE) {
+      rni_nutr_agg_ts <-  tonnes_nutr_ts %>%
+        filter (species != "Engraulis ringens") %>%
+        group_by (country, year, nutrient, rcp, scenario) %>%
+        summarise (tot_rni = sum (rni_equivalents, na.rm = TRUE))
+    }  # end country ifelse
+  } else {  
+    # if not peru, don't worry about anchovy
+    rni_nutr_agg_ts <-  rni_nutr_ts %>%
+      group_by (country, year, nutrient, rcp, scenario) %>%
+      summarise (tot_rni = sum (rni_equivalents, na.rm = TRUE))
+  }
+  
+  # mid and end century averages
+  rni_period <- rni_nutr_agg_ts %>%
+    mutate (
+      period = case_when (year %in% 2051:2060 ~ "midcentury",
+                        year %in% 2091:2100 ~ "endcentury")
+    ) %>%
+    # cut to periods of interest
+  filter (!is.na (period), rcp == "RCP60") %>%
+    # take mean per period
+    group_by (country, rcp, nutrient, scenario, period) %>%
+    summarise (mean_rni_equiv = mean (tot_rni, na.rm = TRUE))
+
+}  
+
+report_RNI_met_values("Chile") %>% write.excel()
   
 ################################################################################
 # Reject figs ----
