@@ -91,164 +91,107 @@ saveRDS(chl, file = "Data/annual_nutr_upside_childRNI_Chile.Rds")
 
 #Plot for each country and RCP
 plot_child_RNI_proj <- function (country_name, RCP) {
-  # country_name is lowercase, indo, peru, sl, chile
-  
+
   #projected nutrient yield in rni_equivalents for each country
-  nutr_ts <- readRDS(paste0("Data/annual_nutr_upside_", country_name, ".Rds"))
+  nutr_ts <- readRDS(paste0("Data/annual_nutr_upside_childRNI_", country_name, ".Rds"))
   
-  plot_ts <- 
+  # aggregate by rcp, scenario, year, nutrient
+  nutr_agg_ts <- nutr_ts %>%
+    group_by (rcp, scenario, year, nutrient) %>%
+    summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
+    filter (rcp == RCP, !nutrient %in% c("Protein"))
+  
+  plot_ts <- nutr_agg_ts %>% 
+    ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
+    geom_line() +
+    facet_wrap (~nutrient, scales = "free_y") +
+    theme_bw() +
+    labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
+    ggtitle (paste0("Projected nutrient yield for ", country_name, "; ", RCP)) +
+    theme (axis.text.y = element_text (size = 14),
+           axis.text.x = element_text (size = 13),
+           axis.title = element_text (size = 16),
+           strip.text = element_text (size = 15),
+           legend.text = element_text (size = 12),
+           legend.title = element_text (size = 14),
+           plot.title = element_text (size = 18))
+  
+  # save png
+  png (paste0("Figures/annual_nutr_ts_childRNI_", country_name, "_", RCP, ".png"), width = 9, height = 6, units = "in", res = 300)
+  print (plot_ts + theme(legend.position="bottom"))
+  dev.off()
+  
+}
+
+plot_child_RNI_proj("Chile", RCP = "RCP26")
+
+# Apply to all countries, all RCPs
+pmap (expand_grid(country_name = c ("Chile", "Peru", "Sierra Leone", "Indonesia"), RCP = c("RCP26", "RCP45", "RCP60", "RCP85")), plot_child_RNI_proj)                   
                      
-                     
 
-png ("Figures/annual_nutr_ts_nutrient_facet_childRNI_Peru.png", width = 10, height = 6, units = "in", res = 300)
-peru_nutr_ts %>%
-  group_by (rcp, scenario, year, nutrient) %>%
-  summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
-  filter (rcp == "RCP60", !nutrient %in% c("Protein")) %>%
-  ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
-  #geom_point() +
-  geom_line() +
-  facet_wrap (~nutrient, scales = "free_y") +
-  theme_bw() +
-  labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
-  ggtitle ("Projected nutrient yield for Peru, RCP 6.0") +
-  theme (axis.text = element_text (size = 14),
-         axis.title = element_text (size = 16),
-         strip.text = element_text (size = 16),
-         legend.text = element_text (size = 12),
-         legend.title = element_text (size = 14),
-         plot.title = element_text (size = 18))
-dev.off()
+# Peru anchovy ----
 
-# just anchovy
-png ("Figures/Peru_annual_nutr_ts_nutrient_facet_anchov.png", width = 10, height = 6, units = "in", res = 300)
-peru_nutr_ts %>%
-  filter (species == "Engraulis ringens", scenario == "Productivity Only") %>%
-  group_by (rcp, scenario, year, nutrient) %>%
-  summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
-  filter (rcp == "RCP60", !nutrient %in% c("Protein")) %>%
-  ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
-  #geom_point() +
-  geom_line() +
-  facet_wrap (~nutrient, scales = "free_y") +
-  theme_bw() +
-  labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
-  ggtitle ("Projected nutrient yield for Peru, RCP 6.0") +
-  theme (axis.text = element_text (size = 14),
-         axis.title = element_text (size = 16),
-         strip.text = element_text (size = 16),
-         legend.text = element_text (size = 12),
-         legend.title = element_text (size = 14),
-         plot.title = element_text (size = 18))
-dev.off()
+peru_nutr_ts <- readRDS("Data/annual_nutr_upside_childRNI_Peru.Rds")
 
+for (RCP in c("RCP26", "RCP45", "RCP60", "RCP85")) {
+  
+  plot_noanchov <- peru_nutr_ts %>%
+    filter (species != "Engraulis ringens") %>%
+    group_by (rcp, scenario, year, nutrient) %>%
+    summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
+    filter (rcp == RCP, !nutrient %in% c("Protein")) %>%
+    ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
+    geom_line() +
+    facet_wrap (~nutrient, scales = "free_y") +
+    theme_bw() +
+    labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
+    ggtitle (paste0("Projected nutrient yield for Peru, ", RCP, "; Anchovy removed")) +
+    theme (axis.text.y = element_text (size = 14),
+           axis.text.x = element_text (size = 13),
+           axis.title = element_text (size = 16),
+           strip.text = element_text (size = 15),
+           legend.text = element_text (size = 12),
+           legend.title = element_text (size = 14),
+           plot.title = element_text (size = 18))
 
-
-
-chl_nutr_ts <- readRDS("Data/annual_nutr_upside_chile.Rds")
-png ("Figures/Chile_annual_nutr_ts_nutrient_facet.png", width = 10, height = 6, units = "in", res = 300)
-chl_nutr_ts %>%
-  group_by (rcp, scenario, year, nutrient) %>%
-  summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
-  filter (rcp == "RCP60", !nutrient %in% c("Protein")) %>%
-  ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
-  #geom_point() +
-  geom_line() +
-  facet_wrap (~nutrient, scales = "free_y") +
-  theme_bw() +
-  labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
-  ggtitle ("Projected nutrient yield for Chile, RCP 6.0") +
-  theme (axis.text = element_text (size = 14),
-         axis.title = element_text (size = 16),
-         strip.text = element_text (size = 16),
-         legend.text = element_text (size = 12),
-         legend.title = element_text (size = 14),
-         plot.title = element_text (size = 18))
-dev.off()
-
-indo_nutr_ts <- readRDS("Data/annual_nutr_upside_indo.Rds")
-png ("Figures/Indo_annual_nutr_ts_nutrient_facet.png", width = 10, height = 6, units = "in", res = 300)
-indo_nutr_ts %>%
-  group_by (rcp, scenario, year, nutrient) %>%
-  summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
-  filter (rcp == "RCP60", !nutrient %in% c("Protein")) %>%
-  ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
-  #geom_point() +
-  geom_line() +
-  facet_wrap (~nutrient, scales = "free_y") +
-  theme_bw() +
-  labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
-  ggtitle ("Projected nutrient yield for Indonesia, RCP 6.0") +
-  theme (axis.text = element_text (size = 14),
-         axis.title = element_text (size = 16),
-         strip.text = element_text (size = 16),
-         legend.text = element_text (size = 12),
-         legend.title = element_text (size = 14),
-         plot.title = element_text (size = 18))
-dev.off()
-
-
-sl_nutr_ts <- readRDS("Data/annual_nutr_upside_sl.Rds")
-png ("Figures/SL_annual_nutr_ts_nutrient_facet.png", width = 10, height = 6, units = "in", res = 300)
-sl_nutr_ts %>%
-  group_by (rcp, scenario, year, nutrient) %>%
-  summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
-  filter (rcp == "RCP60", !nutrient %in% c("Protein")) %>%
-  ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
-  #geom_point() +
-  geom_line() +
-  facet_wrap (~nutrient, scales = "free_y") +
-  theme_bw() +
-  labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
-  ggtitle ("Projected nutrient yield for Sierra Leone, RCP 6.0") +
-  theme (axis.text = element_text (size = 14),
-         axis.title = element_text (size = 16),
-         strip.text = element_text (size = 16),
-         legend.text = element_text (size = 12),
-         legend.title = element_text (size = 14),
-         plot.title = element_text (size = 18))
-dev.off()
-
-chl %>%
-  group_by (rcp, scenario, year, nutrient) %>%
-  summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
-  filter (rcp == "RCP60", !nutrient == "Protein") %>%
-ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
-  #geom_point() +
-  geom_line() +
-  facet_wrap (~nutrient, scales = "free_y") +
-  theme_bw() +
-  labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
-  ggtitle ("Projected nutrient yield for Indonesia, RCP 6.0")
-
-indo %>%
-group_by (rcp, scenario, year, nutrient) %>%
-  summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
-  filter (rcp == "RCP60", !nutrient %in% c("Protein","Selenium")) %>%
-  ggplot (aes (x = year, y = tot_fed/1000000, col = nutrient, group = nutrient)) +
-  #geom_point() +
-  geom_line() +
-  facet_wrap (~scenario, scales = "free_y") +
-  theme_bw() +
-  labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
-  ggtitle ("Projected nutrient yield for Indonesia, RCP 6.0")
-
-
-peru %>%
-  filter (species == "Engraulis ringens") %>%
-  group_by (rcp, scenario, year, nutrient) %>%
-  summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
-  filter (rcp == "RCP60", !nutrient %in% c("Protein","Selenium")) %>%
-  ggplot (aes (x = year, y = tot_fed/1000000, col = nutrient, group = nutrient)) +
-  #geom_point() +
-  geom_line() +
-  facet_wrap (~scenario, scales = "free_y") +
-  theme_bw() +
-  labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
-  ggtitle ("Projected nutrient yield for Peru anchovy, RCP 6.0")
+  png (paste0("Figures/annual_nutr_ts_childRNI_Peru_NOanchov_", RCP, ".png"), width = 9, height = 6, units = "in", res = 300)
+  print(plot_noanchov + theme(legend.position="bottom"))
+  dev.off()
+  
+  # JUST anchovy
+  plot_anchov <- peru_nutr_ts %>%
+    filter (species == "Engraulis ringens") %>%
+    group_by (rcp, scenario, year, nutrient) %>%
+    summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
+    filter (rcp == RCP, !nutrient %in% c("Protein")) %>%
+    ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
+    geom_line() +
+    facet_wrap (~nutrient, scales = "free_y") +
+    theme_bw() +
+    labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
+    ggtitle (paste0("Projected nutrient yield for Peru, ", RCP, "; Anchovy only")) +
+    theme (axis.text.y = element_text (size = 14),
+           axis.text.x = element_text (size = 13),
+           axis.title = element_text (size = 16),
+           strip.text = element_text (size = 15),
+           legend.text = element_text (size = 12),
+           legend.title = element_text (size = 14),
+           plot.title = element_text (size = 18))
+  
+  png (paste0("Figures/annual_nutr_ts_childRNI_Peru_anchov_", RCP, ".png"), width = 9, height = 6, units = "in", res = 300)
+  print(plot_anchov + theme(legend.position="bottom"))
+  dev.off()
+  
+}
+    
+    
   
 
-##################################################################################
+  
+################################################################################
+# Reject figs ----
+
+
 # plot as 3 point time series, line graph, scenario as color ----
 # catch upside relative by period, from calculate_nutritional_upsides.r
 # expressed as catch ratios relative to base year for midcentury and end century, can multiply by landings
@@ -306,14 +249,7 @@ calc_nutr_upside_tonnes <- function (country_name) {
     # convert to nutrients
     mutate (children_fed = pmap (list (species = species, amount = tonnes, country_name = country), calc_children_fed_func)) %>%
     unnest(cols = c(children_fed),  names_repair = "check_unique")
-  
-  
-  
-  # #convert to upside, subtract 
-  # mey_2050 = mey_ratio_midcentury - bau_ratio_midcentury,
-  # mey_2100 = mey_ratio_endcentury - bau_ratio_endcentury,
-  # adapt_2050 = adapt_ratio_midcentury - bau_ratio_midcentury,
-  # adapt_2100 = adapt_ratio_endcentury - bau_ratio_endcentury) %>%
+
   
   # fix levels
   nutr_upside$scenario <- factor(nutr_upside$scenario, levels = c ("bau", "mey", "adapt"))
@@ -365,45 +301,20 @@ plot_nutr_absolutes_tonnes <- function (country_name) {
   
 }
 
-
-a <- plot_nutr_absolutes_tonnes("Peru")
-
-png("Figures/nutricast_3pt_ts_Peru_free.png", width = 6.5, height = 4, units = "in", res = 300)
-a + 
-  facet_wrap (~ nutrient, scales = "free_y") +
-  scale_x_discrete (labels = c ("current", "2050s", "2090s")) +
-  theme (axis.text = element_text (size = 10),
-         axis.title = element_text (size = 14)) 
-dev.off()
-
-c <- plot_nutr_absolutes_tonnes("Chile")
-png("Figures/nutricast_3pt_ts_Chile_free.png", width = 6.5, height = 4, units = "in", res = 300)
-c + 
-  facet_wrap (~ nutrient, scales = "free_y") +
-  scale_x_discrete (labels = c ("current", "2050s", "2090s")) +
-  theme (axis.text = element_text (size = 10),
-         axis.title = element_text (size = 14)) 
-dev.off()
-
-i <- plot_nutr_absolutes_tonnes("Indonesia")
-png("Figures/nutricast_3pt_ts_Indo_free.png", width = 6.5, height = 4, units = "in", res = 300)
-i + 
-  facet_wrap (~ nutrient, scales = "free_y") +
-  scale_x_discrete (labels = c ("current", "2050s", "2090s")) +
-  theme (axis.text = element_text (size = 10),
-         axis.title = element_text (size = 14)) 
-dev.off()
-
-sl <- 
-  i <- plot_nutr_absolutes_tonnes("Sierra Leone")
-png("Figures/nutricast_3pt_ts_SL_free.png", width = 6.5, height = 4, units = "in", res = 300)
-sl + 
-  facet_wrap (~ nutrient, scales = "free_y") +
-  scale_x_discrete (labels = c ("current", "2050s", "2090s")) +
-  theme (axis.text = element_text (size = 10),
-         axis.title = element_text (size = 14)) 
-dev.off()
-
+for (country in c("Chile", "Indonesia", "Peru", "Sierra Leone")) {
+  plot <- plot_nutr_absolutes_tonnes(country)
+  
+  png (paste0("Figures/nutricast_3pt_ts_", country, "_free.png"), width = 6.5, height = 4, units = "in", res = 300)
+  print (
+    plot +  
+      facet_wrap (~ nutrient, scales = "free_y") +
+      scale_x_discrete (labels = c ("current", "2050s", "2090s")) +
+      theme (axis.text = element_text (size = 10),
+             axis.title = element_text (size = 14)) 
+  )
+  
+  dev.off()
+}
 
 
 ############################################################################
@@ -432,16 +343,6 @@ indo6_annual_recreate <- catch_upside_annual_repaired %>%
 
 indo6 %>% filter (species == "Lutjanus")
 indo6_annual_recreate %>% filter (species == "Lutjanus")
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -477,52 +378,24 @@ plot_bar_nutr_upside_ratios <- function (country_name, Selenium = FALSE) {
     ggtitle ("Nutrition upside from climate-adaptive management")
 }
 
+for (country in c("Chile", "Indonesia", "Peru", "Sierra Leone")) {
+  plot <- plot_bar_nutr_upside_ratios(country)
+  
+  png (paste0("Figures/nutricast_upside_overall_repaired_", country, ".png"), wwidth = 6, height = 5, units = "in", res = 300)
+  print (
+    plot +  
+      theme (plot.title = element_text (size = 17),
+             axis.text = element_text (size = 11),
+             axis.text.x = element_text (angle = 60, hjust = 1),
+             strip.text.x =  element_text (size = 12),
+             axis.title = element_text (size = 16),
+             legend.title = element_text (size = 14),
+             legend.text = element_text (size = 11)) 
+  )
+  
+  dev.off()
+}
 
-p <- plot_nutr_upside_ratios("Peru")
-
-png ("Figures/Peru_nutricast_upside_overall_repaired.png", width = 6, height = 5, units= "in", res = 300)
-p + theme (plot.title = element_text (size = 17),
-       axis.text = element_text (size = 11),
-       axis.text.x = element_text (angle = 60, hjust = 1),
-       strip.text.x =  element_text (size = 12),
-       axis.title = element_text (size = 16),
-       legend.title = element_text (size = 14),
-       legend.text = element_text (size = 11)) 
-dev.off()
-
-i <- plot_nutr_upside_ratios("Indonesia")
-
-png ("Figures/Indo_nutricast_upside_overall_repaired.png", width = 6, height = 5, units= "in", res = 300)
-i + theme (plot.title = element_text (size = 17),
-           axis.text = element_text (size = 11),
-           axis.text.x = element_text (angle = 60, hjust = 1),
-           strip.text.x =  element_text (size = 12),
-           axis.title = element_text (size = 16),
-           legend.title = element_text (size = 14),
-           legend.text = element_text (size = 11)) 
-dev.off()
-
-s <- plot_nutr_upside_ratios("Sierra Leone")
-png ("Figures/SL_nutricast_upside_overall_repaired.png", width = 6, height = 5, units= "in", res = 300)
-s + theme (plot.title = element_text (size = 17),
-           axis.text = element_text (size = 11),
-           axis.text.x = element_text (angle = 60, hjust = 1),
-           strip.text.x =  element_text (size = 12),
-           axis.title = element_text (size = 16),
-           legend.title = element_text (size = 14),
-           legend.text = element_text (size = 11)) 
-dev.off()
-
-c <- plot_nutr_upside_ratios("Chile")
-png ("Figures/Chile_nutricast_upside_overall_repaired.png", width = 6, height = 5, units= "in", res = 300)
-c + theme (plot.title = element_text (size = 17),
-           axis.text = element_text (size = 11),
-           axis.text.x = element_text (angle = 60, hjust = 1),
-           strip.text.x =  element_text (size = 12),
-           axis.title = element_text (size = 16),
-           legend.title = element_text (size = 14),
-           legend.text = element_text (size = 11)) 
-dev.off()
 
 ## plot BAU and amount, not difference ----
 
@@ -593,47 +466,20 @@ plot_nutr_upside_absolute <- function (country_name, Selenium = FALSE) {
     ggtitle ("Nutrition provisioning from climate-adaptive management")
 }
 
-png ("Figures/Peru_nutricast_upside_overall_repaired_3scen.png", width = 6, height = 5, units= "in", res = 300)
-plot_nutr_upside_absolute("Peru") + theme (plot.title = element_text (size = 17),
-           axis.text = element_text (size = 11),
-           axis.text.x = element_text (angle = 60, hjust = 1),
-           strip.text.x =  element_text (size = 12),
-           axis.title = element_text (size = 16),
-           legend.title = element_text (size = 14),
-           legend.text = element_text (size = 11)) 
-dev.off()
-
-
-
-png ("Figures/Indo_nutricast_upside_overall_repaired_3scen.png", width = 6, height = 5, units= "in", res = 300)
-plot_nutr_upside_absolute("Indonesia") + theme (plot.title = element_text (size = 17),
-           axis.text = element_text (size = 11),
-           axis.text.x = element_text (angle = 60, hjust = 1),
-           strip.text.x =  element_text (size = 12),
-           axis.title = element_text (size = 16),
-           legend.title = element_text (size = 14),
-           legend.text = element_text (size = 11)) 
-dev.off()
-
-
-png ("Figures/SL_nutricast_upside_overall_repaired_3scen.png", width = 6, height = 5, units= "in", res = 300)
-plot_nutr_upside_absolute("Sierra Leone") + theme (plot.title = element_text (size = 17),
-           axis.text = element_text (size = 11),
-           axis.text.x = element_text (angle = 60, hjust = 1),
-           strip.text.x =  element_text (size = 12),
-           axis.title = element_text (size = 16),
-           legend.title = element_text (size = 14),
-           legend.text = element_text (size = 11)) 
-dev.off()
-
-
-png ("Figures/Chile_nutricast_upside_overall_repaired_3scen.png", width = 6, height = 5, units= "in", res = 300)
-plot_nutr_upside_absolute("Chile") + theme (plot.title = element_text (size = 17),
-           axis.text = element_text (size = 11),
-           axis.text.x = element_text (angle = 60, hjust = 1),
-           strip.text.x =  element_text (size = 12),
-           axis.title = element_text (size = 16),
-           legend.title = element_text (size = 14),
-           legend.text = element_text (size = 11)) 
-dev.off()
-
+for (country in c("Chile", "Indonesia", "Peru", "Sierra Leone")) {
+  plot <- plot_nutr_upside_absolute(country)
+  
+  png (paste0("Figures/nutricast_upside_overall_repaired_3scen_", country, ".png"), wwidth = 6, height = 5, units = "in", res = 300)
+  print (
+    plot +  
+      theme (plot.title = element_text (size = 17),
+             axis.text = element_text (size = 11),
+             axis.text.x = element_text (angle = 60, hjust = 1),
+             strip.text.x =  element_text (size = 12),
+             axis.title = element_text (size = 16),
+             legend.title = element_text (size = 14),
+             legend.text = element_text (size = 11)) 
+  )
+  
+  dev.off()
+}
