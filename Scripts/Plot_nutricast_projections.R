@@ -33,8 +33,11 @@ print (p)
 
 plot_nutricast_proj<- function (country_name, spp_name) {
   
+  # dat <- ds_spp%>% 
+  #   filter (country == country_name, species == spp_name, year  >2030, rcp %in% c("RCP26", "RCP60"))
+  # 
   dat <- ds_spp%>% 
-    filter (country == country_name, species == spp_name, year  >2030, rcp %in% c("RCP26", "RCP60"))
+    filter (country == country_name, species == spp_name, rcp %in% c("RCP26", "RCP60"))
   
   dat$scenario <- factor (dat$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
   
@@ -218,4 +221,25 @@ pdf (file = "Figures/Nutricast_timeseries_catch_vs_MSY.pdf", width = 12, height 
 print(
   mapply (plot_nutricast_proj, ds_pri_spp_input$country, ds_pri_spp_input$species)
 )
+dev.off()
+
+# plot FULL time series, aggregated catch 
+png ("Figures/Nutricast_catch_full_ts_all_scen.png", width = 12, height = 8, units = "in", res = 300)
+ds_spp %>%
+  filter (!country %in% c("Ghana", "Mexico")) %>%
+  group_by (country, rcp, scenario, year) %>%
+  summarise (tot = sum (catch_mt, na.rm = TRUE)) %>%
+  ggplot (aes (x = year, y = tot/1000000, col = scenario)) +
+  geom_line() +
+  facet_grid (country ~ rcp, scales = "free") +
+  labs (x= "", y = "Catch, million metric tonnes")+
+  theme_bw() +
+  ggtitle ("Nutricast full projection ts") +
+  theme (axis.text.y = element_text (size = 14),
+         axis.text.x = element_text (size = 13),
+         axis.title = element_text (size = 16),
+         strip.text = element_text (size = 15),
+         legend.text = element_text (size = 12),
+         legend.title = element_text (size = 14),
+         plot.title = element_text (size = 18))
 dev.off()
