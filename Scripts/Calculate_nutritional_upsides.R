@@ -4,7 +4,7 @@
 
 library (tidyverse)
 
-# smaller, just rcp 60 and 85. now has mexico
+# smaller, just 3 management scenarios. now has mexico
 ds_spp <- readRDS("Data/Free_etal_proj_smaller.Rds")
 
 # 2/1/23 moving code from regional team priority spp
@@ -71,6 +71,15 @@ saveRDS (catch_upside_relative_annual, file = "Data/nutricast_upside_relative_an
 # need to fix SAU missing species, check_SAU_nutricast_Species
 # did this 5/22/23 in check_sau_nutricast_species, but only saved catch_ratio, i think this is all that I need
 # "Data/nutricast_upside_relative_annual_repair_missing.Rds"
+
+# show full time series to account for weird behavior early in projection
+catch_upside_relative_annual_full_ts <-  ds_spp %>%
+  filter (scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), catch_mt > 0) %>%
+  left_join (ds_spp_baseline, by = c("country", "rcp", "scenario", "species")) %>%
+  mutate (catch_ratio = catch_mt / baseline_catch) %>%
+  select (country, rcp, scenario, year, species, baseline_catch, catch_mt, catch_ratio)
+
+saveRDS (catch_upside_relative_annual_full_ts, file = "Data/nutricast_upside_relative_annual_ratio_full_ts.Rds")
 
 ######################################
 
