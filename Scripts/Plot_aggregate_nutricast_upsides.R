@@ -74,22 +74,33 @@ calc_nutr_upside_tonnes_annual <- function (country_name) {
 
 # this takes several minutes
 indo <-   calc_nutr_upside_tonnes_annual ("Indonesia"); beep()
-saveRDS(indo, file = "Data/annual_nutr_upside_indo.Rds")
+saveRDS(indo, file = "Data/annual_nutr_upside_childRNI_Indonesia.Rds")
 
 peru <-   calc_nutr_upside_tonnes_annual ("Peru"); beep()
-saveRDS(peru, file = "Data/annual_nutr_upside_peru.Rds")
+saveRDS(peru, file = "Data/annual_nutr_upside_childRNI_Peru.Rds")
 
 sl <-   calc_nutr_upside_tonnes_annual ("Sierra Leone"); beep()
-saveRDS(sl, file = "Data/annual_nutr_upside_sl.Rds")
+saveRDS(sl, file = "Data/annual_nutr_upside_childRNI_Sierra Leone.Rds")
 
 chl <-   calc_nutr_upside_tonnes_annual ("Chile"); beep()
-saveRDS(chl, file = "Data/annual_nutr_upside_chile.Rds")
+saveRDS(chl, file = "Data/annual_nutr_upside_childRNI_Chile.Rds")
+
 
 ################################################
 # plot annual ts-----
-peru_nutr_ts <- readRDS("Data/annual_nutr_upside_peru.Rds")
 
-png ("Figures/Peru_annual_nutr_ts_nutrient_facet.png", width = 10, height = 6, units = "in", res = 300)
+#Plot for each country and RCP
+plot_child_RNI_proj <- function (country_name, RCP) {
+  # country_name is lowercase, indo, peru, sl, chile
+  
+  #projected nutrient yield in rni_equivalents for each country
+  nutr_ts <- readRDS(paste0("Data/annual_nutr_upside_", country_name, ".Rds"))
+  
+  plot_ts <- 
+                     
+                     
+
+png ("Figures/annual_nutr_ts_nutrient_facet_childRNI_Peru.png", width = 10, height = 6, units = "in", res = 300)
 peru_nutr_ts %>%
   group_by (rcp, scenario, year, nutrient) %>%
   summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
