@@ -172,20 +172,6 @@ nutricast_repair <- nutricast_missing_spp %>%
   ) %>% 
     unnest (cols = c(nutricast), names_repair = "check_unique")
 
-# update with ihh
-sl_ihh_missing_spp <- check_missing_nutricast_spp("Sierra Leone")
-sl_ihh_repair <- sl_ihh_missing_spp %>%
-  mutate (nutricast = pmap(list(species_name = species, country_name = country), match_nutricast_taxa)
-  ) %>% 
-  unnest (cols = c(nutricast), names_repair = "check_unique")
-
-nutricast_repair <- readRDS("Data/catch_upside_relative_repair_missing.Rds")
-
-nutricast_repair_ihh <- rbind (nutricast_repair, sl_ihh_repair)
-
-# remove duplicates
-nutricast_repair_ihh <- nutricast_repair_ihh [!duplicated(nutricast_repair_ihh ), ]
-
 saveRDS(nutricast_repair, file = "Data/catch_upside_relative_repair_missing.Rds")
 
 # also do this with annual ts ----
@@ -247,21 +233,6 @@ nutricast_repair_annual <- nutricast_missing_spp %>%
 
 saveRDS(nutricast_repair_annual, file = "Data/nutricast_upside_relative_annual_repair_missing.Rds")
 
-# update with ihh
-sl_ihh_missing_spp <- check_missing_nutricast_spp("Sierra Leone")
-sl_ihh_repair_annual <- sl_ihh_missing_spp %>%
-  mutate (nutricast = pmap(list(species_name = species, country_name = country), match_nutricast_taxa_annual)
-  ) %>% 
-  unnest (cols = c(nutricast), names_repair = "check_unique")
-
-nutricast_repair_annual <- readRDS("Data/nutricast_upside_relative_annual_repair_missing.Rds")
-
-nutricast_repair_annual_ihh <- rbind (nutricast_repair_annual, sl_ihh_repair_annual)
-
-# remove duplicates
-nutricast_repair_annual_ihh <- nutricast_repair_annual_ihh [!duplicated(nutricast_repair_annual_ihh), ]
-
-saveRDS(nutricast_repair_annual, file = "Data/nutricast_upside_relative_annual_repair_missing.Rds")
 
 #######################################################################################
 
