@@ -8,6 +8,7 @@ library (tidyverse)
 ds_spp <- readRDS("Data/Free_etal_proj_smaller.Rds")
 
 # 2/1/23 moving code from regional team priority spp
+# 9/16/23 update: changing baseline year to 2017-2021. Weird dynamics in the first years of the model are creating strange results
 
 # upside in terms of relation to baseline catch----
 # to be able to use with our updated landings data, instead I want to calculate what the catch in 2050 is relative to baseline under the different scenarios. 
@@ -17,7 +18,7 @@ catch_upside_relative <-  ds_spp %>%
   mutate (
     # baseline and mid century and end century
     period = case_when (
-      year %in% c(2012:2021) ~ "2012-2021",
+      year %in% c(2017:2021) ~ "2017-2021",
       year %in% c(2051:2060) ~ "2051-2060",
       year %in% c(2091:2100) ~ "2091-2100")) %>%
   filter (!is.na (period)) %>%
@@ -46,7 +47,7 @@ catch_upside_relative %>%
 
 # probably can do this with brackets but just make a baseline value separately
 ds_spp_baseline <- ds_spp %>%
-  filter (scenario %in% "No Adaptation", catch_mt > 0, between (year, 2012, 2021)) %>%
+  filter (scenario %in% "No Adaptation", catch_mt > 0, between (year, 2017, 2021)) %>%
   group_by (country, rcp, scenario, species) %>%
   summarise (baseline_catch = mean (catch_mt, na.rm = TRUE)) %>%
   ungroup()
