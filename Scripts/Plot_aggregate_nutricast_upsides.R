@@ -32,8 +32,9 @@ sau_2019 <- readRDS("Data/SAU_2019.Rds")
 
 # plot as full time series ----
 # these are identical for the nutrients....
-# annual nutricast time series
-catch_upside_annual <- readRDS ("Data/nutricast_upside_relative_annual_ratio_full_ts.Rds")
+# annual nutricast time series (calculate_nutritional_upside.R)
+catch_upside_annual <- readRDS ("Data/nutricast_upside_relative_annual_ratio.Rds")
+
 # repaired missing species, this is in a slightly different format (check_sau_nutricast_species.R)
 catch_upside_annual_missing <- readRDS("Data/nutricast_upside_relative_annual_repair_missing.Rds")
 
@@ -73,8 +74,8 @@ calc_nutr_upside_tonnes_annual <- function (country_name) {
 }
 
 # this takes several minutes
-indo_fullts <-   calc_nutr_upside_tonnes_annual ("Indonesia"); beep()
-saveRDS(indo_fullts, file = "Data/annual_nutr_upside_childRNI_Indonesia_full_timeseries.Rds")
+indo <-   calc_nutr_upside_tonnes_annual ("Indonesia"); beep()
+saveRDS(indo, file = "Data/annual_nutr_upside_childRNI_Indonesia.Rds")
 
 peru <-   calc_nutr_upside_tonnes_annual ("Peru"); beep()
 saveRDS(peru, file = "Data/annual_nutr_upside_childRNI_Peru.Rds")
@@ -96,7 +97,7 @@ plot_child_RNI_proj <- function (country_name, RCP) {
   nutr_ts <- readRDS(paste0("Data/annual_nutr_upside_childRNI_", country_name, ".Rds"))
   
   # aggregate by rcp, scenario, year, nutrient
-  nutr_agg_ts <- indo_fullts %>%
+  nutr_agg_ts <- nutr_ts %>%
     group_by (rcp, scenario, year, nutrient) %>%
     summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
     filter (rcp == RCP, !nutrient %in% c("Protein"))
@@ -193,6 +194,8 @@ write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
   write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
 }
 
+
+# report
 report_RNI_met_values <- function (country_name, anchovy = TRUE) {
   
   rni_nutr_ts <- readRDS(paste0("Data/annual_nutr_upside_childRNI_", country_name, ".Rds"))
@@ -233,7 +236,7 @@ report_RNI_met_values <- function (country_name, anchovy = TRUE) {
 
 }  
 
-report_RNI_met_values("Chile") %>% write.excel()
+report_RNI_met_values("Indonesia") %>% write.excel()
   
 ################################################################################
 # Reject figs ----
