@@ -26,12 +26,12 @@ catch_upside_relative <-  ds_spp %>%
   summarise (catch_mt = mean (catch_mt, na.rm = TRUE)) %>%
   ungroup() %>%
   group_by (country, rcp, species) %>%
-  summarize (bau_ratio_midcentury = catch_mt[scenario == "No Adaptation" & period == "2051-2060"]/ catch_mt[scenario == "No Adaptation" & period == "2012-2021"],
-             bau_ratio_endcentury = catch_mt[scenario == "No Adaptation" & period == "2091-2100"]/ catch_mt[scenario == "No Adaptation" & period == "2012-2021"],
-             mey_ratio_midcentury = catch_mt[scenario == "Productivity Only" & period == "2051-2060"]/ catch_mt[scenario == "No Adaptation" & period == "2012-2021"],
-             mey_ratio_endcentury = catch_mt[scenario == "Productivity Only" & period == "2091-2100"]/ catch_mt[scenario == "No Adaptation" & period == "2012-2021"],
-             adapt_ratio_midcentury = catch_mt[scenario == "Full Adaptation" & period == "2051-2060"]/ catch_mt[scenario == "No Adaptation" & period == "2012-2021"],
-             adapt_ratio_endcentury = catch_mt[scenario == "Full Adaptation" & period == "2091-2100"]/ catch_mt[scenario == "No Adaptation" & period == "2012-2021"]
+  reframe (bau_ratio_midcentury = catch_mt[scenario == "No Adaptation" & period == "2051-2060"]/ catch_mt[scenario == "No Adaptation" & period == "2017-2021"],
+             bau_ratio_endcentury = catch_mt[scenario == "No Adaptation" & period == "2091-2100"]/ catch_mt[scenario == "No Adaptation" & period == "2017-2021"],
+             mey_ratio_midcentury = catch_mt[scenario == "Productivity Only" & period == "2051-2060"]/ catch_mt[scenario == "No Adaptation" & period == "2017-2021"],
+             mey_ratio_endcentury = catch_mt[scenario == "Productivity Only" & period == "2091-2100"]/ catch_mt[scenario == "No Adaptation" & period == "2017-2021"],
+             adapt_ratio_midcentury = catch_mt[scenario == "Full Adaptation" & period == "2051-2060"]/ catch_mt[scenario == "No Adaptation" & period == "2017-2021"],
+             adapt_ratio_endcentury = catch_mt[scenario == "Full Adaptation" & period == "2091-2100"]/ catch_mt[scenario == "No Adaptation" & period == "2017-2021"]
   )
 
 saveRDS (catch_upside_relative, file = "Data/nutricast_upside_relative.Rds")
@@ -69,6 +69,7 @@ catch_upside_relative_annual <-  ds_spp %>%
   
 
 saveRDS (catch_upside_relative_annual, file = "Data/nutricast_upside_relative_annual_ratio.Rds")
+
 # need to fix SAU missing species, check_SAU_nutricast_Species
 # did this 5/22/23 in check_sau_nutricast_species, but only saved catch_ratio, i think this is all that I need
 # "Data/nutricast_upside_relative_annual_repair_missing.Rds"
