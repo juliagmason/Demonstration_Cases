@@ -31,6 +31,8 @@ sau_baseline <- sau_full %>%
   group_by (country, species) %>%
   summarise (bl_tonnes = sum (tonnes))
 
+
+
 # chl landings
 
 # note: as of 6/6/23, have added commercial_group column but very preliminary, just lumped all the fish that weren't in SAU into "other"
@@ -184,6 +186,34 @@ upside_ts_bau_agg_comm_group <- catch_upside_ts %>%
   inner_join (sau_2019_taxa_8, by = "species") %>%
   group_by (country, rcp, year, commercial_group) %>%
   summarise (tonnes = sum (tonnes))
+
+# just plot peru past for context figure---
+png ("Figures/Peru_SAU_landings_context.png", width = 6, height = 5, unit = "in", res = 300)
+sau_10yr %>%
+  filter (country == "Peru") %>%
+  mutate (commercial_group = case_when (
+    commercial_group %in% c("Flatfishes", "Scorpionfishes", "Cod-likes") ~ "Other fishes & inverts",
+    TRUE ~ commercial_group
+  )) %>%
+  group_by(year, commercial_group) %>%
+  summarise (tonnes = sum (tonnes)) %>%
+  ungroup() %>%
+  ggplot (aes (x = year, y = tonnes/1000000)) +
+  geom_area(aes (fill = commercial_group), position = "stack") +
+  #guides (fill = "none") +
+  theme_bw() +
+  labs (y ="Catch, million tonnes", x = "", fill = "Commercial group")+
+  theme (axis.text = element_text (size = 14),
+         axis.title = element_text (size = 18),
+         legend.text = element_text (size = 16),
+         legend.title = element_text(size = 18),
+         legend.position = "none") +
+  
+  # qualitative color scale for species, Dark1
+  scale_fill_brewer(palette = "Dark2") +
+  scale_x_continuous (breaks = c (2010, 2014, 2018))
+dev.off()
+  
 
 
 for (country_name in sau_countries) {
