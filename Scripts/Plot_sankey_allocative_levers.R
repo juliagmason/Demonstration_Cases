@@ -471,6 +471,20 @@ chl_foreign_ds %>%
          legend.position = "none")
 dev.off()
 
+# report proportional contribution of sectors to nutrients ----
+chl_landings %>%
+  filter (year == 2021, chl_taxa != "Algae") %>% 
+  group_by (sector) %>% summarise (catch = sum(catch_mt, na.rm = TRUE)) %>% write.excel()
+# SSF catches 87.9%, lsf catches 12.1% by volume
+
+chl_foreign_ds %>%
+  filter (sector != "Foreign catch") %>%
+  # group by nutrient, this makes it slightly cleaner
+  group_by (nutrient) %>%
+  summarise (prop_ssf = sum (rni_equivalents[which (sector == "Artisanal")], na.rm = TRUE)/sum (rni_equivalents, na.rm = TRUE) * 100,
+             prop_lsf = sum (rni_equivalents[which (sector == "Industrial")], na.rm = TRUE)/sum (rni_equivalents, na.rm = TRUE) * 100) %>% write.excel()
+
+
 # Indonesia ----
 indo_ds <- sau_2019 %>%
   # filter to country, remove recreational and subsistence
@@ -510,7 +524,21 @@ print(indo_ds %>%
 )
 dev.off()
 
-# Peru
+# report proportional contribution of sectors to nutrients ----
+sau_2019 %>%
+  filter (country == "Indonesia", fishing_sector %in% c("Industrial", "Artisanal"), fleet == "Domestic catch") %>% 
+  group_by (fishing_sector) %>% summarise (catch = sum(tonnes, na.rm = TRUE)) %>% write.excel()
+# SSF catches 87.9%, lsf catches 12.1% by volume
+
+indo_ds %>%
+  filter (fishing_sector != "Foreign catch") %>%
+  # group by nutrient, this makes it slightly cleaner
+  group_by (nutrient) %>%
+  summarise (prop_ssf = sum (rni_equivalents[which (fishing_sector == "Artisanal")], na.rm = TRUE)/sum (rni_equivalents, na.rm = TRUE) * 100,
+             prop_lsf = sum (rni_equivalents[which (fishing_sector == "Industrial")], na.rm = TRUE)/sum (rni_equivalents, na.rm = TRUE) * 100) %>% write.excel()
+
+
+# Peru ----
 
 # foreign artisanal industrial ----
 peru_ds <- sau_2019 %>%
@@ -575,6 +603,22 @@ print(peru_ds %>%
                legend.position = "none")
 )
 dev.off()
+
+# report proportional contribution of sectors to nutrients ----
+sau_2019 %>%
+  filter (country == "Peru", fishing_sector %in% c("Industrial", "Artisanal"), fleet == "Domestic catch", species != "Engraulis ringens") %>% 
+  group_by (fishing_sector) %>% summarise (catch = sum(tonnes, na.rm = TRUE)) %>% write.excel()
+# SSF catches 87.9%, lsf catches 12.1% by volume
+
+peru_ds %>%
+  filter (species != "Engraulis ringens", fishing_sector != "Foreign catch") %>%
+  # group by nutrient, this makes it slightly cleaner
+  group_by (fishing_sector, nutrient) %>%
+  summarise (rni_equivalents = sum (rni_equivalents, na.rm = TRUE)) %>%
+  group_by (nutrient) %>%
+  summarise (prop_ssf = sum (rni_equivalents[which (fishing_sector == "Artisanal")], na.rm = TRUE)/sum (rni_equivalents, na.rm = TRUE) * 100,
+             prop_lsf = sum (rni_equivalents[which (fishing_sector == "Industrial")], na.rm = TRUE)/sum (rni_equivalents, na.rm = TRUE) * 100) %>% write.excel()
+
 
 # Sierra Leone ----
 # exports 
@@ -672,7 +716,20 @@ ihh_ds_sector %>%
 dev.off()
 
 
+# report proportional contribution of sectors to nutrients ----
+# Abby question: Do SSF or LSF provide any nutrient in particular in disproportionate amounts (compared to volume)? 
+sl_sector_prop <- sl_landings %>% summarise (prop_ssf = sum (catch_mt[which (sector == "Small-scale")], na.rm = TRUE)/sum (catch_mt, na.rm = TRUE) * 100,
+                                             prop_lsf = sum (catch_mt[which (sector == "Large-scale")], na.rm = TRUE)/sum (catch_mt, na.rm = TRUE) * 100)
 
+sl_landings %>% filter (year == 2017) %>% group_by (sector) %>% summarise (catch = sum(catch_mt, na.rm = TRUE)) %>% write.excel()
+# SSF catches 87.9%, lsf catches 12.1% by volume
+
+ihh_ds_sector %>%
+  filter (sector != "Foreign catch") %>%
+  group_by (nutrient) %>%
+  summarise (prop_ssf = sum (rni_equivalents[which (sector == "Small-scale")], na.rm = TRUE)/sum (rni_equivalents, na.rm = TRUE) * 100,
+             prop_lsf = sum (rni_equivalents[which (sector == "Large-scale")], na.rm = TRUE)/sum (rni_equivalents, na.rm = TRUE) * 100)
+  
 
 
 #######################################################################################################
