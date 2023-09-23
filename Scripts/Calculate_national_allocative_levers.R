@@ -442,7 +442,7 @@ saveRDS(indo_foreign_sector_nutr, "Data/levers_RNI_pop_foreign_sector_Indo.Rds")
 
 # indo exports
 indo_export <- sau_2019 %>%
-  filter (country == "Indonesia") %>%
+  filter (country == "Indonesia", fleet == "Domestic catch") %>%
   # aggregate small and large scale
   group_by (country, species) %>%
   summarise (catch_mt = sum(tonnes, na.rm = TRUE)) %>%
@@ -583,7 +583,7 @@ saveRDS(peru_foreign_sector_nutr_noanchov, "Data/levers_RNI_pop_foreign_sector_P
 # peru exports
 peru_export_noanchov <- sau_2019 %>%
   # filter to country, remove recreational and subsistence
-  filter (country == "Peru", species != "Engraulis ringens") %>%
+  filter (country == "Peru", fleet == "Domestic catch", species != "Engraulis ringens") %>%
   # aggregate small and large scale
   group_by (country, species) %>%
   summarise (catch_mt = sum(tonnes, na.rm = TRUE)) %>%
@@ -601,7 +601,7 @@ peru_export_noanchov <- sau_2019 %>%
                 values_to = "catch_mt") 
 
 # calculate RNI equivalents and percent population needs met
-peru_export_noanchov_nutr <- peru_export_noanchov %>%
+peru_export_nutr_noanchov <- peru_export_noanchov %>%
   # attempting to do both rni equiv and nutr_tonnes in one 
   mutate(rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = "Peru"), calc_children_fed_func),
          nutr_tonnes = pmap (list (species_name = species, catch_mt = catch_mt, country_name = "Peru"), convert_catch_to_nutr_tons)) %>%
@@ -618,7 +618,7 @@ peru_export_noanchov_nutr <- peru_export_noanchov %>%
   mutate (perc_demand_met = nutr_tonnes / tot_nutr_annual_demand * 100) %>%
   select (-c(Time, nutr_tonnes, tot_pop, tot_nutr_annual_demand))  
 
-saveRDS(peru_export_noanchov_nutr, "Data/levers_RNI_pop_export_Peru_noanchov.Rds")
+saveRDS(peru_export_nutr_noanchov, "Data/levers_RNI_pop_export_Peru_noanchov.Rds")
 
 # report values ----
 
@@ -722,7 +722,7 @@ saveRDS(peru_foreign_sector_nutr_anchov, "Data/levers_RNI_pop_foreign_sector_Per
 # peru exports
 peru_export_anchov <- sau_2019 %>%
   # filter to country, remove recreational and subsistence
-  filter (country == "Peru", species == "Engraulis ringens") %>%
+  filter (country == "Peru", fleet == "Domestic catch", species == "Engraulis ringens") %>%
   # aggregate small and large scale
   group_by (country, species) %>%
   summarise (catch_mt = sum(tonnes, na.rm = TRUE)) %>%
