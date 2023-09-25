@@ -5,6 +5,92 @@
 # smaller, just rcp 60 and 85. now has mexico
 ds_spp <- readRDS("Data/Free_etal_proj_smaller.Rds")
 
+# calculate % loss by 2051-2060 relative to 2017-2021 baseline
+t <- ds_spp %>% 
+  mutate (
+    period = case_when (
+      year %in% c(2017:2021) ~ "2017-2021",
+      year %in% c(2051:2060) ~ "2051-2060")) %>%
+  filter (!is.na (catch_mt), !is.na (period), scenario == "No Adaptation", rcp == "RCP60", ) %>%
+  #take mean projected catch for the decade period
+  group_by (country, rcp, period, species, scenario) %>%
+  summarise (catch_mt = mean (catch_mt, na.rm = TRUE)) %>%
+  ungroup() %>%
+  # find difference among scenarios--absolute and percent diff
+  group_by (country) %>%
+  reframe (perc_diff = (sum (catch_mt[period == "2051-2060"]) - sum (catch_mt[period == "2017-2021"]))/sum (catch_mt[period == "2017-2021"]) * 100)
+  
+  
+  
+  summarize (mey_diff_mt = catch_mt[scenario == "Productivity Only"] - catch_mt[scenario == "No Adaptation"],
+             mey_diff_percent = (catch_mt[scenario == "Productivity Only"] - catch_mt[scenario == "No Adaptation"])/catch_mt[scenario == "No Adaptation"] * 100,
+             adapt_diff_mt = catch_mt[scenario == "Full Adaptation"] - catch_mt[scenario == "No Adaptation"],
+             adapt_diff_percent = (catch_mt[scenario == "Full Adaptation"] - catch_mt[scenario == "No Adaptation"])/catch_mt[scenario == "No Adaptation"] * 100) %>%
+  ungroup()
+  
+  # peru anchovy vs. no anchovy
+  ds_spp %>% 
+    filter (country == "Peru", species == "Engraulis ringens") %>%
+    mutate (
+      period = case_when (
+        year %in% c(2017:2021) ~ "2017-2021",
+        year %in% c(2051:2060) ~ "2051-2060")) %>%
+    filter (!is.na (catch_mt), !is.na (period), scenario == "No Adaptation", rcp == "RCP60", ) %>%
+    #take mean projected catch for the decade period
+    group_by (country, rcp, period, species, scenario) %>%
+    summarise (catch_mt = mean (catch_mt, na.rm = TRUE)) %>%
+    ungroup() %>%
+    # find difference among scenarios--absolute and percent diff
+    group_by (country) %>%
+    reframe (perc_diff = (sum (catch_mt[period == "2051-2060"]) - sum (catch_mt[period == "2017-2021"]))/sum (catch_mt[period == "2017-2021"]) * 100)
+  
+  ds_spp %>% 
+    filter (country == "Peru", species != "Engraulis ringens") %>%
+    mutate (
+      period = case_when (
+        year %in% c(2017:2021) ~ "2017-2021",
+        year %in% c(2051:2060) ~ "2051-2060")) %>%
+    filter (!is.na (catch_mt), !is.na (period), scenario == "No Adaptation", rcp == "RCP60", ) %>%
+    #take mean projected catch for the decade period
+    group_by (country, rcp, period, species, scenario) %>%
+    summarise (catch_mt = mean (catch_mt, na.rm = TRUE)) %>%
+    ungroup() %>%
+    # find difference among scenarios--absolute and percent diff
+    group_by (country) %>%
+    reframe (perc_diff = (sum (catch_mt[period == "2051-2060"]) - sum (catch_mt[period == "2017-2021"]))/sum (catch_mt[period == "2017-2021"]) * 100)
+  
+  ds_spp %>% 
+    filter (country == "Peru", species == "Engraulis ringens") %>%
+    mutate (
+      period = case_when (
+        year %in% c(2017:2021) ~ "2017-2021",
+        year %in% c(2091:2100) ~ "2051-2060")) %>%
+    filter (!is.na (catch_mt), !is.na (period), scenario == "No Adaptation", rcp == "RCP60", ) %>%
+    #take mean projected catch for the decade period
+    group_by (country, rcp, period, species, scenario) %>%
+    summarise (catch_mt = mean (catch_mt, na.rm = TRUE)) %>%
+    ungroup() %>%
+    # find difference among scenarios--absolute and percent diff
+    group_by (country) %>%
+    reframe (perc_diff = (sum (catch_mt[period == "2051-2060"]) - sum (catch_mt[period == "2017-2021"]))/sum (catch_mt[period == "2017-2021"]) * 100)
+  
+  ds_spp %>% 
+    filter (country == "Peru", species != "Engraulis ringens") %>%
+    mutate (
+      period = case_when (
+        year %in% c(2017:2021) ~ "2017-2021",
+        year %in% c(2091:2100) ~ "2051-2060")) %>%
+    filter (!is.na (catch_mt), !is.na (period), scenario == "No Adaptation", rcp == "RCP60", ) %>%
+    #take mean projected catch for the decade period
+    group_by (country, rcp, period, species, scenario) %>%
+    summarise (catch_mt = mean (catch_mt, na.rm = TRUE)) %>%
+    ungroup() %>%
+    # find difference among scenarios--absolute and percent diff
+    group_by (country) %>%
+    reframe (perc_diff = (sum (catch_mt[period == "2051-2060"]) - sum (catch_mt[period == "2017-2021"]))/sum (catch_mt[period == "2017-2021"]) * 100)
+  
+  
+
 priority_spp <- read_csv ("Data/regional_teams_priority_spp.csv") %>%
   # just change S. japonicus peruanus to S. japonicus; no nutrient or SAU or nutricast data
   mutate (species = case_when (species == "Scomber japonicus peruanus" ~ "Scomber japonicus",
