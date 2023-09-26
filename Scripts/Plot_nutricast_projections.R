@@ -89,6 +89,76 @@ t <- ds_spp %>%
     group_by (country) %>%
     reframe (perc_diff = (sum (catch_mt[period == "2051-2060"]) - sum (catch_mt[period == "2017-2021"]))/sum (catch_mt[period == "2017-2021"]) * 100)
   
+# Plot overall yield ----
+  
+  ds_spp$scenario <- factor (ds_spp$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
+
+plot_catch_proj <- function (country_name)  {
+  plot <- ds_spp %>%
+    filter (country == country_name, scenario %in% c ("No Adaptation", "Productivity Only", "Full Adaptation"), year > 2017) %>%
+    group_by (year, rcp, scenario) %>%
+    summarise (tot_catch = sum (catch_mt, na.rm = TRUE)) %>%
+    ggplot (aes (x = year, y = tot_catch/1000000, col = scenario), lwd = 1.5) +
+    geom_line() +
+    theme_bw() +
+    facet_wrap ( ~ rcp, scales = "free_y") +
+    labs (x = "", y = "Catch, million metric tons", col = "Mgmt. scenario") +
+    ggtitle (paste0 ("Total catch projections for ", country_name, "\nFree et al. (2020) ")) +
+    theme (plot.title = element_text (size = 18),
+           axis.text = element_text (size = 12),
+           strip.text = element_text (size = 14),
+           legend.title = element_text (size = 14),
+           legend.text = element_text (size = 12),
+           axis.title = element_text (size = 14))
+  
+  png (paste0("Figures/Total_catch_projections_", country_name, ".png"), width = 8, height = 6, units = "in", res = 300)
+  print(plot)
+  dev.off()
+  
+}
+
+sapply (c("Chile", "Sierra Leone", "Indonesia"), plot_catch_proj)
+
+# peru no anchov vs anchov
+png ("Figures/Total_catch_projections_Peru_noanchov.png", width = 8, height = 6, units = "in", res = 300)
+ds_spp %>%
+  filter (country == "Peru", species != "Engraulis ringens", scenario %in% c ("No Adaptation", "Productivity Only", "Full Adaptation"), year > 2017) %>%
+  group_by (year, rcp, scenario) %>%
+  summarise (tot_catch = sum (catch_mt, na.rm = TRUE)) %>%
+  ggplot (aes (x = year, y = tot_catch/1000000, col = scenario), lwd = 1.5) +
+  geom_line() +
+  theme_bw() +
+  facet_wrap ( ~ rcp, scales = "free_y") +
+  labs (x = "", y = "Catch, million metric tons", col = "Mgmt. scenario") +
+  ggtitle ("Total catch projections for Peru, anchoveta removed\nFree et al. (2020)") +
+  theme (plot.title = element_text (size = 18),
+         axis.text = element_text (size = 12),
+         strip.text = element_text (size = 14),
+         legend.title = element_text (size = 14),
+         legend.text = element_text (size = 12),
+         axis.title = element_text (size = 14))
+
+dev.off()   
+
+png ("Figures/Total_catch_projections_Peru_anchov.png", width = 8, height = 6, units = "in", res = 300)
+ds_spp %>%
+  filter (country == "Peru", species == "Engraulis ringens", scenario %in% c ("No Adaptation", "Productivity Only", "Full Adaptation"), year > 2017) %>%
+  group_by (year, rcp, scenario) %>%
+  summarise (tot_catch = sum (catch_mt, na.rm = TRUE)) %>%
+  ggplot (aes (x = year, y = tot_catch/1000000, col = scenario), lwd = 1.5) +
+  geom_line() +
+  theme_bw() +
+  facet_wrap ( ~ rcp, scales = "free_y") +
+  labs (x = "", y = "Catch, million metric tons", col = "Mgmt. scenario") +
+  ggtitle ("Total catch projections for Peru, anchoveta only\nFree et al. (2020)") +
+  theme (plot.title = element_text (size = 18),
+         axis.text = element_text (size = 12),
+         strip.text = element_text (size = 14),
+         legend.title = element_text (size = 14),
+         legend.text = element_text (size = 12),
+         axis.title = element_text (size = 14))
+
+dev.off()  
   
 
 priority_spp <- read_csv ("Data/regional_teams_priority_spp.csv") %>%
