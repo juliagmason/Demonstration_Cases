@@ -10,10 +10,10 @@ library (tidyverse)
 download_2019_full <- read.csv("Data/SAU EEZ 2019.csv")%>% # this doesn't have indonesia
   mutate (country = case_when (grepl ("Mex", area_name) ~ "Mexico",
                                grepl ("Chile", area_name) ~ "Chile",
-                               TRUE ~ area_name)
-          ) %>%
-  # remove Chile and Sierra Leone. really should only be Peru now. 
-  filter (country == "Peru")
+                               TRUE ~ area_name))
+  #         ) %>%
+  # # remove Chile and Sierra Leone. really should only be Peru now. 
+  # filter (country == "Peru")
 
 
 indo_2019_download_full <- read.csv("Data/SAU EEZ indonesia.csv") %>%
@@ -44,6 +44,8 @@ chl_baseline <- chl_landings %>%
   group_by (country, species) %>%
   summarise (bl_tonnes = sum (catch_mt)) 
 
+
+
 # sl IHH
 # year with data for both artisanal and industrial is 2017
 sl_ihh_landings <- readRDS("Data/SLE_landings_IHH.Rds")
@@ -61,6 +63,145 @@ full_baseline <- rbind (sau_baseline, chl_baseline, sl_baseline)
 saveRDS(full_baseline, file = "Data/baseline_catch_sau_chl_ihh.Rds")
 
 full_baseline <- readRDS("DAta/baseline_catch_sau_chl_ihh.Rds")
+
+# plot landings trend for contextual figure ----
+# chile ----
+# trick color scale....
+chl_landings$commercial_group = factor(chl_landings$commercial_group, levels = c("Anchovies","Cod-likes","Crustaceans","Flatfishes","Herring-likes","Molluscs","Other fishes & inverts",
+"Perch-likes","Salmon, smelts, etc","Scorpionfishes","Sharks & rays","Tuna & billfishes", "Algae"))
+
+png ("Figures/Chile_landings_trend_sernapesca_areastack.png", width = 7, height = 4, units = "in", res = 300)
+chl_landings %>%
+  # mutate (algae = case_when (commercial_group == "Algae" ~ "Algae",
+  #                            TRUE ~ "Non-algae")) %>%
+  group_by (year, commercial_group) %>%
+  summarise (catch_mt = sum(catch_mt, na.rm = TRUE)) %>%
+  ungroup() %>%
+  ggplot (aes (x = year, y = catch_mt/1000000, fill = commercial_group, group = commercial_group)) +
+  # geom_point() +
+  # geom_line() +
+  geom_area()+
+  theme_bw() +
+  labs (x = "", y = "Catch, million tonnes", fill = "Comm. group") +
+  ggtitle ("Landings trends, Chile official statistics") +
+  theme (axis.text = element_text (size = 12),
+         axis.title = element_text (size = 14),
+         legend.text = element_text (size = 10),
+         legend.title = element_text (size = 12),
+         plot.title = element_text (size = 16))
+
+dev.off()
+
+# compare with sea around us 
+png ("Figures/Chile_landings_trend_SAU.png", width = 7, height = 4, units = "in", res = 300)
+sau_full %>%
+  filter (country == "Chile", year > 2000) %>%
+  group_by (year) %>% summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  ggplot (aes (x = year, y = tonnes/1000000)) +
+  geom_point() +
+  geom_line() +
+  theme_bw() +
+  labs (x = "", y = "Catch, million tonnes", fill = "Comm. group") +
+  ggtitle ("Landings trends, Chile SAU") +
+  theme (axis.text = element_text (size = 12),
+         axis.title = element_text (size = 14),
+         legend.text = element_text (size = 12),
+         plot.title = element_text (size = 16))
+
+dev.off()
+
+# area stack
+png ("Figures/Chile_landings_trend_SAU.png", width = 7, height = 4, units = "in", res = 300)
+sau_full %>%
+  filter (country == "Chile", year > 2000) %>%
+  group_by (year, commercial_group) %>% summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  ggplot (aes (x = year, y = tonnes/1000000, fill = commercial_group, group = commercial_group)) +
+  geom_area() +
+  theme_bw() +
+  labs (x = "", y = "Catch, million tonnes", fill = "Comm. group") +
+  ggtitle ("Landings trends, Chile SAU") +
+  theme (axis.text = element_text (size = 12),
+         axis.title = element_text (size = 14),
+         legend.text = element_text (size = 10),
+         legend.title = element_text (size = 12),
+         plot.title = element_text (size = 16))
+
+dev.off()
+
+# indonesia----
+# area stack
+png ("Figures/Indo_landings_trend_SAU.png", width = 7, height = 4, units = "in", res = 300)
+sau_full %>%
+  filter (country == "Indonesia", year > 2000) %>%
+  group_by (year, commercial_group) %>% summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  ggplot (aes (x = year, y = tonnes/1000000, fill = commercial_group, group = commercial_group)) +
+  geom_area() +
+  theme_bw() +
+  labs (x = "", y = "Catch, million tonnes", fill = "Comm. group") +
+  ggtitle ("Landings trends, Indonesia SAU") +
+  theme (axis.text = element_text (size = 12),
+         axis.title = element_text (size = 14),
+         legend.text = element_text (size = 10),
+         legend.title = element_text (size = 12),
+         plot.title = element_text (size = 16))
+
+dev.off()
+
+# Peru----
+# area stack
+png ("Figures/Peru_landings_trend_SAU.png", width = 7, height = 4, units = "in", res = 300)
+sau_full %>%
+  filter (country == "Peru", year > 2000) %>%
+  group_by (year, commercial_group) %>% summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  ggplot (aes (x = year, y = tonnes/1000000, fill = commercial_group, group = commercial_group)) +
+  geom_area() +
+  theme_bw() +
+  labs (x = "", y = "Catch, million tonnes", fill = "Comm. group") +
+  ggtitle ("Landings trends, Peru SAU") +
+  theme (axis.text = element_text (size = 12),
+         axis.title = element_text (size = 14),
+         legend.text = element_text (size = 10),
+         legend.title = element_text (size = 12),
+         plot.title = element_text (size = 16))
+
+dev.off()
+
+# Sierra Leone
+#ihh
+png ("Figures/SL_landings_trend_IHH.png", width = 7, height = 4, units = "in", res = 300)
+sl_ihh_landings %>%
+  filter (!year == 2018) %>% # all NA
+  group_by (year, commercial_group) %>% summarise (tonnes = sum (catch_mt, na.rm = TRUE)) %>%
+  ggplot (aes (x = year, y = tonnes/1000000, fill = commercial_group, group = commercial_group)) +
+  geom_area() +
+  theme_bw() +
+  labs (x = "", y = "Catch, million tonnes", fill = "Comm. group") +
+  ggtitle ("Landings trends, Sierra Leone IHH") +
+  theme (axis.text = element_text (size = 12),
+         axis.title = element_text (size = 14),
+         legend.text = element_text (size = 10),
+         legend.title = element_text (size = 12),
+         plot.title = element_text (size = 16))
+
+dev.off()
+
+# area stack
+png ("Figures/SL_landings_trend_SAU.png", width = 7, height = 4, units = "in", res = 300)
+sau_full %>%
+  filter (country == "Sierra Leone", year > 2000) %>%
+  group_by (year, commercial_group) %>% summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
+  ggplot (aes (x = year, y = tonnes/1000000, fill = commercial_group, group = commercial_group)) +
+  geom_area() +
+  theme_bw() +
+  labs (x = "", y = "Catch, million tonnes", fill = "Comm. group") +
+  ggtitle ("Landings trends, Sierra Leone SAU") +
+  theme (axis.text = element_text (size = 12),
+         axis.title = element_text (size = 14),
+         legend.text = element_text (size = 10),
+         legend.title = element_text (size = 12),
+         plot.title = element_text (size = 16))
+
+dev.off()
 
 # catch upside ----
 # ratio of baseline (2012-2021) to future catch for each year/scenario calculate_nutritional_upsides.R
@@ -326,6 +467,24 @@ chl_landings_agg_clip_commgroup %>%
   guides (fill = "none") +
   ggtitle (paste0("Recent and projected total landings, ", "Chile"))
 
+dev.off()
+
+# just chile landings ts
+png ("Figures/Chile_landings_commgroup_areastack.png", width = 4, height = 3, units = "in", res = 300)
+chl_landings_agg_clip_commgroup %>%
+  #filter (year > 2017) %>%
+  ggplot (aes (x = year, y = tonnes/1000000)) +
+  geom_area(aes (fill = commercial_group), position = "stack") +
+  labs (y ="", x = "") +
+  theme_bw() +
+  theme (axis.text = element_text (size = 16),
+         axis.title = element_text (size = 24)) +
+  
+  # qualitative color scale for species, Dark1
+  scale_fill_brewer(palette = "Dark2") +
+  # remove legend
+  guides (fill = "none") +
+  ggtitle ("")
 dev.off()
 
 # sierra leone ihh data comm_group ----
