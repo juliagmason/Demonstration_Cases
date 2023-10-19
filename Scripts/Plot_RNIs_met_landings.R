@@ -268,7 +268,24 @@ landings %>%
   scale_fill_brewer(palette = "Dark2") +
   ggtitle ("Potential nutrient provisioning, Algae omitted\n2021 landings") +
   guides (fill = "none") +
-  theme (axis.text = element_text (size = 10),
+  theme (axis.text = element_text (size = 16),
+         axis.title = element_text (size = 10),
+         plot.title = element_text(size = 12))
+dev.off()
+
+#version for ppt
+png ("Figures/Chl_aggregate_landings_RNIs_met_no_algae_ppt.png", width = 4, height = 3, units = "in", res = 300)  
+landings %>%
+  
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  ggplot (aes (x = nutrient, y = rni_equivalents/1000000, fill = commercial_group)) +
+  geom_col() +
+  theme_bw() +
+  labs (x = "", y = "", fill = "Comm. group") +
+  scale_fill_brewer(palette = "Dark2") +
+  #ggtitle ("Potential nutrient provisioning, Algae omitted\n2021 landings") +
+  guides (fill = "none") +
+  theme (axis.text = element_text (size = 16),
          axis.title = element_text (size = 10),
          plot.title = element_text(size = 12))
 dev.off()
