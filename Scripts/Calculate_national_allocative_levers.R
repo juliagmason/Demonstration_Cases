@@ -66,20 +66,22 @@ sl_landings <- readRDS("Data/SLE_landings_IHH.Rds")
 # just use 2019?
 # not taking five year mean, this is just 2019 data. so just need to fix countries and species names
 # export percent production is in percentage points, convert
-exports <- read_csv ("Data/20230830_edf_ARTIS_snet.csv") %>%
+exports <- read_csv ("Data/20231016_edf_ARTIS_snet.csv") %>%
   mutate (species = str_to_sentence(sciname),
-          prop_exp = exports_percent_of_prod
-          /100,
+          prop_exp = exports_percent_of_prod/100,
           # just doing country names by hand...
           country = case_when (
             exporter_iso3c == "CHL" ~ "Chile",
             exporter_iso3c == "IDN" ~ "Indonesia",
             exporter_iso3c == "PER" ~ "Peru", 
             exporter_iso3c == "MEX" ~ "Mexico",
-            exporter_iso3c == "SLE" ~ "Sierra Leone"
-          ), .keep = "unused") %>%
+            exporter_iso3c == "SLE" ~ "Sierra Leone",
+            exporter_iso3c == "MWI" ~ "Malawi"), 
+          .keep = "unused") %>%
   # # remove aquaculture and inland
-  # filter (habitat == "marine", method == "capture")
+  filter (method == "capture",
+          habitat == case_when(country == "Malawi" ~ "inland",
+                               TRUE ~ "marine")) %>%
   filter (year == 2019)
 
 # country nutrient demand data ----
@@ -824,3 +826,56 @@ peru_export_anchov %>%
   mutate (perc_volume = catch_volume / sum(catch_volume) * 100) %>%
   write.excel()
 
+# Malawi exports ----
+
+# malawi landings
+# Clean_Malawi_landings.R
+mal_landings <- readRDS("Data/Malawi_landings_cleaned.Rds")
+
+# have to match species names, just at genus level for most of them
+mal_export <- exports %>% 
+  filter (country == "Malawi") %>%
+  mutate (case_when (
+    species == "Clarias" ~ "Clarias gariepinus",
+    species == "Oreochromis" ~ "Oreochromis lidole combined"
+  ))
+
+mwi_export <- mal_landings %>%
+  # filter to 2017 and add country columnt
+  filter (Year == 2017) %>%
+  # aggregate small and large scale
+  group_by (species) %>%
+  summarise (catch_mt = sum(tonnes, na.rm = TRUE)) %>%
+  mutate (country = "Malawi") %>%
+  # join to ARTIS data
+  left_join(exports, by = c("species", "country")) %>%
+  #for species missing data, assume zero exports
+  replace_na (list(prop_exp = 0)) %>%
+  mutate (Exported = catch_mt * prop_exp,
+          Retained = catch_mt * (1-prop_exp)) %>%
+  # cut unnecessary columns
+  select (country, species, Exported, Retained) %>%
+  # pivot longer
+  pivot_longer (Exported:Retained, 
+                names_to = "exports",
+                values_to = "catch_mt") 
+
+# calculate RNI equivalents and percent population needs met
+peru_export_nutr_anchov <- peru_export_anchov %>%
+  # attempting to do both rni equiv and nutr_tonnes in one 
+  mutate(rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = "Peru"), calc_children_fed_func),
+         nutr_tonnes = pmap (list (species_name = species, catch_mt = catch_mt, country_name = "Peru"), convert_catch_to_nutr_tons)) %>%
+  unnest (cols = c(rni_equivalents, nutr_tonnes),  names_repair = "check_unique", names_sep = ".") %>%
+  # this makes weird column names because I didn't think about running the functions together. duplicates the nutrient column
+  select (-c(nutr_tonnes.nutrient, catch_mt)) %>%
+  # remove text before "." in column names
+  rename_with (~gsub(".*\\.", "", .x)) %>%
+  # group by nutrient, this makes it cleaner
+  group_by (country, exports, nutrient) %>%
+  summarise (across( where(is.numeric), ~ sum(.x, na.rm = TRUE))) %>%
+  # join to population demand
+  left_join (filter (wpp_country_aggregate, Time == 2019), by = c("country", "nutrient")) %>%
+  mutate (perc_demand_met = nutr_tonnes / tot_nutr_annual_demand * 100) %>%
+  select (-c(Time, nutr_tonnes, tot_pop, tot_nutr_annual_demand))  
+
+saveRDS(peru_export_nutr_anchov, "Data/levers_RNI_pop_export_Peru_anchov.Rds")
