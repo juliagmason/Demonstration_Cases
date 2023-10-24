@@ -15,6 +15,7 @@ compiled_nutr <- readRDS("Data/species_nutrients_compiled.Rds")
 
 
 # matched fishnutr data for missing species ----
+# from Match_SAU_FishNutrients_taxa.R
 # depends on country. Finfish only; potentially could do with nonfish, but might have them all through AFCD?
 fish_taxamatch_nutr <- readRDS("Data/Matched_finfish_nutr.Rds") 
 
@@ -25,6 +26,9 @@ rni_child <- readRDS("Data/RNI_child.Rds")
 
 
 calc_children_fed_func <- function (species_name, amount_mt, country_name) {
+  # species name is Latin name separated by a space, e.g. "Gadus morhua"
+  # amount_mt is catch/landings/wet weight in metric tons
+  # country_name is for matching species names among SAU and FishNutrients--will only harmonize if it's Peru, Chile, Indonesia, or Sierra Leone
 
   if (species_name %in% compiled_nutr$species) {
     nutr_content <- compiled_nutr %>% filter (species == species_name)
@@ -35,13 +39,15 @@ calc_children_fed_func <- function (species_name, amount_mt, country_name) {
   
   catch_nutrients <- nutr_content %>%
     mutate (catch_mt = amount_mt,
+            # edible portion conversion values from GENuS/Nutricast, Free et al. 2022 cites Roberts 1998: Roberts, P. Conversion Factors for Estimating the Equivalent Live Weight of Fisheries Products (The Food and Agriculture Organization of the United Nations, 1998).
             p_edible = case_when (
               taxa == "Finfish" ~ 0.87,
               taxa == "Crustacean" ~ 0.36,
               taxa == "Mollusc" ~ 0.17,
-              # GENuS/nutricast is 0.21 for cephalopods. Using 0.67, Bianchi et al. 2022 value for D. gigas; only cephalopod in our priority species. They also have a blanket 0.7 value for cephalopods.  
+              # GENuS/nutricast is 0.21 for cephalopods. Using 0.67, Bianchi et al. 2022 value for D. gigas; only cephalopod in our priority species. They also have a blanket 0.7 value for cephalopods.
               taxa == "Cephalopod" & species == "Dosidicus gigas" ~ 0.67,
               taxa == "Cephalopod" & species != "Dosidicus gigas" ~ 0.21,
+              # for unknown conversions, set to 1
               taxa == "Other" ~ 1,
               taxa == "Algae" ~ 1),
             # convert tons per year to 100g /day, proportion edible
