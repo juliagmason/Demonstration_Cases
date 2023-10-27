@@ -5,7 +5,7 @@
 # smaller, just rcp 60 and 85. now has mexico
 ds_spp <- readRDS("Data/Free_etal_proj_smaller.Rds")
 
-# calculate % loss by 2051-2060 relative to 2017-2021 baseline
+# calculate % loss by 2051-2060 relative to 2017-2021 baseline to report in summary table ----
 t <- ds_spp %>% 
   mutate (
     period = case_when (
@@ -20,13 +20,7 @@ t <- ds_spp %>%
   group_by (country) %>%
   reframe (perc_diff = (sum (catch_mt[period == "2051-2060"]) - sum (catch_mt[period == "2017-2021"]))/sum (catch_mt[period == "2017-2021"]) * 100)
   
-  
-  
-  summarize (mey_diff_mt = catch_mt[scenario == "Productivity Only"] - catch_mt[scenario == "No Adaptation"],
-             mey_diff_percent = (catch_mt[scenario == "Productivity Only"] - catch_mt[scenario == "No Adaptation"])/catch_mt[scenario == "No Adaptation"] * 100,
-             adapt_diff_mt = catch_mt[scenario == "Full Adaptation"] - catch_mt[scenario == "No Adaptation"],
-             adapt_diff_percent = (catch_mt[scenario == "Full Adaptation"] - catch_mt[scenario == "No Adaptation"])/catch_mt[scenario == "No Adaptation"] * 100) %>%
-  ungroup()
+
   
   # peru anchovy vs. no anchovy
   ds_spp %>% 
@@ -89,7 +83,7 @@ t <- ds_spp %>%
     group_by (country) %>%
     reframe (perc_diff = (sum (catch_mt[period == "2051-2060"]) - sum (catch_mt[period == "2017-2021"]))/sum (catch_mt[period == "2017-2021"]) * 100)
   
-# Plot overall yield ----
+# Plot overall yield time series ----
   
   ds_spp$scenario <- factor (ds_spp$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
 
