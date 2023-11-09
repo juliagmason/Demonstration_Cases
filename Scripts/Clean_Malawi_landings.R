@@ -84,7 +84,7 @@ mal_landings %>%
   filter (!comm_name %in% c("Chisawasawa", "Kambuzi")) %>%
   ggplot (aes (x= Year, y = tonnes/1000,fill = comm_name)) +
   geom_area(position = "stack") +
-  facet_wrap (~sector, scales = "free_y", nrow = 2) +
+  facet_wrap (~sector, scales = "free_y", nrow = 1) +
   theme_bw() +
   labs (y = "Catch, 1000 tonnes", fill = "Species", x = "") +
   ggtitle("Malawi fish production by sector") +
@@ -120,23 +120,24 @@ mal_top$sector <- factor (mal_top$sector, levels = c("Small-scale", "Large-scale
 library (scales)
 show_col(brewer_pal(palette = "Dark2")(6))
 
-png ("Figures/Malawi_landings_top_spp.png", width = 10, height = 8, res = 300, units = "in")
+png ("Figures/Malawi_landings_top_spp.png", width = 7, height = 4, res = 300, units = "in")
 
 mal_top %>%
   group_by (comm_name, sector, Year) %>%
   summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
   ggplot (aes (x= Year, y = tonnes/1000,fill = comm_name)) +
   geom_area(position = "stack") +
-  facet_wrap (~sector, scales = "free_y", nrow = 2) +
+  facet_wrap (~sector, scales = "free_y", nrow = 1) +
   #scale_fill_brewer(palette = "Dark2") +
   scale_fill_manual(values = c("#D95F02", "#7570b3", "#e7298a", "#66A61E", "#E6AB02")) +
   theme_bw() +
-  labs (y = "Catch, 1000 tonnes", fill = "Species", x = "") +
-  ggtitle("Malawi fish production by sector") +
+  labs (y = "Catch, thousand tonnes", fill = "Species", x = "") +
+  ggtitle("Recent landings by sector, Malawi") +
   theme (axis.text = element_text (size = 12),
-         axis.title = element_text (size = 16),
-         plot.title = element_text(size = 20),
-         strip.text = element_text (size =16),
-         legend.text = element_text (size = 12),
-         legend.title = element_text (size = 16)) 
+         axis.title = element_text (size = 14),
+         legend.text = element_text (size = 10),
+         legend.title = element_text (size = 12),
+         plot.title = element_text (size = 16),
+         strip.text = element_text (size = 14)) +
+  guides (fill = "none")
 dev.off()
