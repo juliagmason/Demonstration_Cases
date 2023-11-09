@@ -1,5 +1,5 @@
 # Plot nutricast projections
-
+library (tidyverse)
 # 1/31/23 from regional_team_priority_species_figs older code
 
 # smaller, just rcp 60 and 85. now has mexico
@@ -85,7 +85,7 @@ t <- ds_spp %>%
   
 # Plot overall yield time series ----
   
-  ds_spp$scenario <- factor (ds_spp$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
+ds_spp$scenario <- factor (ds_spp$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
 
 plot_catch_proj <- function (country_name)  {
   plot <- ds_spp %>%
