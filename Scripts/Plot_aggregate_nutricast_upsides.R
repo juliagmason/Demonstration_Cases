@@ -146,7 +146,7 @@ for (RCP in c("RCP26", "RCP45", "RCP60", "RCP85")) {
     facet_wrap (~nutrient, scales = "free_y") +
     theme_bw() +
     labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
-    ggtitle (paste0("Projected nutrient yield for Peru, ", RCP, "; Anchovy removed")) +
+    ggtitle (paste0("Projected nutrient yield for Peru, ", RCP, "; Anchoveta removed")) +
     theme (axis.text.y = element_text (size = 14),
            axis.text.x = element_text (size = 13),
            axis.title = element_text (size = 16),
@@ -170,7 +170,7 @@ for (RCP in c("RCP26", "RCP45", "RCP60", "RCP85")) {
     facet_wrap (~nutrient, scales = "free_y") +
     theme_bw() +
     labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
-    ggtitle (paste0("Projected nutrient yield for Peru, ", RCP, "; Anchovy only")) +
+    ggtitle (paste0("Projected nutrient yield for Peru, ", RCP, "; Anchoveta only")) +
     theme (axis.text.y = element_text (size = 14),
            axis.text.x = element_text (size = 13),
            axis.title = element_text (size = 16),

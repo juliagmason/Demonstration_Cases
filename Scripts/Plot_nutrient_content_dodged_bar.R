@@ -99,18 +99,18 @@ plot_colorful_spp_nutr_dodge_bar(indo_spp$species, Selenium = TRUE)
 # cleaned names from clean_malawi_landings
 mal_top_names <- mal_names %>% filter (comm_name %in% c("Chambo", "Usipa", "Utaka", "Ndunduma"))
 
-png ("Figures/Malawi_top_spp_nutr_dodge_bar.png", width = 6, height = 3, units = "in", res = 300)
+png ("Figures/Malawi_top_spp_nutr_dodge_bar.png", width = 5, height = 4, units = "in", res = 300)
 print(
 plot_colorful_spp_nutr_dodge_bar(mal_top_names$species, Selenium = FALSE) +
-  # scale_x_discrete(labels = c ())
-  theme ( 
-    axis.text.y = element_text (size = 10),
-    axis.text.x = element_text (size = 10),
-    axis.title = element_text (size = 12),
-    strip.text = element_text(size = 16),
-    legend.text = element_text (size = 10),
-    legend.title = element_text (size = 12),
-    plot.title = element_text (size = 16))
+      ggtitle ("Nutrient content of top species by volume") +
+     scale_x_discrete(labels = c ("Usipa", "Utaka", "Ndunduma", "Chambo")) +
+    theme ( 
+      axis.text.y = element_text (size = 13),
+      axis.text.x = element_text (size = 11),
+      axis.title = element_text (size = 13),
+      legend.text = element_text (size = 12),
+      legend.title = element_text (size = 13),
+      plot.title = element_text (size = 16))
 )
 dev.off()
 

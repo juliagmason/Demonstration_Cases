@@ -135,9 +135,9 @@ print(
     ggtitle ("Potential nutrient provisioning\n2019 reconstructed catch") +
     guides (fill = "none") +
     scale_x_discrete (labels = c ("Calc", "Iron", "Omg3", "VitA", "Zinc" )) +
-    theme (axis.text = element_text (size = 10),
-           axis.title = element_text (size = 10),
-           plot.title = element_text(size = 12))
+    theme (axis.text = element_text (size = 11),
+           axis.title = element_text (size = 13),
+           plot.title = element_text (size = 16))
 )
 dev.off()
 
@@ -166,11 +166,11 @@ peru_no_anchovy %>%
   scale_x_discrete (labels = c ("Calc", "Iron", "Omg3", "VitA", "Zinc" )) +
   scale_fill_brewer(palette = "Dark2") +
   scale_x_discrete (labels = c ("Calc", "Iron", "Omg3", "VitA", "Zinc" )) +
-  ggtitle ("Potential nutrient provisioning, Anchovy omitted\n2019 reconstructed catch") +
+  ggtitle ("Potential nutrient provisioning,\nAnchoveta omitted\n2019 reconstructed catch") +
   guides (fill = "none") +
-  theme (axis.text = element_text (size = 10),
-         axis.title = element_text (size = 10),
-         plot.title = element_text(size = 12))
+  theme (axis.text = element_text (size = 11),
+         axis.title = element_text (size = 13),
+         plot.title = element_text (size = 16))
 
 dev.off()
 
@@ -184,11 +184,12 @@ png ("Figures/SL_aggregate_landings_RNIs_met_IHH.png", width = 4, height = 4, un
 print(
   plot_sau_rnis_met("Sierra Leone")  +
     scale_fill_manual(values = c("#1B9E77", "#D95F02", "#7570b3", "#66A61E", "#E6AB02", "#A6761D", "#666666")) +
+    scale_x_discrete (labels = c ("Calc", "Iron", "Omg3", "VitA", "Zinc" )) +
     ggtitle ("Potential nutrient provisioning, 2017 landings") +
     guides (fill = "none") +
-    theme (axis.text = element_text (size = 10),
-             axis.title = element_text (size = 10),
-             plot.title = element_text(size = 12)) 
+    theme (axis.text = element_text (size = 11),
+           axis.title = element_text (size = 13),
+           plot.title = element_text (size = 16))
 )
 
 dev.off()
@@ -266,11 +267,13 @@ landings %>%
   theme_bw() +
   labs (x = "", y = "Child RNI equivalents, millions", fill = "Comm. group") +
   scale_fill_brewer(palette = "Dark2") +
-  ggtitle ("Potential nutrient provisioning, Algae omitted\n2021 landings") +
+  ggtitle ("Potential nutrient provisioning,\nAlgae omitted; 2021 landings") +
+  # abbreviate nutrient names
+  scale_x_discrete (labels = c ("Calc", "Iron", "Omg3", "VitA", "Zinc" )) +
   guides (fill = "none") +
-  theme (axis.text = element_text (size = 16),
-         axis.title = element_text (size = 10),
-         plot.title = element_text(size = 12))
+  theme (axis.text = element_text (size = 11),
+         axis.title = element_text (size = 13),
+         plot.title = element_text (size = 16))
 dev.off()
 
 #version for ppt
@@ -285,9 +288,9 @@ landings %>%
   scale_fill_brewer(palette = "Dark2") +
   #ggtitle ("Potential nutrient provisioning, Algae omitted\n2021 landings") +
   guides (fill = "none") +
-  theme (axis.text = element_text (size = 16),
-         axis.title = element_text (size = 10),
-         plot.title = element_text(size = 12))
+  theme (axis.text = element_text (size = 11),
+         axis.title = element_text (size = 13),
+         plot.title = element_text (size = 16))
 dev.off()
 
 
@@ -305,25 +308,22 @@ mal_nutr <- mal_top %>%
 # keep colors consistent, 
 show_col(brewer_pal(palette = "Dark2")(6))
 
-png ("Figures/Mal_aggregate_landings_RNIs_met.png", width = 6, height = 3, units = "in", res = 300)  
+png ("Figures/Mal_aggregate_landings_RNIs_met.png", width = 4, height = 4, units = "in", res = 300)  
 mal_nutr %>%
   filter (!nutrient %in% c("Protein", "Selenium")) %>%
   ggplot (aes (x = nutrient, y = rni_equivalents/1000000, fill = comm_name)) +
   #ggplot (aes (x = reorder(nutrient, -children_fed, na.rm = TRUE), y = children_fed/1000000, fill = commercial_group)) +
   geom_col() +
   scale_fill_manual(values = c("#D95F02", "#7570B3", "#e7298a", "#66A61E", "#E6AB02")) +
+  # abbreviate nutrient names
+  scale_x_discrete (labels = c ("Calc", "Iron", "Omg3", "VitA", "Zinc" )) +
   theme_bw() +
-  ggtitle (paste0("Potential nutrient provisioning, 2017 landings")) +
+  ggtitle (paste0("Potential nutrient provisioning,\n2017 landings")) +
   labs (x = "", y = "Child RNI equivalents, millions", fill = "Species") +
-theme (
-  axis.text.y = element_text (size = 10),
-  axis.text.x = element_text (size = 10),
-  axis.title = element_text (size = 12),
-  strip.text = element_text(size = 16),
-  legend.text = element_text (size = 10),
-  legend.title = element_text (size = 12),
-  plot.title = element_text (size = 16)
-)
+  theme (axis.text = element_text (size = 11),
+         axis.title = element_text (size = 13),
+         plot.title = element_text (size = 16)) +
+  guides (fill = "none")
 
 dev.off()
 
