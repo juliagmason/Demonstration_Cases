@@ -198,6 +198,9 @@ sl_foreign_sector_nutr %>%
   mutate (perc_rnis_Foreign = Foreign_rni_equivalents/(Domestic_rni_equivalents + Foreign_rni_equivalents)* 100) %>%
   write.excel()
 
+sl_foreign_sector_nutr %>%
+  filter (nutrient != "Protein" )
+
 # overall % foreign by volume
 sl_foreign_sector_vol %>%
   summarise (perc_foreign = sum(catch_mt[sector == "Foreign catch"], na.rm = TRUE)/sum (catch_mt, na.rm = TRUE) * 100)
@@ -860,22 +863,51 @@ mwi_export <- mal_landings %>%
                 names_to = "exports",
                 values_to = "catch_mt") 
 
-# calculate RNI equivalents and percent population needs met
-peru_export_nutr_anchov <- peru_export_anchov %>%
-  # attempting to do both rni equiv and nutr_tonnes in one 
-  mutate(rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = "Peru"), calc_children_fed_func),
-         nutr_tonnes = pmap (list (species_name = species, catch_mt = catch_mt, country_name = "Peru"), convert_catch_to_nutr_tons)) %>%
-  unnest (cols = c(rni_equivalents, nutr_tonnes),  names_repair = "check_unique", names_sep = ".") %>%
-  # this makes weird column names because I didn't think about running the functions together. duplicates the nutrient column
-  select (-c(nutr_tonnes.nutrient, catch_mt)) %>%
-  # remove text before "." in column names
-  rename_with (~gsub(".*\\.", "", .x)) %>%
-  # group by nutrient, this makes it cleaner
-  group_by (country, exports, nutrient) %>%
-  summarise (across( where(is.numeric), ~ sum(.x, na.rm = TRUE))) %>%
-  # join to population demand
-  left_join (filter (wpp_country_aggregate, Time == 2019), by = c("country", "nutrient")) %>%
-  mutate (perc_demand_met = nutr_tonnes / tot_nutr_annual_demand * 100) %>%
-  select (-c(Time, nutr_tonnes, tot_pop, tot_nutr_annual_demand))  
+  
 
 saveRDS(peru_export_nutr_anchov, "Data/levers_RNI_pop_export_Peru_anchov.Rds")
+
+# Malawi small scale vs large scale ---
+# calculate RNI equivalents and percent population needs met
+mal_sector_nutr <- mal_landings %>%
+  filter (Year == 2017) %>%
+  # attempting to do both rni equiv and nutr_tonnes in one 
+  mutate(
+         rni_equivalents = pmap (list (species = species, amount = tonnes, country_name = "Malawi"), calc_children_fed_func)) %>%
+         #nutr_tonnes = pmap (list (species_name = species, tonnes = tonnes, country_name = "Malawi"), convert_catch_to_nutr_tons)) %>%
+  unnest (cols = rni_equivalents,  names_repair = "check_unique", names_sep = ".") %>%
+  # this makes weird column names because I didn't think about running the functions together. duplicates the nutrient column
+  #select (-c(nutr_tonnes.nutrient, catch_mt)) %>%
+  # remove text before "." in column names
+  rename_with (~gsub(".*\\.", "", .x)) #%>%
+  # group by nutrient, this makes it cleaner
+#   group_by (country, sector, nutrient) %>%
+#   summarise (across( where(is.numeric), ~ sum(.x, na.rm = TRUE))) %>%
+#   # join to Sierra leone population demand
+#   left_join (filter (wpp_country_aggregate, Time == 2017), by = c("country", "nutrient")) %>%
+#   mutate (perc_demand_met = nutr_tonnes / tot_nutr_annual_demand * 100) %>%
+#   select (-c(Time, nutr_tonnes, tot_pop, tot_nutr_annual_demand))
+# 
+# saveRDS(sl_foreign_sector_nutr, "Data/levers_RNI_pop_foreign_sector_SierraLeone.Rds")
+
+
+# artisanal vs industrial 
+x <- mal_sector_nutr %>%
+  select (-c(Year, tonnes)) %>%
+  group_by(nutrient, sector) %>%
+  summarise (across( where(is.numeric), sum)) %>%
+  pivot_wider (names_from = sector,
+               values_from = rni_equivalents,
+               names_glue = "{sector}_{.value}") %>%
+  ungroup() %>%
+  mutate (SSF_perc_rnis = `Small-scale_rni_equivalents`/(`Large-scale_rni_equivalents` + `Small-scale_rni_equivalents`)* 100,
+          LSF_perc_rnis = `Large-scale_rni_equivalents`/(`Large-scale_rni_equivalents` + `Small-scale_rni_equivalents`)* 100) %>%
+  write.excel()
+
+# ssf percent by volumne
+mal_landings %>% 
+  filter (Year == 2017) %>%
+  group_by (sector) %>%
+  summarise (catch_volume = sum (tonnes)) %>%
+  mutate (perc_volume = catch_volume/ sum(catch_volume) * 100) %>%
+  write.excel
