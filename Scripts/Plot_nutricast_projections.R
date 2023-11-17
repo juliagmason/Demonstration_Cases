@@ -413,3 +413,24 @@ ds_spp %>%
          legend.text = element_text (size = 12),
          legend.title = element_text (size = 14),
          plot.title = element_text (size = 18))
+
+ds_spp %>%
+  filter (!country %in% c("Ghana", "Mexico"),
+          between (year, 2012, 2025)) %>%
+  group_by (country, rcp, scenario, year) %>%
+  summarise (tot = sum (catch_mt, na.rm = TRUE)) %>%
+  ggplot (aes (x = year, y = tot/1000000, col = scenario)) +
+  geom_line() +
+  geom_vline (xintercept = 2017, lty = 2) +
+  facet_grid (country ~ rcp, scales = "free") +
+  labs (x= "", y = "Catch, million metric tonnes")+
+  theme_bw() +
+  ggtitle ("Catch projection initial years") +
+  theme (axis.text.y = element_text (size = 14),
+         axis.text.x = element_text (size = 13),
+         axis.title = element_text (size = 16),
+         strip.text = element_text (size = 15),
+         legend.text = element_text (size = 12),
+         legend.title = element_text (size = 14),
+         plot.title = element_text (size = 18))
+
