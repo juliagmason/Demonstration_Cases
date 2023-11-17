@@ -119,14 +119,28 @@ print(
     guides (fill = "none") +
     # abbreviate nutrient names
     scale_x_discrete (labels = c ("Calc", "Iron", "Omg3", "VitA", "Zinc" )) +
-    ggtitle ("Potential nutrient provisioning\n2019 reconstructed catch") +
+    ggtitle ("Total nutrient yield\n2019 reconstructed catch") +
     theme (axis.text = element_text (size = 11),
            axis.title = element_text (size = 13),
            plot.title = element_text (size = 16))
 )
 dev.off()
 
+# save for illustrator
+i +
+  scale_fill_brewer(palette = "Dark2") +
+  guides (fill = "none") +
+  # abbreviate nutrient names
+  scale_x_discrete (labels = c ("Calcium", "Iron", "Omgega 3", "Vit. A", "Zinc" )) +
+  ggtitle ("Total nutrient yield") +
+  labs (y = "Child RNI equiv., millions") +
+  theme (axis.text.y = element_text (size = 11),
+         axis.text.x = element_text (size = 9),
+         axis.title = element_text (size = 12),
+         plot.title = element_text (size = 13),
+         plot.margin=unit(c(1,1,1,1), 'mm'))
 
+ggsave ("Figures/FigXB_TNY_Indo.eps", width = 74, height = 60, units = "mm")
 # Peru  ----
 png ("Figures/Peru_aggregate_landings_RNIs_met.png", width = 4, height = 4, units = "in", res = 300)  
 print(
@@ -136,8 +150,8 @@ print(
     guides (fill = "none") +
     scale_x_discrete (labels = c ("Calc", "Iron", "Omg3", "VitA", "Zinc" )) +
     theme (axis.text = element_text (size = 11),
-           axis.title = element_text (size = 13),
-           plot.title = element_text (size = 16))
+           axis.title = element_text (size = 12),
+           plot.title = element_text (size = 14))
 )
 dev.off()
 
