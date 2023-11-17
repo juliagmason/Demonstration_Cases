@@ -398,6 +398,13 @@ chl_foreign_sector_vol %>%
   mutate (perc_volume = catch_volume / sum(catch_volume) * 100) %>%
   write.excel()
 
+# artisanal catch more omega 3s, is this bc of anchovy?
+chl_noalgae %>% filter (species == "Engraulis ringens")
+
+chl_noalgae %>% filter (sector == "Artisanal") %>%
+  mutate (catch_prop = catch_mt / sum (catch_mt)) %>%
+arrange (desc(catch_prop)) %>% View()
+
 # exports 
 chl_export_nutr %>%
   pivot_wider (names_from = exports,
