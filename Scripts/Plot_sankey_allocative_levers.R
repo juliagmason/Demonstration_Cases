@@ -128,18 +128,53 @@ indo_export_nutr %>%
                axis2 = exports,
                y = rni_equivalents/1000000,
                fill = nutrient)) +
-  scale_x_discrete (limits = c ("nutrient", "exports"), expand = c(.2, .05)) +
-  labs(y = "RNI equivalents, millions", x = "Allocation levers") +
+  scale_x_discrete (limits = c ("nutrient", "exports"), expand = c(.02, .05)) +
+  labs(y = "Child RNI equiv., millions", x = "Allocation levers") +
   geom_alluvium() +
   geom_stratum() +
   geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 5) +
   #geom_text(stat = "stratum", aes(label = after_stat(round(prop, 2)))) +
+  scale_fill_viridis_d() +
   theme_minimal() +
-  ggtitle(paste0("Nutrient flows, Indonesia Domestic catch\nSAU data")) +
+  ggtitle(paste0("National allocative lever: Exports")) +
   theme (axis.text = element_text (size = 14),
          axis.title = element_text (size = 16),
          plot.title = element_text (size = 18),
          legend.position = "none")
+dev.off()
+
+p <- indo_export_nutr %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  mutate (nutrient = case_when (
+    nutrient == "Omega_3" ~ "Omega 3",
+    nutrient == "Vitamin_A" ~ "Vit. A",
+    TRUE ~ nutrient)) %>%
+  ggplot (aes (axis1 = nutrient,
+               axis2 = exports,
+               y = rni_equivalents/1000000,
+               fill = nutrient)) +
+  scale_x_discrete (limits = c ("nutrient", "exports"), expand = c(.05, .05)) +
+  labs(y = "Child RNI equiv., millions", x = "Allocation levers") +
+  geom_alluvium() +
+  geom_stratum() +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 2.5) +
+  theme_minimal() +
+  ggtitle("National allocative driver: Exports") +
+  scale_fill_brewer (palette = "Set1") +
+theme ( 
+  axis.text.x = element_blank(),
+  axis.text.y = element_text (size = 9),
+  axis.title = element_text (size = 12),
+  plot.title = element_text (size = 13),
+  plot.margin=unit(c(1,1,1,1), 'mm'),
+  legend.position = "none")
+
+ggsave ("Figures/FigXD_driver_Indo.eps", width = 74, height = 60, units = "mm",
+        device = cairo_eps)
+
+cairo_ps("Figures/FigXD_driver_Indo.eps", width = 3.14, height = 2.75,
+         fallback_resolution = 300)
+print(p)
 dev.off()
 
 
