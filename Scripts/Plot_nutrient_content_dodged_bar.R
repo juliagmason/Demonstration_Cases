@@ -1,19 +1,9 @@
-## Plot spp nutrient content dodged bar
+# Plot Fig XC, nutrient content of top species
+
 # 3/2/23, moving from regional_team_priority_spp_figs
 
 library (tidyverse)
 library (stringr)
-#library (AFCD)
-
-# priority species ----
-# top 5-7 priority species identified by regional teams
-# as of 8/4/22  have peru and chile, mexico (limited data avail). took indo spp from willow spreadsheet, but don't know where they came from
-priority_spp <- read_csv ("Data/regional_teams_priority_spp.csv") %>%
-  # just change S. japonicus peruanus to S. japonicus; no nutrient or SAU or nutricast data
-  mutate (species = case_when (species == "Scomber japonicus peruanus" ~ "Scomber japonicus",
-                               TRUE ~ species)
-  )
-
 
 
 # nutrient data ----
@@ -34,7 +24,9 @@ spp_nutr <-  compiled_nutr %>%
   
   # this would be the percentage of your daily requirement you could get from a 100g serving of each species. cap at 100%
   mutate (perc_rni = amount/RNI * 100,
+          # optional--cap at 100?
           #perc_rni = ifelse (perc_rni > 100, 100, perc_rni),
+          # shorten nutrient names so they fit on the x axis
           nutrient = 
             case_when (nutrient == "Vitamin_A" ~ "Vit A",
                        nutrient == "Omega_3" ~ "Omega 3",
@@ -42,15 +34,9 @@ spp_nutr <-  compiled_nutr %>%
   ungroup()
 
 
-
-
-# order by overall nutrient density 
-
-# shorten spp names
-# https://stackoverflow.com/questions/8299978/splitting-a-string-on-the-first-space
-
-
+# function to plot ----
 plot_colorful_spp_nutr_dodge_bar <- function (species_names, Selenium = FALSE) {
+  
   #species_names is a vector of scientific names
   
   if (Selenium == TRUE) {omit_nutrients <- "Protein"} else {omit_nutrients <- c("Protein", "Selenium")}
@@ -59,7 +45,10 @@ plot_colorful_spp_nutr_dodge_bar <- function (species_names, Selenium = FALSE) {
     filter (!nutrient %in% omit_nutrients, 
             species %in% species_names) %>%
     group_by (species) %>%
+    # order by overall nutrient density, from Maire et al. 2021
     mutate (micronutrient_density = sum (perc_rni),
+            # shorten spp names
+            # https://stackoverflow.com/questions/8299978/splitting-a-string-on-the-first-space
             spp_short = ifelse (
               grepl(" ", species),
               paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
@@ -82,16 +71,6 @@ plot_colorful_spp_nutr_dodge_bar <- function (species_names, Selenium = FALSE) {
       legend.title = element_text (size = 14),
       plot.title = element_text (size = 18))
 }
-
-# try to find high selenium indo??
-indo_spp <- sau_2019 %>%
-  filter (country == "Indonesia") %>%
-  group_by (species) %>%
-  summarise (tot_catch = sum (tonnes)) %>%
-  top_n(20, tot_catch)
-
-plot_colorful_spp_nutr_dodge_bar(indo_spp$species, Selenium = TRUE)
-# Sardinella species, and scomberomorous
 
 
 # Malawi top spp ----
@@ -193,6 +172,17 @@ print(
       plot.title = element_text (size = 16))
 )
 dev.off()
+
+# try to find high selenium indo??
+indo_spp <- sau_2019 %>%
+  filter (country == "Indonesia") %>%
+  group_by (species) %>%
+  summarise (tot_catch = sum (tonnes)) %>%
+  top_n(20, tot_catch)
+
+plot_colorful_spp_nutr_dodge_bar(indo_spp$species, Selenium = TRUE)
+# Sardinella species, and scomberomorous
+
 
 # peru spp ----
 peru_top <- sau_2019 %>%
