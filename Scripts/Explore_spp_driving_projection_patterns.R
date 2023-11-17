@@ -133,7 +133,7 @@ scenario_diff <- ds_spp %>%
             adapt_diff_percent = (catch_mt[scenario == "Full Adaptation"& period == "2051-2060"] - catch_mt[scenario == "No Adaptation"& period == "2051-2060"])/catch_mt[scenario == "No Adaptation"& period == "2051-2060"] * 100)
 
 
-treemap (chl_scenario_diff, index = "species",
+treemap (filter (scenario_diff, country == "Chile"), index = "species",
          vSize="initial_log", type="value",
          vColor = "mey_diff_percent",
          palette = "RdYlBu",
@@ -208,19 +208,55 @@ treemap (filter (scenario_diff, country == "Sierra Leone"), index = "species",
          inflate.labels=F,                        # If true, labels are bigger when rectangle is bigger.
          title = "Sierra Leone projections, improvement under MEY vs BAU"
 ) 
+
+# sierra leone does worse under adapt than bau
+treemap (filter (scenario_diff, country == "Sierra Leone"), index = "species",
+         vSize="initial_log", type="value",
+         vColor = "adapt_diff_percent",
+         palette = "RdYlBu",
+         mapping = c(-50, 0,  200),
+         fontsize.labels=c(15,12),                # size of labels. Give the size per level of aggregation: size for group, size for subgroup, sub-subgroups...
+         fontcolor.labels=c("black","orange"),    # Color of labels
+         fontface.labels=c(2,1),                  # Font of labels: 1,2,3,4 for normal, bold, italic, bold-italic...
+         #border.lwds=c(7,2),
+         bg.labels=c("transparent"),              # Background color of labels
+         align.labels=list(
+           c("center", "center"), 
+           c("right", "bottom")
+         ),                                   # Where to place labels in the rectangle?
+         overlap.labels=0.5,                      # number between 0 and 1 that determines the tolerance of the overlap between labels. 0 means that labels of lower levels are not printed if higher level labels overlap, 1  means that labels are always printed. In-between values, for instance the default value .5, means that lower level labels are printed if other labels do not overlap with more than .5  times their area size.
+         inflate.labels=F,                        # If true, labels are bigger when rectangle is bigger.
+         title = "Sierra Leone projections, improvement under Adapt vs BAU"
+) 
   
 # just species projection ts for ones with big differences
+sl_large_decline_spp <- scenario_diff %>% filter (country == "Sierra Leone", adapt_diff_percent < -10 & initial > 300)
 
-chl_large_improvement_spp <- chl_scenario_diff %>% filter (mey_diff_percent > 250 & initial > 100)
-
-ds_chl %>%
-  filter (species %in% chl_large_improvement_spp$species, year > 2017, rcp == "RCP60") %>%
+ds_spp %>%
+  filter (country == "Sierra Leone", species %in% sl_large_decline_spp$species, year > 2017, rcp == "RCP60") %>%
   ggplot (aes (x = year, y = catch_mt/1000000, col = scenario), lwd = 1.5) +
   geom_line() +
   theme_bw() +
   facet_wrap ( ~ species, scales = "free_y") +
   labs (x = "", y = "Catch, million metric tons", col = "Mgmt. scenario") +
-  ggtitle (paste0 ("Chile top species improvements")) +
+  ggtitle (paste0 ("SL species worse under Adapt")) +
+  theme (plot.title = element_text (size = 18),
+         axis.text = element_text (size = 12),
+         strip.text = element_text (size = 14),
+         legend.title = element_text (size = 14),
+         legend.text = element_text (size = 12),
+         axis.title = element_text (size = 14))
+
+chl_large_improvement_spp <- scenario_diff %>% filter (country == "Chile", mey_diff_percent > 250 & initial > 100)
+
+ds_spp %>%
+  filter (country == "Peru", species %in% chl_large_improvement_spp$species, year > 2017, rcp == "RCP60") %>%
+  ggplot (aes (x = year, y = catch_mt/1000000, col = scenario), lwd = 1.5) +
+  geom_line() +
+  theme_bw() +
+  facet_wrap ( ~ species, scales = "free_y") +
+  labs (x = "", y = "Catch, million metric tons", col = "Mgmt. scenario") +
+  ggtitle (paste0 ("Chile top improved species, dynamics in Peru")) +
   theme (plot.title = element_text (size = 18),
          axis.text = element_text (size = 12),
          strip.text = element_text (size = 14),
@@ -273,6 +309,30 @@ ds_spp %>%
   facet_wrap (~variable, scales = "free") +
   theme_bw() +
   ggtitle ("Peru, T. murphyi, RCP 6.0")
+
+
+ds_spp %>%
+  filter (country == "Peru", species == "Scomber japonicus", rcp == "RCP60") %>%
+  pivot_longer(range_km2:ffmsy, 
+               names_to = "variable",
+               values_to = "value") %>%
+  ggplot (aes (x = year, y = value, col = scenario)) +
+  geom_line () +
+  facet_wrap (~variable, scales = "free") +
+  theme_bw() +
+  ggtitle ("Peru, S. japonicus, RCP 6.0")
+
+
+ds_spp %>%
+  filter (country == "Chile", species == "Scomber japonicus", rcp == "RCP60") %>%
+  pivot_longer(range_km2:ffmsy, 
+               names_to = "variable",
+               values_to = "value") %>%
+  ggplot (aes (x = year, y = value, col = scenario)) +
+  geom_line () +
+  facet_wrap (~variable, scales = "free") +
+  theme_bw() +
+  ggtitle ("Chile, S. japonicus, RCP 6.0")
 
 # for sierra leone, s. aurita vs. s. maderensis
 ds_spp %>%
