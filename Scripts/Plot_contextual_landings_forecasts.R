@@ -64,6 +64,7 @@ saveRDS(full_baseline, file = "Data/baseline_catch_sau_chl_ihh.Rds")
 
 full_baseline <- readRDS("DAta/baseline_catch_sau_chl_ihh.Rds")
 
+# Supplemental info: full landings trend and compare data sources ----
 # plot landings trend for contextual figure ----
 # chile ----
 # trick color scale....
