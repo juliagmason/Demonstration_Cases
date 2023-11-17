@@ -1,0 +1,125 @@
+# Plot Fig XB total nutrient yield
+# 11 17 23
+# JGM
+
+# copying code from Plot_RNIs_met_landings.R
+
+library (tidyverse)
+library (stringr)
+
+# function for converting catch in mt to children fed ----
+# this will also bring in fishnutr data and RNI data
+source ("Scripts/Function_convert_catch_amt_children_fed.R")
+
+
+# country-specific landings data ----
+
+#Clean_Chile_Sernapesca_landings.R
+chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
+
+# Clean_Malawi_landings.R
+mal_landings <- readRDS("Data/Malawi_landings_cleaned.Rds")
+
+# Sierra Leone IHH data
+sl_landings <- readRDS("Data/SLE_landings_IHH.Rds")
+
+# SAU landings data ----
+sau_2019 <- readRDS("Data/SAU_2019.Rds")
+
+# join to commercial group
+sau_2019_taxa <- readRDS("Data/SAU_2019_taxa.Rds")
+
+# cut to 8 commercial groups, get rid of scorpionfishies and flatfishes
+sau_2019_taxa_8 <- sau_2019_taxa %>%
+  mutate (commercial_group = case_when (
+    commercial_group %in% c("Flatfishes", "Scorpionfishes", "Cod-likes") ~ "Other fishes & inverts",
+    TRUE ~ commercial_group
+  ))
+
+# function plot aggregate landings RNIS met ----
+plot_sau_rnis_met <- function (country_name, Selenium = FALSE) {
+  
+  if (country_name == "Chile") {
+    
+    landings <- chl_landings %>%
+      filter (year == 2021) %>%
+      # cut to 8 commercial groups
+      mutate (commercial_group = case_when (
+        commercial_group %in% c("Flatfishes", "Scorpionfishes", "Cod-likes", "Salmon, smelts, etc") ~ "Other fishes & inverts",
+        TRUE ~ commercial_group
+      )) %>%
+      group_by (species, commercial_group) %>%
+      summarise (catch_mt = sum (catch_mt)) %>%
+      mutate (rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = "Chile"), calc_children_fed_func)) %>%
+      unnest(cols = c(rni_equivalents),  names_repair = "check_unique") 
+    
+    # set levels to deal with algae? maybe don't have to?
+    #landings$commercial_group <- factor(landings$commercial_group, levels = c ("Algae", "Cephalopod", "Crustacean", "Finfish", "Mollusc", "Other"))
+    
+  } else if (country_name == "Sierra Leone") {
+    landings <- sl_landings %>%
+      filter (year == 2017) %>%
+      # cut to 8 commercial groups
+      mutate (commercial_group = case_when (
+        commercial_group %in% c("Flatfishes", "Scorpionfishes") ~ "Other fishes & inverts",
+        TRUE ~ commercial_group
+      )) %>%
+      group_by (species, commercial_group) %>%
+      summarise (catch_mt = sum (catch_mt)) %>%
+      mutate (rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = "Sierra Leone"), calc_children_fed_func)) %>%
+      unnest(cols = c(rni_equivalents),  names_repair = "check_unique") 
+    
+    # standardize color scale, dark1
+    landings$commercial_group <- factor (landings$commercial_group, levels = c("Anchovies", "Crustaceans","Herring-likes", "Molluscs", "Other fishes & inverts", "Perch-likes","Sharks & rays", "Tuna & billfishes") )
+    
+    
+  } else {
+    
+    
+    landings <- sau_2019 %>%
+      left_join (sau_2019_taxa_8, by = "species") %>%
+      filter(country == country_name) %>%
+      group_by (species, commercial_group) %>%
+      summarise (catch_mt = sum (tonnes, na.rm = TRUE)) %>%
+      mutate (rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = country_name), calc_children_fed_func)) %>%
+      unnest(cols = c(rni_equivalents),  names_repair = "check_unique")
+    
+    # standardize color scale, dark1
+    landings$commercial_group <- factor (landings$commercial_group, levels = c("Anchovies", "Crustaceans","Herring-likes", "Molluscs", "Other fishes & inverts", "Perch-likes","Sharks & rays", "Tuna & billfishes") )
+    
+    
+  }
+  
+  
+  # not working?? omit_nutrients <- ifelse (Selenium == TRUE, c("Protein", "Selenium"), "Protein")
+  if (Selenium == TRUE) {omit_nutrients <- "Protein"} else {omit_nutrients <- c("Protein", "Selenium")}
+  
+  landings %>%
+    
+    filter (!nutrient %in% omit_nutrients) %>%
+    # just have alphabetical so nutrients are always in the same order
+    ggplot (aes (x = nutrient, y = rni_equivalents/1000000, fill = commercial_group)) +
+    geom_col() +
+    theme_bw() +
+    labs (x = "", y = "Child RNI equivalents, millions", fill = "Comm. group") 
+  
+}
+
+
+# indonesia ----
+
+# save for illustrator
+plot_sau_rnis_met("Indonesia") +
+  scale_fill_brewer(palette = "Dark2") +
+  guides (fill = "none") +
+  # abbreviate nutrient names
+  scale_x_discrete (labels = c ("Calcium", "Iron", "Omgega 3", "Vit. A", "Zinc" )) +
+  ggtitle ("Total nutrient yield") +
+  labs (y = "Child RNI equiv., millions") +
+  theme (axis.text.y = element_text (size = 11),
+         axis.text.x = element_text (size = 9),
+         axis.title = element_text (size = 12),
+         plot.title = element_text (size = 13),
+         plot.margin=unit(c(1,1,1,1), 'mm'))
+
+ggsave ("Figures/FigXB_TNY_Indo.eps", width = 74, height = 60, units = "mm")
