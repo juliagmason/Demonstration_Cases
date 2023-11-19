@@ -139,10 +139,7 @@ sau_20yr_nutricast_clip %>%
   
   ggsave ("Figures/FigXA_contextual_Indo.eps", width = 174, height = 60, units = "mm")
 
-  
   # Peru ----
-  
-  
   sau_20yr_nutricast_clip %>%
     filter (country == "Peru") %>%
     # cut to 8 comm groups
@@ -179,3 +176,5 @@ sau_20yr_nutricast_clip %>%
     scale_fill_brewer(palette = "Dark2") +
     ggtitle ("Peru: Recent and projected total landings (RCP 6.0)")
   
+  ggsave ("Figures/FigXA_contextual_Peru.eps", width = 174, height = 60, units = "mm")
+ 
