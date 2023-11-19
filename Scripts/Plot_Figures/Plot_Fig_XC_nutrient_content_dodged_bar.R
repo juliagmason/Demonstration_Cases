@@ -82,102 +82,74 @@ chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
 # Sierra Leone IHH data
 sl_landings <- readRDS("Data/SLE_landings_IHH.Rds")
 
-# Malawi FAO data (just need names)
-# common name/scientific name key; re-sent on 6/26/23 with more species
-mal_names <- read.csv ("Data/Malawi_names.csv") 
+# Malawi FAO data 
+mal_landings <- readRDS("Data/Malawi_landings_cleaned.Rds")
 
 
 # Malawi top spp ----
 
 # cleaned names from clean_malawi_landings
-mal_top_names <- mal_names %>% filter (comm_name %in% c("Chambo", "Usipa", "Utaka", "Ndunduma"))
+mal_top <- mal_landings %>% 
+  filter (Year == 2017, comm_name %in% c("Chambo", "Usipa", "Utaka", "Ndunduma")) %>%
+  group_by (species, comm_name) %>%
+  summarise (tonnes = sum (tonnes)) %>%
+  ungroup() %>%
+  slice_max (tonnes, n=4)
 
-png ("Figures/Malawi_top_spp_nutr_dodge_bar.png", width = 5, height = 4, units = "in", res = 300)
-print(
-plot_colorful_spp_nutr_dodge_bar(mal_top_names$species, Selenium = FALSE) +
-      ggtitle ("Nutrient content of top species by volume") +
-     scale_x_discrete(labels = c ("Usipa", "Utaka", "Ndunduma", "Chambo")) +
-    theme ( 
-      axis.text.y = element_text (size = 13),
-      axis.text.x = element_text (size = 11),
-      axis.title = element_text (size = 13),
-      legend.text = element_text (size = 12),
-      legend.title = element_text (size = 13),
-      plot.title = element_text (size = 16))
-)
-dev.off()
+plot_colorful_spp_nutr_dodge_bar(mal_top$species, Selenium = FALSE) +
+  ggtitle ("Nutrient content of top species") +
+  #scale_x_discrete(labels = c ("Usipa", "Utaka", "Ndunduma", "Chambo")) +
+  labs (y = "% Child RNI met")+
+  scale_fill_brewer(palette = "Set1") +
+  theme ( 
+    axis.text = element_text (size = 11),
+    axis.title = element_text (size = 12),
+    legend.text = element_text (size = 10),
+    legend.title = element_text (size = 12),
+    legend.key.size = unit (3.5, "mm"),
+    plot.title = element_text (size = 13),
+    plot.margin=unit(c(1,1,1,1), 'mm'))
+
+ggsave ("Figures/FigXC_nutr_Malawi.eps", width = 100, height = 60, units = "mm")
 
 # sierra leone ----
 
 sl_landings <- readRDS("Data/SLE_landings_IHH.Rds")
 
-# john wanted top industrial vs. artisanal
-sl_top_sector <- sl_landings %>%
-  filter (year == 2017) %>%
-  #summarise (tonnes = sum(catch_mt, na.rm = TRUE)) %>%
-  #ungroup() %>%
-  group_by (sector) %>%
+sl_top <- sl_landings %>%
+  filter (year == 2017, !species %in% c("ND", "Mixed Species", "Marine species NEI")) %>%
+  group_by (species) %>%
+  summarise (catch_mt = sum(catch_mt, na.rm = TRUE)) %>%
   slice_max (catch_mt, n=4)
 
-# ss is E. fim, Sard, P. elongatus.. Large is sard, c. rhoncus, G. decadactylus for 2017. same for overall years. 
-
-# plot with facet
-sl_facet <- spp_nutr %>%
-  filter (!nutrient %in% c("Selenium", "Protein"), 
-          species %in% sl_top_sector$species) %>%
-  group_by (species) %>%
-  mutate (micronutrient_density = sum (perc_rni),
-          spp_short = ifelse (
-            grepl(" ", species),
-            paste0 (substr(species, 1, 1), ". ", str_split_fixed (species, " ", 2)[,2]),
-            species)
-  ) %>% 
-  ungroup() %>%
-  mutate (sector = case_when (
-    species %in% c("Sardinella", "Ethmalosa fimbriata", "Pseudotolithus elongatus") ~ "Small-scale",
-    TRUE ~ "Large-scale"
-  ))
-
- # make fake additional sardinella
-ls_sard <- sl_facet %>% filter (species == "Sardinella") %>% mutate (sector = "Large-scale")
-
-sl_facet <- rbind (sl_facet, ls_sard)
-sl_facet$sector <- factor (sl_facet$sector, levels = c ("Small-scale", "Large-scale"))
-
-
-png ("Figures/SL_spp_nutr_dodge_bar_sector.png", width = 6, height = 4, units = "in", res = 300)
- sl_facet %>% 
-  ggplot (aes (x = reorder(spp_short, -micronutrient_density), fill = nutrient, y = perc_rni)) +
-  geom_col (position = "dodge") +
-  theme_bw() +
-  labs (x = "", y = "% Child RNI met per 100g serving", fill = "Nutrient") +
-  facet_wrap (~sector, scales = "free_x") +
-  #ylim (c(0,100)) +
-  ggtitle ("Nutrient content of top species by volume") +
+plot_colorful_spp_nutr_dodge_bar(sl_top$species, Selenium = FALSE) +
+  ggtitle ("Nutrient content of top species") +
+  # scale_x_discrete(labels = c ()) +
+  labs (y = "% Child RNI met")+
+  scale_fill_brewer(palette = "Set1") +
   theme ( 
-    axis.text.y = element_text (size = 13),
-    axis.text.x = element_text (size = 11, angle = 45, vjust =1, hjust = 1),
-    axis.title = element_text (size = 13),
-    strip.text = element_text(size = 13),
-    legend.text = element_text (size = 12),
-    legend.title = element_text (size = 13),
-    plot.title = element_text (size = 16))
-dev.off()
+    axis.text = element_text (size = 11),
+    axis.title = element_text (size = 12),
+    legend.text = element_text (size = 10),
+    legend.title = element_text (size = 12),
+    legend.key.size = unit (3.5, "mm"),
+    plot.title = element_text (size = 13),
+    plot.margin=unit(c(1,1,1,1), 'mm'))
 
+ggsave ("Figures/FigXC_nutr_SierraLeone.eps", width = 100, height = 60, units = "mm")
 
 # indonesia top spp ----
 indo_top <- sau_2019 %>%
   filter (country == "Indonesia") %>%
   group_by (species) %>%
   summarise (tot = sum (tonnes)) %>%
-  slice_max (tot, n = 5)
+  slice_max (tot, n = 7)
 
-png ("Figures/Indo_top_spp_nutr_dodge_bar.png", width = 5, height = 4, units = "in", res = 300)
-print(
   plot_colorful_spp_nutr_dodge_bar(indo_top$species, Selenium = FALSE) +
     ggtitle ("Nutrient content of top species") +
     # scale_x_discrete(labels = c ()) +
     labs (y = "% Child RNI met")+
+    scale_fill_brewer(palette = "Set1") +
     theme ( 
       axis.text = element_text (size = 11),
       axis.title = element_text (size = 12),
@@ -186,8 +158,8 @@ print(
       legend.key.size = unit (3.5, "mm"),
       plot.title = element_text (size = 13),
       plot.margin=unit(c(1,1,1,1), 'mm'))
-)
-dev.off()
+# )
+# dev.off()
 
 ggsave ("Figures/FigXC_nutr_Indo.eps", width = 100, height = 60, units = "mm")
 
@@ -209,33 +181,59 @@ peru_top <- sau_2019 %>%
   summarise (tot = sum (tonnes)) %>%
   slice_max (tot, n = 5)
 
-png ("Figures/Peru_top_spp_nutr_dodge_bar.png", width = 5, height = 4, units = "in", res = 300)
-print(
+# png ("Figures/Peru_top_spp_nutr_dodge_bar.png", width = 5, height = 4, units = "in", res = 300)
+# print(
+# )
+# dev.off()
+
   plot_colorful_spp_nutr_dodge_bar(peru_top$species, Selenium = FALSE) +
-    ggtitle ("Nutrient content of top species by volume") +
-    # scale_x_discrete(labels = c ())
+    ggtitle ("Nutrient content of top species") +
+    # scale_x_discrete(labels = c ()) +
+    labs (y = "% Child RNI met")+
+    scale_fill_brewer(palette = "Set1") +
     theme ( 
-      axis.text.y = element_text (size = 13),
-      axis.text.x = element_text (size = 11),
-      axis.title = element_text (size = 13),
-      legend.text = element_text (size = 12),
-      legend.title = element_text (size = 13),
-      plot.title = element_text (size = 16))
-)
-dev.off()
+      axis.text = element_text (size = 11),
+      axis.title = element_text (size = 12),
+      legend.text = element_text (size = 10),
+      legend.title = element_text (size = 12),
+      legend.key.size = unit (3.5, "mm"),
+      plot.title = element_text (size = 13),
+      plot.margin=unit(c(1,1,1,1), 'mm'))
+
+  
+  ggsave ("Figures/FigXC_nutr_Peru.eps", width = 100, height = 60, units = "mm")
+
 
 # chile ----
 chl_top <- chl_landings %>%
   group_by (species) %>%
   summarise (tot = sum (catch_mt)) %>%
-  slice_max (tot, n = 3)
+  slice_max (tot, n = 4)
+  
+  
+  plot_colorful_spp_nutr_dodge_bar(chl_top$species, Selenium = FALSE) +
+    ggtitle ("Nutrient content of top species") +
+    # scale_x_discrete(labels = c ()) +
+    labs (y = "% Child RNI met")+
+    scale_fill_brewer(palette = "Set1") +
+    theme ( 
+      axis.text = element_text (size = 11),
+      axis.title = element_text (size = 12),
+      legend.text = element_text (size = 10),
+      legend.title = element_text (size = 12),
+      legend.key.size = unit (3.5, "mm"),
+      plot.title = element_text (size = 13),
+      plot.margin=unit(c(1,1,1,1), 'mm'))
+  
+  
+  ggsave ("Figures/FigXC_nutr_Chile.eps", width = 100, height = 60, units = "mm")
 
 # algae is crazy
 chl_top_alg <- chl_landings %>%
   filter (commercial_group == "Algae") %>%
   group_by (species) %>%
   summarise (tot = sum (catch_mt)) %>%
-  slice_max (tot, n = 3)
+  slice_max (tot, n = 4)
 
 png ("Figures/Chl_top_spp_nutr_dodge_bar_alg.png", width = 5, height = 4, units = "in", res = 300)
 print(
@@ -252,18 +250,3 @@ print(
 )
 dev.off()
 
-
-png ("Figures/Chl_top_spp_nutr_dodge_bar_non-alg.png", width = 5, height = 4, units = "in", res = 300)
-print(
-  plot_colorful_spp_nutr_dodge_bar(chl_top$species, Selenium = FALSE) +
-    ggtitle ("Nutrient content of top species by volume") +
-    # scale_x_discrete(labels = c ())
-    theme ( 
-      axis.text.y = element_text (size = 13),
-      axis.text.x = element_text (size = 11),
-      axis.title = element_text (size = 13),
-      legend.text = element_text (size = 12),
-      legend.title = element_text (size = 13),
-      plot.title = element_text (size = 16))
-)
-dev.off()
