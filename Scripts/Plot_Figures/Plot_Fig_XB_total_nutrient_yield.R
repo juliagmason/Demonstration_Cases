@@ -42,7 +42,7 @@ plot_sau_rnis_met <- function (country_name, Selenium = FALSE) {
   if (country_name == "Chile") {
     
     landings <- chl_landings %>%
-      filter (year == 2021) %>%
+      filter (year == 2021, !commercial_group == "Algae") %>%
       # cut to 8 commercial groups
       mutate (commercial_group = case_when (
         commercial_group %in% c("Flatfishes", "Scorpionfishes", "Cod-likes", "Salmon, smelts, etc") ~ "Other fishes & inverts",
@@ -113,7 +113,7 @@ plot_sau_rnis_met("Indonesia") +
   scale_fill_brewer(palette = "Dark2") +
   guides (fill = "none") +
   # abbreviate nutrient names
-  scale_x_discrete (labels = c ("Calcium", "Iron", "Omgega 3", "Vit. A", "Zinc" )) +
+  scale_x_discrete (labels = c ("Calcium", "Iron", "Omega 3", "Vit. A", "Zinc" )) +
   ggtitle ("Total nutrient yield") +
   labs (y = "Child RNI equiv., millions") +
   theme (axis.text.y = element_text (size = 11),
@@ -123,3 +123,85 @@ plot_sau_rnis_met("Indonesia") +
          plot.margin=unit(c(1,1,1,1), 'mm'))
 
 ggsave ("Figures/FigXB_TNY_Indo.eps", width = 74, height = 60, units = "mm")
+
+# Peru ----
+plot_sau_rnis_met("Peru") +
+  scale_fill_brewer(palette = "Dark2") +
+  guides (fill = "none") +
+  # abbreviate nutrient names
+  scale_x_discrete (labels = c ("Calcium", "Iron", "Omega 3", "Vit. A", "Zinc" )) +
+  ggtitle ("Total nutrient yield") +
+  labs (y = "Child RNI equiv., millions") +
+  theme (axis.text.y = element_text (size = 11),
+         axis.text.x = element_text (size = 9),
+         axis.title = element_text (size = 12),
+         plot.title = element_text (size = 13),
+         plot.margin=unit(c(1,1,1,1), 'mm'))
+
+ggsave ("Figures/FigXB_TNY_Peru.eps", width = 74, height = 60, units = "mm")
+
+# Sierra Leone ----
+# library(scales)
+# show_col(brewer_pal(palette = "Dark2")(8))
+# show_col(brewer_pal(palette = "GnBu")(10))
+
+plot_sau_rnis_met("Sierra Leone")  +
+    scale_fill_manual(values = c("#1B9E77", "#D95F02", "#7570b3", "#66A61E", "#E6AB02", "#A6761D", "#666666")) +
+  scale_x_discrete (labels = c ("Calcium", "Iron", "Omega 3", "Vit. A", "Zinc" )) +
+  ggtitle ("Total nutrient yield") +
+  labs (y = "Child RNI equiv., millions") +
+  theme (axis.text.y = element_text (size = 11),
+         axis.text.x = element_text (size = 9),
+         axis.title = element_text (size = 12),
+         plot.title = element_text (size = 13),
+         plot.margin=unit(c(1,1,1,1), 'mm'))
+ggsave ("Figures/FigXB_TNY_SL.eps", width = 74, height = 60, units = "mm")
+
+# Chile ----
+plot_sau_rnis_met("Chile") +
+  scale_fill_brewer(palette = "Dark2") +
+  guides (fill = "none") +
+  # abbreviate nutrient names
+  scale_x_discrete (labels = c ("Calcium", "Iron", "Omega 3", "Vit. A", "Zinc" )) +
+  ggtitle ("Total nutrient yield") +
+  labs (y = "Child RNI equiv., millions") +
+  theme (axis.text.y = element_text (size = 11),
+         axis.text.x = element_text (size = 9),
+         axis.title = element_text (size = 12),
+         plot.title = element_text (size = 13),
+         plot.margin=unit(c(1,1,1,1), 'mm'))
+
+ggsave ("Figures/FigXB_TNY_Chile.eps", width = 74, height = 60, units = "mm")
+
+# Malawi ----
+# plot separately
+# ssf has 2018 but industrial most recent is 2017
+# Clean_Malawi_landings.R
+mal_top <- readRDS("Data/malawi_landings_top.Rds")
+
+mal_nutr <- mal_top %>%
+  filter (Year == 2017) %>%
+  mutate (rni_equivalents = pmap (list (species = species, amount = tonnes, country_name = "Malawi"), calc_children_fed_func)) %>%
+  unnest(cols = c(rni_equivalents),  names_repair = "check_unique") 
+
+# keep colors consistent, 
+#show_col(brewer_pal(palette = "Dark2")(6))
+
+mal_nutr %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  ggplot (aes (x = nutrient, y = rni_equivalents/1000000, fill = comm_name)) +
+  geom_col() +
+  scale_fill_manual(values = c("#D95F02", "#7570B3", "#e7298a", "#66A61E", "#E6AB02")) +
+  # abbreviate nutrient names
+  scale_x_discrete (labels = c ("Calcium", "Iron", "Omega 3", "Vit. A", "Zinc" )) +
+  ggtitle ("Total nutrient yield") +
+  labs (y = "Child RNI equiv., millions") +
+  theme_bw() +
+  labs (x = "", y = "Child RNI equivalents, millions", fill = "Comm. name") + 
+  theme (axis.text.y = element_text (size = 11),
+         axis.text.x = element_text (size = 9),
+         axis.title = element_text (size = 12),
+         plot.title = element_text (size = 13),
+         plot.margin=unit(c(1,1,1,1), 'mm'))
+
+ggsave ("Figures/FigXB_TNY_Malawi.eps", width = 74, height = 60, units = "mm")
