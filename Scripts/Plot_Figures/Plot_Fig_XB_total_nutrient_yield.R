@@ -146,6 +146,7 @@ ggsave ("Figures/FigXB_TNY_Peru.eps", width = 74, height = 60, units = "mm")
 # show_col(brewer_pal(palette = "GnBu")(10))
 
 plot_sau_rnis_met("Sierra Leone")  +
+  guides (fill = "none") +
     scale_fill_manual(values = c("#1B9E77", "#D95F02", "#7570b3", "#66A61E", "#E6AB02", "#A6761D", "#666666")) +
   scale_x_discrete (labels = c ("Calcium", "Iron", "Omega 3", "Vit. A", "Zinc" )) +
   ggtitle ("Total nutrient yield") +
@@ -190,6 +191,7 @@ mal_nutr <- mal_top %>%
 mal_nutr %>%
   filter (!nutrient %in% c("Protein", "Selenium")) %>%
   ggplot (aes (x = nutrient, y = rni_equivalents/1000000, fill = comm_name)) +
+  guides (fill = "none") +
   geom_col() +
   scale_fill_manual(values = c("#D95F02", "#7570B3", "#e7298a", "#66A61E", "#E6AB02")) +
   # abbreviate nutrient names
