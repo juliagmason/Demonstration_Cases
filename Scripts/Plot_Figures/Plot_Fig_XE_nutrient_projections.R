@@ -65,5 +65,43 @@ plot_child_RNI_proj("Indonesia", RCP = "RCP60") +
 
 ggsave ("Figures/FigXE_projected_Indo.eps", width = 97, height = 70, units = "mm")
 
+plot_child_RNI_proj("Chile", RCP = "RCP60") +
+  labs (y = "Child RNI equiv., millions", x = "", col = "Mgmt. scenario") +
+  ggtitle ("Projected nutrient yield, RCP 6.0") +
+  scale_x_continuous (breaks = c(2020, 2050, 2090)) +
+  theme ( 
+    axis.text.x = element_text (size = 9),
+    axis.text.y = element_text (size = 9),
+    axis.title = element_text (size = 12),
+    legend.text = element_text (size = 9),
+    legend.title = element_text (size = 9),
+    legend.position = "bottom",
+    legend.margin = margin (t = -25),
+    strip.text = element_text (size = 9, margin = margin(0.5,0.5,0.5,0.5, "mm")),
+    plot.title = element_text (size = 13),
+    plot.margin=unit(c(1,1,1,1), 'mm'),
+    panel.grid.minor = element_blank())
+
+ggsave ("Figures/FigXE_projected_Chile.eps", width = 97, height = 70, units = "mm")
+
+plot_child_RNI_proj("Sierra Leone", RCP = "RCP60") +
+  labs (y = "Child RNI equiv., millions", x = "", col = "Mgmt. scenario") +
+  ggtitle ("Projected nutrient yield, RCP 6.0") +
+  scale_x_continuous (breaks = c(2020, 2050, 2090)) +
+  theme ( 
+    axis.text.x = element_text (size = 9),
+    axis.text.y = element_text (size = 9),
+    axis.title = element_text (size = 12),
+    legend.text = element_text (size = 9),
+    legend.title = element_text (size = 9),
+    legend.position = "bottom",
+    legend.margin = margin (t = -25),
+    strip.text = element_text (size = 9, margin = margin(0.5,0.5,0.5,0.5, "mm")),
+    plot.title = element_text (size = 13),
+    plot.margin=unit(c(1,1,1,1), 'mm'),
+    panel.grid.minor = element_blank())
+
+ggsave ("Figures/FigXE_projected_SierraLeone.eps", width = 97, height = 70, units = "mm")
+
 # Apply to all countries, all RCPs for supplement
 pmap (expand_grid(country_name = c ("Chile", "Peru", "Sierra Leone", "Indonesia"), RCP = c("RCP26", "RCP45", "RCP60", "RCP85")), plot_child_RNI_proj)                   
