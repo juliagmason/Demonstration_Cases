@@ -106,7 +106,7 @@ sau_20yr_nutricast_clip %>%
     geom_area (data = filter(upside_ts_bau_agg_comm_group, country == "Indonesia", rcp == "RCP60"), aes (fill = commercial_group), position = "stack") +
     
     # add line of aggregated past landings to show what's missing
-    geom_line (data = filter (sau_20yr_agg, country == "Indonesia")) +
+    geom_line (data = filter (sau_20yr_agg, country == "Indonesia"), lty = 2) +
     #guides (fill = "none") +
     labs (y ="Catch, million tonnes", x = "", fill = "Commercial group")+
   theme_bw() +
@@ -124,10 +124,6 @@ sau_20yr_nutricast_clip %>%
     # qualitative color scale for species, Dark1
     scale_fill_brewer(palette = "Dark2") +
     ggtitle ("Indonesia: Recent and projected total landings (RCP 6.0)")
-  
-  # png (paste0("Figures/contextual_agg_catch_area_comm_group_2scen", country_name,".png"), width = 6, height = 3, units = "in", res = 300)
-  # print (p_plot)
-  # dev.off()
   
   ggsave ("Figures/FigXA_contextual_Indo.eps", width = 174, height = 60, units = "mm")
 
@@ -149,7 +145,7 @@ sau_20yr_nutricast_clip %>%
     geom_area (data = filter(upside_ts_bau_agg_comm_group, country == "Peru", rcp == "RCP60"), aes (fill = commercial_group), position = "stack") +
     
     # add line of aggregated past landings to show what's missing
-    geom_line (data = filter (sau_20yr_agg, country == "Peru")) +
+    geom_line (data = filter (sau_20yr_agg, country == "Peru"), lty = 2) +
     #guides (fill = "none") +
     labs (y ="Catch, million tonnes", x = "", fill = "Commercial group")+
     theme_bw() +
@@ -311,4 +307,40 @@ ggsave ("Figures/FigXA_contextual_Chile.eps", width = 174, height = 60, units = 
 
   ggsave ("Figures/FigXA_contextual_SierraLeone.eps", width = 174, height = 60, units = "mm") 
 
+  # Malawi ----
+
+# different format bc no forecast data
+
+  # landings with just the top 5 species for clarity
+mal_top <- readRDS("Data/malawi_landings_top.Rds")
+mal_top$sector <- factor (mal_top$sector, levels = c("Small-scale", "Large-scale"))
   
+  
+# trick color scale so we keep species consistent
+library (scales)
+show_col(brewer_pal(palette = "Dark2")(6))
+  
+  
+  
+mal_top %>%
+    group_by (comm_name, sector, Year) %>%
+    summarise (tonnes = sum (tonnes, na.rm = TRUE)) %>%
+    ggplot (aes (x= Year, y = tonnes/1000,fill = comm_name)) +
+    geom_area(position = "stack") +
+    facet_wrap (~sector, scales = "free_y", nrow = 1) +
+    #scale_fill_brewer(palette = "Dark2") +
+    scale_fill_manual(values = c("#D95F02", "#7570b3", "#e7298a", "#66A61E", "#E6AB02")) +
+    theme_bw() +
+    labs (y = "Catch, thousand tonnes", fill = "Species", x = "") +
+    ggtitle("Malawi: Recent landings by sector") +
+  theme (axis.text = element_text (size = 11),
+         axis.title = element_text (size = 12),
+         legend.text = element_text (size = 11),
+         legend.title = element_text (size = 12),
+         legend.key.size = unit (3.5, "mm"),
+         legend.margin=margin(1,1,1,2),
+         legend.box.margin=margin(-10,-10,-10,-10),
+         plot.title = element_text(size = 13),
+         plot.margin=unit(c(1,1,1,1), 'mm')) 
+
+ggsave ("Figures/FigXA_contextual_Malawi.eps", width = 174, height = 60, units = "mm") 
