@@ -2,6 +2,8 @@
 # 2 14 22
 # JGM
 
+### OLD, use calculate_projected_nutritional_upsides.R instead ###
+
 library (tidyverse)
 
 # smaller, just 3 management scenarios. now has mexico
