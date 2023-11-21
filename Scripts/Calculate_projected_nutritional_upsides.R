@@ -5,10 +5,263 @@
 # Calculate the ratio of projected catch to a baseline period for each year, under each scenario. translate that catch into nutrient yield
 
 library (tidyverse)
-library (beepr) # calc_nutr_upside_tonnes_annual takes many minutes!
+library (stringr) # for wrangling species, family, genus names
+#remotes::install_github("ropensci/rfishbase")
+library (rfishbase) # for interpolating missing species
+library (beepr) # calc_nutr_upside_tonnes_annual takes many minutes
 
 # major update 3/27/23 is that I'm going to calculate children fed from current landings, and then multiply ratios for nutrient yield. doing this to preserve matched species. but maybe doesn't matter?
 # 11/21/23 overhauling code--this is calculating, not plotting. bring in calculation of catch upsides from calculate_nutritional_upsides.R, which was misnamed, only calculated catch upsides there
+
+
+# projection data from free et al. 2020. smaller version to reduce processing time, just has 3 management scenarios
+ds_spp <- readRDS("Data/Free_etal_proj_smaller.Rds")
+
+# 2/1/23 moving code from regional team priority spp
+# 9/16/23 update: changing baseline year to 2017-2021. Weird dynamics in the first years of the model are creating strange results
+
+# calculate catch upside in terms of relation to baseline catch, by period----
+# to be able to use with our updated landings data, instead I want to calculate what the catch in 2050 is relative to baseline under the different scenarios. 
+
+catch_upside_relative <-  ds_spp %>%
+  filter (scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), catch_mt > 0) %>%
+  mutate (
+    # baseline and mid century and end century
+    period = case_when (
+      year %in% c(2017:2021) ~ "2017-2021",
+      year %in% c(2051:2060) ~ "2051-2060",
+      year %in% c(2091:2100) ~ "2091-2100")) %>%
+  filter (!is.na (period)) %>%
+  group_by (country, rcp, scenario, period, species) %>%
+  summarise (catch_mt = mean (catch_mt, na.rm = TRUE)) %>%
+  ungroup() %>%
+  group_by (country, rcp, species) %>%
+  reframe (bau_ratio_midcentury = catch_mt[scenario == "No Adaptation" & period == "2051-2060"]/ catch_mt[scenario == "No Adaptation" & period == "2017-2021"],
+           bau_ratio_endcentury = catch_mt[scenario == "No Adaptation" & period == "2091-2100"]/ catch_mt[scenario == "No Adaptation" & period == "2017-2021"],
+           mey_ratio_midcentury = catch_mt[scenario == "Productivity Only" & period == "2051-2060"]/ catch_mt[scenario == "No Adaptation" & period == "2017-2021"],
+           mey_ratio_endcentury = catch_mt[scenario == "Productivity Only" & period == "2091-2100"]/ catch_mt[scenario == "No Adaptation" & period == "2017-2021"],
+           adapt_ratio_midcentury = catch_mt[scenario == "Full Adaptation" & period == "2051-2060"]/ catch_mt[scenario == "No Adaptation" & period == "2017-2021"],
+           adapt_ratio_endcentury = catch_mt[scenario == "Full Adaptation" & period == "2091-2100"]/ catch_mt[scenario == "No Adaptation" & period == "2017-2021"]
+  )
+
+saveRDS (catch_upside_relative, file = "Data/nutricast_upside_relative.Rds")
+
+# calculate annual catch upside for full time series----
+
+# probably can do this with brackets but just make a baseline value separately
+ds_spp_baseline <- ds_spp %>%
+  filter (scenario %in% "No Adaptation", catch_mt > 0, between (year, 2017, 2021)) %>%
+  group_by (country, rcp, scenario, species) %>%
+  summarise (baseline_catch = mean (catch_mt, na.rm = TRUE)) %>%
+  ungroup()
+
+# then need to make 2 more fake ones with the other scenarios??
+ds_spp_baseline_mey <- ds_spp_baseline %>%
+  mutate (scenario = "Productivity Only")
+
+ds_spp_baseline_adapt <- ds_spp_baseline %>%
+  mutate (scenario = "Full Adaptation")
+
+ds_spp_baseline <- rbind (ds_spp_baseline, ds_spp_baseline_mey, ds_spp_baseline_adapt)
+
+catch_upside_relative_annual <-  ds_spp %>%
+  filter (scenario %in% c("No Adaptation", "Productivity Only", "Full Adaptation"), catch_mt > 0, year > 2021) %>%
+  left_join (ds_spp_baseline, by = c("country", "rcp", "scenario", "species")) %>%
+  mutate (catch_ratio = catch_mt / baseline_catch) %>%
+  select (country, rcp, scenario, year, species, baseline_catch, catch_mt, catch_ratio)
+
+
+saveRDS (catch_upside_relative_annual, file = "Data/nutricast_upside_relative_annual_ratio.Rds")
+
+# repair missing species ----
+# moving from check_SAU_nutricast_species.R
+
+# match to family, get family info from fb?
+# species table just has family code. match from "families" table
+famcodes_fb <- fb_tbl("families") %>%
+  select ("FamCode", "Family")
+
+famcodes_slb <- fb_tbl("families", "sealifebase") %>%
+  select ("FamCode", "Family") 
+# these have overlap with fb
+
+
+nutricast_fams_fb <- fb_tbl ("species") %>%
+  mutate(species = paste(Genus, Species)) %>%
+  filter (species %in% catch_upside_relative$species) %>%
+  left_join (famcodes_fb, by = "FamCode") %>%
+  select (species, Genus, Family)
+
+nutricast_fams_slb <- fb_tbl ("species", "sealifebase") %>%
+  mutate(species = paste(Genus, Species)) %>%
+  filter (species %in% catch_upside_relative$species) %>%
+  left_join (famcodes_slb, by = "FamCode") %>%
+  select (species, Genus, Family)
+
+nutricast_fams <- rbind (nutricast_fams_fb, nutricast_fams_slb)
+
+catch_upside_relative_fam <- catch_upside_relative %>%
+  left_join (nutricast_fams, by = "species") %>%
+  # grab Genus even if not in fishbase
+  mutate (Genus = 
+            case_when (is.na (Genus) ~ word(species, 1),
+                       TRUE ~ Genus)
+  )
+
+# relate to country landings data
+# as of 10/25/22 just 2019 data, suggested by Deng Palomares. Clipped in SAU_explore.R
+# just grab species names
+sau_2019_taxa <- readRDS("Data/SAU_2019_taxa.Rds")
+sau_2019_country_spp <- readRDS("Data/SAU_2019.Rds") %>%
+  ungroup() %>%
+  select (country, species) %>%
+  distinct()
+
+chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
+chl_landings_spp <- chl_landings %>%
+  filter (year == 2021) %>%
+  mutate (country = "Chile") %>%
+  select (country, species) %>%
+  distinct()
+
+# 6/2/23 updating with SierraLeone IHH data
+sl_landings_ihh <- readRDS("Data/SLE_landings_IHH.Rds")
+sl_ihh_spp <- sl_landings_ihh %>%
+  mutate (country == "Sierra Leone") %>%
+  select (country, species) %>%
+  distinct()
+
+# Function to take landed species name and match to nutricast spp by genus or family  ----
+
+match_nutricast_taxa <- function (species_name, country_name) {
+  # send SAU or lande species name into nutricast df
+  
+  catch_upside_country <- catch_upside_relative_fam %>%
+    filter (country == country_name) 
+  
+  # if identified to species level, clip to Genus
+  if (grepl(" ", species_name)) {species_name = word(species_name, 1)}
+  
+  if (grepl ("ae", str_sub(species_name, -2, -1))) {
+    match <- filter (catch_upside_country, Family == species_name)
+    
+    match_mean <- match %>%
+      group_by (rcp, Family) %>%
+      # take mean of all the ratio columns
+      summarise (across(bau_ratio_midcentury:adapt_ratio_endcentury, mean, na.rm = TRUE)) %>%
+      #rename (species = Family) %>%
+      # remove to avoid name duplication
+      select (-Family)
+    
+    
+  } else {
+    match <- filter (catch_upside_country, Genus == species_name)
+    
+    match_mean <- match %>%
+      group_by (rcp, Genus) %>%
+      # take mean of all the ratio columns
+      summarise (across(bau_ratio_midcentury:adapt_ratio_endcentury, mean, na.rm = TRUE)) %>%
+      #rename (species = Genus)
+      select (-Genus)
+    
+  }
+  
+  
+  return (tibble(match_mean))
+  
+}
+
+# Function to grab missing species that don't match nutricast ----
+check_missing_nutricast_spp <- function (country_name) {
+  
+  if (country_name == "Chile") {
+    
+    landed_spp <- chl_landings_spp 
+  } else if (country_name == "Sierra Leone") {
+    landed_spp <- sl_ihh_spp
+  } else {
+    
+    landed_spp <- sau_2019_country_spp %>% filter (country == country_name)
+  }
+  
+  
+  nutricast_country <- catch_upside_relative %>% filter (country == country_name)
+  
+  landed_missing <- landed_spp %>%
+    filter (!species %in% nutricast_country$species) %>%
+    distinct()
+  
+  return (tibble(landed_missing))
+  
+}
+
+nutricast_missing_spp <- map_dfr(as.list (c("Chile", "Peru", "Indonesia", "Sierra Leone")), check_missing_nutricast_spp)
+
+nutricast_repair <- nutricast_missing_spp %>%
+  mutate (nutricast = pmap(list(species_name = species, country_name = country), match_nutricast_taxa)
+  ) %>% 
+  unnest (cols = c(nutricast), names_repair = "check_unique")
+
+saveRDS(nutricast_repair, file = "Data/catch_upside_relative_repair_missing.Rds")
+
+# also do this with annual ts ----
+nutricast_annual <- readRDS ("Data/nutricast_upside_relative_annual_ratio.Rds")
+
+
+nutricast_annual_fam <- nutricast_annual %>%
+  left_join (nutricast_fams, by = "species") %>%
+  # grab Genus even if not in fishbase
+  mutate (Genus = 
+            case_when (is.na (Genus) ~ word(species, 1),
+                       TRUE ~ Genus)
+  )
+
+# for this one we only need to mutate one column, catch_ratio
+match_nutricast_taxa_annual <- function (species_name, country_name) {
+  # send SAU species name into nutricast df
+  
+  catch_upside_country <- nutricast_annual_fam %>%
+    filter (country == country_name) 
+  
+  # if identified to species level, clip to Genus
+  if (grepl(" ", species_name)) {species_name = word(species_name, 1)}
+  
+  # if identified at family level, choose family
+  if (grepl ("ae", str_sub(species_name, -2, -1))) {
+    match <- filter (catch_upside_country, Family == species_name)
+    
+    match_mean <- match %>%
+      group_by (rcp, scenario, year, Family) %>%
+      # take mean of all the ratio columns
+      summarise (catch_ratio = mean (catch_ratio, na.rm = TRUE)) %>%
+      #rename (species = Family) %>%
+      # remove to avoid name duplication
+      select (-Family)
+    
+    
+  } else {
+    match <- filter (catch_upside_country, Genus == species_name)
+    
+    match_mean <- match %>%
+      group_by (rcp, scenario, year, Genus) %>%
+      # take mean of all the ratio columns
+      summarise (catch_ratio = mean (catch_ratio, na.rm = TRUE)) %>%
+      #rename (species = Genus)
+      select (-Genus)
+    
+  }
+  
+  
+  return (tibble(match_mean))
+  
+}
+
+nutricast_repair_annual <- nutricast_missing_spp %>%
+  mutate (nutricast = pmap(list(species_name = species, country_name = country), match_nutricast_taxa_annual)
+  ) %>% 
+  unnest (cols = c(nutricast), names_repair = "check_unique")
+
+saveRDS(nutricast_repair_annual, file = "Data/nutricast_upside_relative_annual_repair_missing.Rds")
 
 
 # function for converting catch in mt to children fed ----
