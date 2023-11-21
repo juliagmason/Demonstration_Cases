@@ -18,9 +18,6 @@ download_2019_full <- read.csv("Data/SAU EEZ 2019.csv")%>% # this doesn't have i
   mutate (country = case_when (grepl ("Mex", area_name) ~ "Mexico",
                                grepl ("Chile", area_name) ~ "Chile",
                                TRUE ~ area_name))
-#         ) %>%
-# # remove Chile and Sierra Leone. really should only be Peru now. 
-# filter (country == "Peru")
 
 
 indo_2019_download_full <- read.csv("Data/SAU EEZ indonesia.csv") %>%
@@ -45,18 +42,13 @@ sl_ihh_landings <- readRDS("Data/SLE_landings_IHH.Rds")
 
 
 # bring in forecast data----
-# baseline -- most recent year of data from each of the data sources. from plot_Contextual_landings_forecasts.R
+# baseline -- most recent year of data from each of the data sources. from calculate_projected_nutritional_upsides.R
 full_baseline <- readRDS("Data/baseline_catch_sau_chl_ihh.Rds")
 
-# ratio of baseline (2012-2021) to future catch for each year/scenario calculate_nutritional_upsides.R
-catch_upside_annual <- readRDS ("Data/nutricast_upside_relative_annual_ratio.Rds")
-
-# repaired missing species, this is in a slightly different format (check_sau_nutricast_species.R)
-catch_upside_annual_missing <- readRDS("Data/nutricast_upside_relative_annual_repair_missing.Rds")
+# ratio of baseline (2012-2021) to future catch for each year/scenario calculate_projected_nutritional_upsides.R
+catch_upside_annual <- readRDS ("Data/catch_upside_relative_annual_repaired.Rds")
 
 catch_upside_ts <- catch_upside_annual %>%
-  select (country, species, rcp, scenario, year, catch_ratio) %>%
-  rbind(catch_upside_annual_missing) %>%
   # join to baseline
   inner_join(full_baseline, by = c ("country", "species")) %>%
   mutate (tonnes = catch_ratio * bl_tonnes)
@@ -177,4 +169,146 @@ sau_20yr_nutricast_clip %>%
     ggtitle ("Peru: Recent and projected total landings (RCP 6.0)")
   
   ggsave ("Figures/FigXA_contextual_Peru.eps", width = 174, height = 60, units = "mm")
- 
+  
+  # Chile ----
+  chl_landings_agg_clip_commgroup <- chl_landings %>%
+    filter (!commercial_group == "Algae") %>%
+    mutate (country = "Chile") %>%
+    # clips to nutricast spp
+    right_join (nutricast_spp, by = c("country", "species")) %>%
+    
+    # condense to 8 commercial groups
+    # cut to 8 comm groups
+    mutate (commercial_group = case_when (
+      commercial_group %in% c("Flatfishes", "Scorpionfishes", "Cod-likes") ~ "Other fishes & inverts",
+      TRUE ~ commercial_group
+    )) %>%
+    group_by (year, commercial_group) %>%
+    summarise (tonnes = sum (catch_mt))%>%
+    filter (!is.na(year)) %>%
+    ungroup()%>%
+    mutate (year = as.integer(year))
+  
+  # data frame of species and taxa/commercial group to match to nutricast data
+  chl_groups <- 
+    chl_landings %>%
+    select (species, commercial_group) %>%
+    mutate (commercial_group = case_when (
+      commercial_group %in% c("Flatfishes", "Scorpionfishes", "Cod-likes") ~ "Other fishes & inverts",
+      TRUE ~ commercial_group)) %>%
+    distinct ()
+  
+  # chile specific nutricast data, add taxa
+  upside_chile_groups <- catch_upside_ts %>%
+    filter (scenario == "No Adaptation", country == "Chile") %>%
+    inner_join (chl_groups, by = "species") %>%
+    group_by (country, rcp, year, commercial_group) %>%
+    summarise (tonnes = sum (tonnes))
+  
+  # line of aggregated landings
+  chl_landings_agg <- chl_landings %>%
+    group_by (year) %>%
+    summarise (tonnes = sum (catch_mt)) %>% 
+    ungroup() %>%
+    mutate (year = as.integer(year))
+  
+  # line of SAU landings?
+  sau_chl_landings <- sau_20yr_agg %>% 
+    filter (country == "Chile", year >= min(chl_landings$year))
+
+  chl_landings_agg_clip_commgroup %>%
+    ggplot (aes (x = year, y = tonnes/1000000)) +
+    geom_area(aes (fill = commercial_group), position = "stack") +
+    # add future landings
+    geom_area (data = filter (upside_chile_groups, rcp == "RCP60"), aes (fill = commercial_group), position = "stack") +
+    # add line of aggregated past landings to show what's missing
+    geom_line (data = chl_landings_agg ) +
+    # add line to show SAU landings
+    geom_line (data = sau_chl_landings, lty = 2) +
+    labs (y ="Catch, million tonnes", x = "", fill = "Commercial group")+
+    theme_bw() +
+    theme (axis.text = element_text (size = 11),
+           axis.title = element_text (size = 12),
+           legend.text = element_text (size = 11),
+           legend.title = element_text (size = 12),
+           legend.key.size = unit (3.5, "mm"),
+           legend.margin=margin(1,1,1,2),
+           legend.box.margin=margin(-10,-10,-10,-10),
+           plot.title = element_text(size = 13),
+           plot.margin=unit(c(1,1,1,1), 'mm')) +
+    # qualitative color scale for species, Dark1
+    scale_fill_brewer(palette = "Dark2") +
+    
+    ggtitle (paste0("Recent and projected total landings, ", "Chile")) 
+  
+ggsave ("Figures/FigXA_contextual_Chile.eps", width = 174, height = 60, units = "mm") 
+  
+
+# Sierra Leone ----
+  show_col(brewer_pal(palette = "Dark2")(8))
+  
+  sl_landings_agg_clip_commgroup <- sl_ihh_landings %>%
+    mutate (country = "Sierra Leone") %>%
+    #clip to nutricast
+    right_join (nutricast_spp, by = c("country", "species")) %>%
+    #rename (commercial_group = taxa) %>%
+    group_by (year, commercial_group) %>%
+    summarise (tonnes = sum (catch_mt, na.rm = TRUE))
+
+  sl_groups <- 
+    sl_ihh_landings %>%
+    select (species, commercial_group) %>%
+    distinct () 
+  
+  # SL specific nutricast data, add taxa
+  upside_sl_groups <- catch_upside_ts %>%
+    filter (scenario == "No Adaptation", country == "Sierra Leone") %>%
+    inner_join (sl_groups, by = "species") %>%
+    group_by (country, rcp, year, commercial_group) %>%
+    summarise (tonnes = sum (tonnes))
+  
+  
+  # full line of landings
+  ihh_agg_landings <- sl_ihh_landings %>%
+    #filter (sector == "Artisanal") %>%
+    group_by (year) %>%
+    summarise (tonnes = sum (catch_mt, na.rm = TRUE)) %>%
+    # take out 0 at 2018, confusing
+    filter (year < 2018)
+  
+  # line of SAU landings?
+  sau_sl_landings <- sau_20yr_agg %>% 
+    filter (country == "Sierra Leone", year >= min(ihh_agg_landings$year))
+  
+  
+  # trick colors
+  library(scales)
+  #show_col(hue_pal()(8))
+  
+  # plot past landings
+  sl_landings_agg_clip_commgroup %>%
+    ggplot (aes (x = year, y = tonnes/1000000)) +
+    geom_area(aes(fill = commercial_group), position = "stack") +
+    # add future landings
+    geom_area (data = filter (upside_sl_groups, rcp == "RCP60"), aes(fill = commercial_group), position = "stack") +
+    
+    # add line of aggregated past landings to show what's missing
+    geom_line (data = ihh_agg_landings ) +
+    geom_line (data = sau_sl_landings, lty = 2) +
+    labs (y ="Catch, million tonnes", x = "", fill = "Commercial group")+
+    theme_bw() +
+    theme (axis.text = element_text (size = 11),
+           axis.title = element_text (size = 12),
+           legend.text = element_text (size = 11),
+           legend.title = element_text (size = 12),
+           legend.key.size = unit (3.5, "mm"),
+           legend.margin=margin(1,1,1,2),
+           legend.box.margin=margin(-10,-10,-10,-10),
+           plot.title = element_text(size = 13),
+           plot.margin=unit(c(1,1,1,1), 'mm')) +
+    scale_fill_manual(values = c("#1B9E77", "#7570b3", "#66A61E", "#E6AB02", "#A6761D", "#666666")) +
+    ggtitle ("Sierra Leone: Recent and projected total landings (RCP 6.0)")
+
+  ggsave ("Figures/FigXA_contextual_SierraLeone.eps", width = 174, height = 60, units = "mm") 
+
+  
