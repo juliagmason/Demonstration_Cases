@@ -27,7 +27,7 @@ sau_10yr <- sau_full %>%
 
 sau_baseline <- sau_full %>%
   rename (species = scientific_name) %>%
-  filter (year == 2019) %>%
+  filter (year == 2019, country %in% c("Peru", "Indonesia")) %>%
   group_by (country, species) %>%
   summarise (bl_tonnes = sum (tonnes))
 
@@ -62,7 +62,7 @@ full_baseline <- rbind (sau_baseline, chl_baseline, sl_baseline)
 
 saveRDS(full_baseline, file = "Data/baseline_catch_sau_chl_ihh.Rds")
 
-full_baseline <- readRDS("DAta/baseline_catch_sau_chl_ihh.Rds")
+full_baseline <- readRDS("Data/baseline_catch_sau_chl_ihh.Rds")
 
 # Supplemental info: full landings trend and compare data sources ----
 # plot landings trend for contextual figure ----
