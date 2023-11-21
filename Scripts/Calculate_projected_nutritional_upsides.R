@@ -75,6 +75,7 @@ saveRDS (catch_upside_relative_annual, file = "Data/nutricast_upside_relative_an
 
 # repair missing species ----
 # moving from check_SAU_nutricast_species.R
+# these return JUST the missing species, so have to load both
 
 # match to family, get family info from fb?
 # species table just has family code. match from "families" table
@@ -125,8 +126,8 @@ chl_landings_spp <- chl_landings %>%
   distinct()
 
 # 6/2/23 updating with SierraLeone IHH data
-sl_landings_ihh <- readRDS("Data/SLE_landings_IHH.Rds")
-sl_ihh_spp <- sl_landings_ihh %>%
+sl_landings <- readRDS("Data/SLE_landings_IHH.Rds")
+sl_ihh_spp <- sl_landings %>%
   mutate (country == "Sierra Leone") %>%
   select (country, species) %>%
   distinct()
@@ -160,7 +161,7 @@ match_nutricast_taxa <- function (species_name, country_name) {
     match_mean <- match %>%
       group_by (rcp, Genus) %>%
       # take mean of all the ratio columns
-      summarise (across(bau_ratio_midcentury:adapt_ratio_endcentury, mean, na.rm = TRUE)) %>%
+      summarise (across(bau_ratio_midcentury:adapt_ratio_endcentury, \(x) mean (x, na.rm = TRUE))) %>%
       #rename (species = Genus)
       select (-Genus)
     
@@ -202,13 +203,23 @@ nutricast_repair <- nutricast_missing_spp %>%
   ) %>% 
   unnest (cols = c(nutricast), names_repair = "check_unique")
 
-saveRDS(nutricast_repair, file = "Data/catch_upside_relative_repair_missing.Rds")
+#saveRDS(nutricast_repair, file = "Data/catch_upside_relative_repair_missing.Rds")
 
-# also do this with annual ts ----
-nutricast_annual <- readRDS ("Data/nutricast_upside_relative_annual_ratio.Rds")
+# join
+catch_upside_repaired <- catch_upside_relative %>%
+  #match columns from missing species
+  select (country, species, rcp, bau_ratio_midcentury, bau_ratio_endcentury, mey_ratio_midcentury, mey_ratio_endcentury, adapt_ratio_midcentury, adapt_ratio_endcentury) %>%
+  rbind (nutricast_repair)
+
+saveRDS(catch_upside_repaired, file = "Data/catch_upside_relative_repaired.Rds")
 
 
-nutricast_annual_fam <- nutricast_annual %>%
+
+# repair missing for annual ts ----
+catch_upside_relative_annual <- readRDS ("Data/nutricast_upside_relative_annual_ratio.Rds")
+
+
+nutricast_annual_fam <- catch_upside_relative_annual %>%
   left_join (nutricast_fams, by = "species") %>%
   # grab Genus even if not in fishbase
   mutate (Genus = 
@@ -261,54 +272,78 @@ nutricast_repair_annual <- nutricast_missing_spp %>%
   ) %>% 
   unnest (cols = c(nutricast), names_repair = "check_unique")
 
-saveRDS(nutricast_repair_annual, file = "Data/nutricast_upside_relative_annual_repair_missing.Rds")
-
-
-# function for converting catch in mt to children fed ----
-# this will also bring in fishnutr data and RNI data
-source ("Scripts/Function_convert_catch_amt_children_fed.R")
-
-# landings data ----
-# Chile country specific 
-chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
-
-# sierra leone country specific
-sl_landings <- readRDS("Data/SLE_landings_IHH.Rds")
-
-
-# SAU data 
-# as of 10/25/22 just 2019 data, suggested by Deng Palomares. Clipped in SAU_explore.R
-sau_2019 <- readRDS("Data/SAU_2019.Rds")
-
-# request to plot current provisioning
-
-
-
-
-# plot as full time series ----
-# these are identical for the nutrients....
-# annual nutricast time series (calculate_nutritional_upside.R)
-catch_upside_annual <- readRDS ("Data/nutricast_upside_relative_annual_ratio.Rds")
-
-# repaired missing species, this is in a slightly different format (check_sau_nutricast_species.R)
-catch_upside_annual_missing <- readRDS("Data/nutricast_upside_relative_annual_repair_missing.Rds")
+#saveRDS(nutricast_repair_annual, file = "Data/nutricast_upside_relative_annual_repair_missing.Rds")
 
 # join
-catch_upside_annual_repaired <- catch_upside_annual %>%
+catch_upside_annual_repaired <- catch_upside_relative_annual %>%
   #match columns from missing species
   select (country, species, rcp, scenario, year, catch_ratio) %>%
-  rbind (catch_upside_annual_missing)
+  rbind (nutricast_repair_annual)
+
+saveRDS(catch_upside_annual_repaired, file = "Data/catch_upside_relative_annual_repaired.Rds")
+
+
+########################################################################################################################################################################
+# Relate ratios to landings data ----
+
+# create a new baseline dataframe using country-specific landings
+
+sau_2019 <- readRDS("Data/SAU_2019.Rds")
+
+# just grab peru and indonesia
+sau_baseline <- sau_2019 %>%
+  filter (country %in% c("Peru", "Indonesia")) %>%
+  group_by (country, species) %>%
+  summarise (bl_tonnes = sum (tonnes))
+
+# if not loaded above
+# chl landings
+# note: as of 6/6/23, have added commercial_group column but very preliminary, just lumped all the fish that weren't in SAU into "other"
+chl_landings <- readRDS ("Data/Chl_sernapesca_landings_compiled_2012_2021.Rds")
+
+chl_baseline <- chl_landings %>% 
+  filter (year == 2021) %>%
+  mutate (country = "Chile") %>%
+  group_by (country, species) %>%
+  summarise (bl_tonnes = sum (catch_mt)) 
+
+# sl IHH
+# year with data for both artisanal and industrial is 2017
+sl_ihh_landings <- readRDS("Data/SLE_landings_IHH.Rds")
+
+sl_baseline <- sl_ihh_landings %>% 
+  filter (year == 2017) %>%
+  mutate (country = "Sierra Leone") %>%
+  group_by (country, species) %>%
+  summarise (bl_tonnes = sum (catch_mt, na.rm = TRUE)) 
+
+full_baseline <- rbind (sau_baseline, chl_baseline, sl_baseline)
+
+saveRDS(full_baseline, file = "Data/baseline_catch_sau_chl_ihh.Rds")
 
 
 # baseline catch from compiled data; from plot_contextual_landings.forecasts.R
 full_baseline <- readRDS("Data/baseline_catch_sau_chl_ihh.Rds")
 
+# catch upside values from above
+catch_upside_annual <- readRDS ("Data/catch_upside_relative_annual_repaired.Rds")
 
 # multiply ratio by baseline
-catch_upside_ts <- catch_upside_annual_repaired %>%
+catch_upside_ts <- catch_upside_annual %>%
   # join to baseline
   inner_join(full_baseline, by = c ("country", "species")) %>%
   mutate (tonnes = catch_ratio * bl_tonnes)
+
+########################################################################################################################################################################
+# Convert to nutrients ----
+
+# function for converting catch in mt to children fed ----
+# this will also bring in fishnutr data and RNI data
+source ("Scripts/Function_convert_catch_amt_children_fed.R")
+
+# 
+
+
 
 
 # function to convert to rni equiv
