@@ -20,18 +20,13 @@ write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
 full_baseline <- readRDS("Data/baseline_catch_sau_chl_ihh.Rds")
 
 
-# expressed as catch ratios relative to base year for midcentury and end century, can multiply by landings
-catch_upside_relative <- readRDS("Data/nutricast_upside_relative.Rds")
-
-# averaged data for missing spp, scripts/check_SAU_nutricast_species
-catch_upside_relative_missing <- readRDS("Data/catch_upside_relative_repair_missing.Rds")
-
-catch_upside_relative_repaired <- 
-  rbind (catch_upside_relative, catch_upside_relative_missing)
+# expressed as catch ratios relative to base year for midcentury and end century, can multiply by landing
+# includes interpolated missing species, from calculate_projected_nutritional_upsides
+catch_upside_relative <- readRDS("Data/catch_upside_relative_repaired.Rds")
 
 
 # multiply ratio by baseline
-catch_upside_tonnes <- catch_upside_relative_repaired %>%
+catch_upside_tonnes <- catch_upside_relative %>%
   # join to baseline
   inner_join(full_baseline, by = c ("country", "species")) %>%
   mutate (across(where (is.double), ~. * bl_tonnes))

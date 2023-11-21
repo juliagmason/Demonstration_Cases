@@ -295,26 +295,17 @@ convert_catch_to_nutr_tons <- function (species_name, catch_mt, country_name) {
 
 
 # Can I just join annual timeseries? noooooo didn't save the tonnes
-#plot_aggregate_nutricast_upsides.R
 
-# annual nutricast time series
-catch_upside_annual <- readRDS ("Data/nutricast_upside_relative_annual_ratio.Rds")
-# repaired missing species, this is in a slightly different format (check_sau_nutricast_species.R)
-catch_upside_annual_missing <- readRDS("Data/nutricast_upside_relative_annual_repair_missing.Rds")
-
-# join
-catch_upside_annual_repaired <- catch_upside_annual %>%
-  #match columns from missing species
-  select (country, species, rcp, scenario, year, catch_ratio) %>%
-  rbind (catch_upside_annual_missing)
-
+# annual nutricast time series, with species repaired
+#calculate_projected_nutritional_upsides.R
+catch_upside_annual <- readRDS ("Data/catch_upside_relative_annual_repaired.Rds")
 
 # baseline catch from plot_contextual_landings_forecasts.R
 # this has sau for peru and indo, chl landings, sl ihh landings
 full_baseline <- readRDS("Data/baseline_catch_sau_chl_ihh.Rds")
 
 # multiply ratio by baseline
-catch_upside_ts <- catch_upside_annual_repaired %>%
+catch_upside_ts <- catch_upside_annual %>%
   # join to baseline
   inner_join(full_baseline, by = c ("country", "species")) %>%
   mutate (tonnes = catch_ratio * bl_tonnes)
@@ -837,14 +828,9 @@ dev.off()
 ###################################################
 # periods ----
 
+# catch upside, with missing species added (calculate_projected_nutritional_upside.R)
+catch_upside_relative <- readRDS("Data/catch_upside_relative_repaired.Rds")
 
-catch_upside_relative <- readRDS("Data/nutricast_upside_relative.Rds")
-
-# averaged data for missing spp
-catch_upside_relative_missing <- readRDS("Data/catch_upside_relative_repair_missing.Rds")
-
-catch_upside_relative_repaired <- 
-  rbind (catch_upside_relative, catch_upside_relative_missing)
 
 # wpp population needs match periods up here?
 wpp_nutricast_periods <- wpp_country_aggregate %>%
@@ -876,11 +862,11 @@ calc_nutr_upside_absolute_population <- function (country_name, Selenium = FALSE
   }
   
   # fix colnames so can pivot_longer and break into period and scenario
-  better_scenario_colnames <- gsub("ratio_", "", colnames(catch_upside_relative_repaired)[4:9])
-  old_colnames <- colnames(catch_upside_relative_repaired)[4:9]
+  better_scenario_colnames <- gsub("ratio_", "", colnames(catch_upside_relative)[4:9])
+  old_colnames <- colnames(catch_upside_relative)[4:9]
   
   upside_ratios_absolute <- landings %>% 
-    left_join(catch_upside_relative_repaired, by = c ("country", "species")) %>%
+    left_join(catch_upside_relative, by = c ("country", "species")) %>%
     rename_with (~ better_scenario_colnames, all_of(old_colnames)) %>%
     mutate (# multiply ratio by current landings
       across(bau_midcentury:adapt_endcentury, ~.x * total_tonnes)) %>%

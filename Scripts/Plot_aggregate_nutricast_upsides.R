@@ -34,17 +34,8 @@ sau_2019 <- readRDS("Data/SAU_2019.Rds")
 
 # plot as full time series ----
 # these are identical for the nutrients....
-# annual nutricast time series (calculate_nutritional_upside.R)
+# annual nutricast time series, with repaired spp (calculate_projected_nutritional_upside.R)
 catch_upside_annual <- readRDS ("Data/nutricast_upside_relative_annual_ratio.Rds")
-
-# repaired missing species, this is in a slightly different format (check_sau_nutricast_species.R)
-catch_upside_annual_missing <- readRDS("Data/nutricast_upside_relative_annual_repair_missing.Rds")
-
-# join
-catch_upside_annual_repaired <- catch_upside_annual %>%
-  #match columns from missing species
-  select (country, species, rcp, scenario, year, catch_ratio) %>%
-  rbind (catch_upside_annual_missing)
 
 
 # baseline catch from compiled data; from plot_contextual_landings.forecasts.R
@@ -52,7 +43,7 @@ full_baseline <- readRDS("Data/baseline_catch_sau_chl_ihh.Rds")
 
 
 # multiply ratio by baseline
-catch_upside_ts <- catch_upside_annual_repaired %>%
+catch_upside_ts <- catch_upside_annual %>%
   # join to baseline
   inner_join(full_baseline, by = c ("country", "species")) %>%
   mutate (tonnes = catch_ratio * bl_tonnes)
@@ -245,15 +236,10 @@ report_RNI_met_values("Indonesia") %>% write.excel()
 
 
 # plot as 3 point time series, line graph, scenario as color ----
-# catch upside relative by period, from calculate_nutritional_upsides.r
+# catch upside relative by period, with missing species, from calculate_projected_nutritional_upsides.r
 # expressed as catch ratios relative to base year for midcentury and end century, can multiply by landings
-catch_upside_relative <- readRDS("Data/nutricast_upside_relative.Rds")
+catch_upside_relative <- readRDS("Data/nutricast_upside_relative_repaired.Rds")
 
-# averaged data for missing spp, scripts/check_SAU_nutricast_species
-catch_upside_relative_missing <- readRDS("Data/catch_upside_relative_repair_missing.Rds")
-
-catch_upside_relative_repaired <- 
-  rbind (catch_upside_relative, catch_upside_relative_missing)
 
 # Function to convert landings to ratio to children fed, by country ----
 # may need to specify division
@@ -280,7 +266,7 @@ calc_nutr_upside_tonnes <- function (country_name) {
       summarise (bau_current = sum (tonnes))
   }
   
-  nutr_upside <- catch_upside_relative_repaired %>%
+  nutr_upside <- catch_upside_relative %>%
     #okay. if I'm just trying to get the projected tons, makes sense to pivot longer, then multiply by current landings all in one go. but since I want to have the baseline value repeated across each scenario, going to mutate across, then pivot longer
     inner_join (landings, by = c ("country", "species")) %>%
     mutate (# multiply ratio by current landings
@@ -376,11 +362,11 @@ for (country in c("Chile", "Indonesia", "Peru", "Sierra Leone")) {
 
 #NOW it works
 
-indo6 <- catch_upside_relative_repaired %>%
+indo6 <- catch_upside_relative %>%
   filter (country == "Indonesia", rcp == "RCP60")
 
 #is this consistent if I take averages of annual?
-indo6_annual_recreate <- catch_upside_annual_repaired %>%
+indo6_annual_recreate <- catch_upside_annual %>%
   filter (country == "Indonesia", rcp == "RCP60") %>%
   mutate (
     # baseline and mid century and end century
@@ -468,11 +454,11 @@ plot_nutr_upside_absolute <- function (country_name, Selenium = FALSE) {
   }
   
   # fix colnames so can pivot_longer and break into period and scenario
-  better_scenario_colnames <- gsub("ratio_", "", colnames(catch_upside_relative_repaired)[4:9])
+  better_scenario_colnames <- gsub("ratio_", "", colnames(catch_upside_relative)[4:9])
   old_colnames <- colnames(catch_upside_relative_repaired)[4:9]
   
   upside_ratios_absolute <- landings %>% 
-    left_join(catch_upside_relative_repaired, by = c ("country", "species")) %>%
+    left_join(catch_upside_relative, by = c ("country", "species")) %>%
     rename_with (~ better_scenario_colnames, all_of(old_colnames)) %>%
     mutate (# multiply ratio by current landings
       across(bau_midcentury:adapt_endcentury, ~.x * total_tonnes)) %>%
