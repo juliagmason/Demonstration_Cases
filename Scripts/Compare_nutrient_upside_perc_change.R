@@ -68,7 +68,7 @@ catch_upside_tonnes_long_compare <- catch_upside_tonnes_long %>%
 
 
 
-bl_nutr_summarize %>% filter (country == "Indonesia")
+bl_nutr_summarize %>% filter (country == "Indonesia") # this is probably different, not clipped to species with projection values
 catch_upside_rni_compare %>% filter (country == "Indonesia", rcp == "RCP60")
 
 
