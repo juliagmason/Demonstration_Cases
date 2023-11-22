@@ -327,26 +327,162 @@ full_baseline <- readRDS("Data/baseline_catch_sau_chl_ihh.Rds")
 
 # catch upside values from above
 catch_upside_annual <- readRDS ("Data/catch_upside_relative_annual_repaired.Rds")
+catch_upside_relative <- readRDS("Data/catch_upside_relative_repaired.Rds")
 
 # multiply ratio by baseline
+# annual
 catch_upside_ts <- catch_upside_annual %>%
   # join to baseline
   inner_join(full_baseline, by = c ("country", "species")) %>%
   mutate (tonnes = catch_ratio * bl_tonnes)
 
+# by period
+catch_upside_tonnes <- catch_upside_relative %>%
+  # join to baseline
+  inner_join(full_baseline, by = c ("country", "species")) %>%
+  mutate (across(where (is.double), ~. * bl_tonnes))
+
 ########################################################################################################################################################################
 # Convert to nutrients ----
+
+# population nutrient needs data
+#Calcualte_population_percent_nutrient_needs.R
+wpp_country_aggregate <- readRDS("Data/annual_nutr_demand_rni_by_country.Rds")
+
+# calculate mean demand by period
+pop_demand_period <- wpp_country_aggregate %>%
+  mutate (
+    # baseline and mid century and end century, consistent with catch_upside_relative
+    period = case_when (
+      Time %in% c(2051:2060) ~ "midcentury",
+      Time %in% c(2091:2100) ~ "endcentury")) %>%
+  filter(!is.na(period)) %>%
+  group_by (country, period, nutrient) %>%
+  summarize (tot_pop = mean (tot_pop),
+             mean_nutr_demand = mean (tot_nutr_annual_demand, na.rm = TRUE))
 
 # function for converting catch in mt to children fed ----
 # this will also bring in fishnutr data and RNI data
 source ("Scripts/Function_convert_catch_amt_children_fed.R")
 
-# 
+# function for converting catch in mt to tonnes of nutrient, for pop needs ----
+# from calculate_population_percent_nutrition.R
+convert_catch_to_nutr_tons <- function (species_name, catch_mt, country_name) {
+  
+  if (species_name %in% compiled_nutr$species) {
+    nutr_content <- compiled_nutr %>% filter (species == species_name)
+  } else  {
+    nutr_content <- fish_taxamatch_nutr %>% filter (species == species_name, country == country_name)
+  }
+  
+  catch_nutrients <- nutr_content %>%
+    mutate (
+      p_edible = case_when (
+        taxa == "Finfish" ~ 0.87,
+        taxa == "Crustacean" ~ 0.36,
+        taxa == "Mollusc" ~ 0.17,
+        # GENuS/nutricast is 0.21 for cephalopods. Using 0.67, Bianchi et al. 2022 value for D. gigas; only cephalopod in our priority species. They also have a blanket 0.7 value for cephalopods.  
+        taxa == "Cephalopod" & species == "Dosidicus gigas" ~ 0.67,
+        taxa == "Cephalopod" & species != "Dosidicus gigas" ~ 0.21,
+        taxa == "Other" ~ 1,
+        taxa == "Algae" ~ 1),
+      # have to put back into units
+      scalar = case_when (
+        nutrient %in% c("Protein", "Omega_3") ~ 1,
+        nutrient %in% c("Calcium", "Zinc", "Iron") ~ 1/1000,
+        nutrient %in% c("Vitamin_A", "Selenium") ~ 1/1e6
+      ),
+      # input (catch_mt) is in metric tons. amount is in units / 100g. so divide by 100 to account for serving size, and multiply by scalar to cancel out g
+      nutr_tonnes = catch_mt * p_edible * amount * scalar / 100 ) %>%
+    select (nutr_tonnes)
+  
+  return (catch_nutrients)
+}
+
+# for periods, calculate rni equiv and nutr tonnes ----
+# remove "ratio" from columns to make it easier to pivot_longer
+colnames (catch_upside_tonnes) <- gsub ("_ratio", "", colnames (catch_upside_tonnes))
+
+# make peru anchovy and peru not anchovy a different country
+
+nutr_upside_rni_nutr_tonnes <- catch_upside_tonnes %>%
+  select (-bl_tonnes) %>%
+  pivot_longer(-c(country, rcp, species),
+               names_to = c("scenario", "period"),
+               names_sep = "_",
+               values_to = "tonnes") %>%
+  mutate(
+    # make life easier by making peru anchovy and not anchovy different countries so calculates separately
+    country = case_when (country == "Peru" & species == "Engraulis ringens" ~ "Peru_anchoveta",
+                         TRUE ~ country),
+    rni_equivalents = pmap (list (species = species, amount = tonnes, country_name = country), calc_children_fed_func), 
+         nutr_tonnes = pmap (list (species_name = species, catch_mt = tonnes, country_name = country), convert_catch_to_nutr_tons)) %>%
+  unnest (cols = c(rni_equivalents, nutr_tonnes),  names_repair = "check_unique", names_sep = ".") %>%
+  # this makes weird column names because I didn't think about running the functions together. 
+  # remove text before "." in column names
+  rename_with (~gsub(".*\\.", "", .x)) %>%
+  # group by nutrient, this makes it cleaner
+  group_by (country, rcp, scenario, period, nutrient) %>%
+  summarise (across( where(is.numeric), ~ sum(.x, na.rm = TRUE))); beep()
+
+saveRDS(nutr_upside_rni_nutr_tonnes, file = "Data/nutrient_upside_rni_nutr_tonnes_period.Rds")
+
+# differences for rcp 6.0
+nutr_upside_diff <- nutr_upside_rni_nutr_tonnes %>% 
+  filter (rcp == "RCP60", scenario != "mey") %>%
+  group_by (country, period, nutrient) %>%
+  summarize (rni_diff = rni_equivalents[scenario == "adapt"] - rni_equivalents[scenario == "bau"],
+             nutr_tonnes_diff = nutr_tonnes[scenario == "adapt"] - nutr_tonnes[scenario == "bau"]) %>%
+  # join to population need
+  # ignore anchoveta for now...can just calculate from the excel sheet?
+  left_join (pop_demand_period, by = c("country", "period", "nutrient")) %>%
+  mutate (perc_demand_met = nutr_tonnes_diff / mean_nutr_demand * 100)
+
+# also want to calculate baseline rnis/nutr tonnes, clipped to the species with nutricast
+# can I just use the first baseline year??
+# easier to use annual
+catch_upside_annual_spp <- catch_upside_annual %>%
+  select (country, species) %>%
+  distinct()
+
+baseline_nutricast_clip <- full_baseline %>%
+  inner_join (catch_upside_annual_spp, by = c ("country", "species"))
+
+baseline_rni_nutr_tonnes <- baseline_nutricast_clip %>%
+  mutate(rni_equivalents = pmap (list (species = species, amount = bl_tonnes, country_name = country), calc_children_fed_func), 
+         nutr_tonnes = pmap (list (species_name = species, catch_mt = bl_tonnes, country_name = country), convert_catch_to_nutr_tons)) %>%
+  unnest (cols = c(rni_equivalents, nutr_tonnes),  names_repair = "check_unique", names_sep = ".") %>%
+  # this makes weird column names because I didn't think about running the functions together. 
+  # remove text before "." in column names
+  rename_with (~gsub(".*\\.", "", .x)) %>%
+  # group by nutrient, this makes it cleaner
+  # make peru anchoveta its own country
+  mutate(country = case_when (country == "Peru" & species == "Engraulis ringens" ~ "Peru_anchoveta",
+                         TRUE ~ country)) %>%
+  group_by (country, nutrient) %>%
+  summarise (across( where(is.numeric), ~ sum(.x, na.rm = TRUE)))
+beep()
+
+# combine these and write to table. want to see the differences, the baseline, and calculate the percent of differences
+
+# function for copying R output tables into word/excel----
+#https://stackoverflow.com/questions/24704344/copy-an-r-data-frame-to-an-excel-spreadsheet
+write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
+  write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
+}
+
+nutr_upside_diff_perc_baseline <- baseline_rni_nutr_tonnes %>%
+  rename (baseline_rni = rni_equivalents, baseline_nutr_tonnes = nutr_tonnes) %>%
+  left_join (nutr_upside_diff, by = c ("country", "nutrient")) %>%
+  mutate (rni_prop_of_baseline = rni_diff / baseline_rni * 100)
+
+nutr_upside_diff_perc_baseline %>% 
+  arrange (country, period) %>%
+  write.excel()
 
 
 
-
-# function to convert to rni equiv
+# function to convert annual to rni equiv ----
 calc_nutr_upside_tonnes_annual <- function (country_name) {
   
   nutr_upside_annual <- catch_upside_ts %>%
@@ -377,105 +513,7 @@ chl <-   calc_nutr_upside_tonnes_annual ("Chile"); beep()
 saveRDS(chl, file = "Data/annual_nutr_upside_childRNI_Chile.Rds")
 
 
-################################################
-# plot annual ts-----
 
-#Plot for each country and RCP
-plot_child_RNI_proj <- function (country_name, RCP) {
-
-  #projected nutrient yield in rni_equivalents for each country
-  nutr_ts <- readRDS(paste0("Data/annual_nutr_upside_childRNI_", country_name, ".Rds"))
-  
-  # aggregate by rcp, scenario, year, nutrient
-  nutr_agg_ts <- nutr_ts %>%
-    group_by (rcp, scenario, year, nutrient) %>%
-    summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
-    filter (rcp == RCP, !nutrient %in% c("Protein"))
-  
-  plot_ts <- nutr_agg_ts %>% 
-    ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
-    geom_line() +
-    facet_wrap (~nutrient, scales = "free_y") +
-    theme_bw() +
-    labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
-    ggtitle (paste0("Projected nutrient yield for ", country_name, "; ", RCP)) +
-    theme (axis.text.y = element_text (size = 14),
-           axis.text.x = element_text (size = 13),
-           axis.title = element_text (size = 16),
-           strip.text = element_text (size = 15),
-           legend.text = element_text (size = 12),
-           legend.title = element_text (size = 14),
-           plot.title = element_text (size = 18))
-  
-  # save png
-  png (paste0("Figures/annual_nutr_ts_childRNI_", country_name, "_", RCP, ".png"), width = 9, height = 6, units = "in", res = 300)
-  print (plot_ts + theme(legend.position="bottom"))
-  dev.off()
-  
-}
-
-plot_child_RNI_proj("Chile", RCP = "RCP26")
-
-# Apply to all countries, all RCPs
-pmap (expand_grid(country_name = c ("Chile", "Peru", "Sierra Leone", "Indonesia"), RCP = c("RCP26", "RCP45", "RCP60", "RCP85")), plot_child_RNI_proj)                   
-                     
-
-# Peru anchovy ----
-
-peru_nutr_ts <- readRDS("Data/annual_nutr_upside_childRNI_Peru.Rds")
-
-for (RCP in c("RCP26", "RCP45", "RCP60", "RCP85")) {
-  
-  plot_noanchov <- peru_nutr_ts %>%
-    filter (species != "Engraulis ringens") %>%
-    group_by (rcp, scenario, year, nutrient) %>%
-    summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
-    filter (rcp == RCP, !nutrient %in% c("Protein")) %>%
-    ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
-    geom_line() +
-    facet_wrap (~nutrient, scales = "free_y") +
-    theme_bw() +
-    labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
-    ggtitle (paste0("Projected nutrient yield for Peru, ", RCP, "; Anchoveta removed")) +
-    theme (axis.text.y = element_text (size = 14),
-           axis.text.x = element_text (size = 13),
-           axis.title = element_text (size = 16),
-           strip.text = element_text (size = 15),
-           legend.text = element_text (size = 12),
-           legend.title = element_text (size = 14),
-           plot.title = element_text (size = 18))
-
-  png (paste0("Figures/annual_nutr_ts_childRNI_Peru_NOanchov_", RCP, ".png"), width = 9, height = 6, units = "in", res = 300)
-  print(plot_noanchov + theme(legend.position="bottom"))
-  dev.off()
-  
-  # JUST anchovy
-  plot_anchov <- peru_nutr_ts %>%
-    filter (species == "Engraulis ringens") %>%
-    group_by (rcp, scenario, year, nutrient) %>%
-    summarise (tot_fed = sum (rni_equivalents, na.rm = TRUE)) %>%
-    filter (rcp == RCP, !nutrient %in% c("Protein")) %>%
-    ggplot (aes (x = year, y = tot_fed/1000000, col = scenario, group = scenario)) +
-    geom_line() +
-    facet_wrap (~nutrient, scales = "free_y") +
-    theme_bw() +
-    labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
-    ggtitle (paste0("Projected nutrient yield for Peru, ", RCP, "; Anchoveta only")) +
-    theme (axis.text.y = element_text (size = 14),
-           axis.text.x = element_text (size = 13),
-           axis.title = element_text (size = 16),
-           strip.text = element_text (size = 15),
-           legend.text = element_text (size = 12),
-           legend.title = element_text (size = 14),
-           plot.title = element_text (size = 18))
-  
-  png (paste0("Figures/annual_nutr_ts_childRNI_Peru_anchov_", RCP, ".png"), width = 9, height = 6, units = "in", res = 300)
-  print(plot_anchov + theme(legend.position="bottom"))
-  dev.off()
-  
-}
-    
-    
 ################################################################################################################
 # Calculate values to report in results ----
 # function for copying R output tables into word/excel----
@@ -484,8 +522,31 @@ write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
   write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
 }
 
+# nutrient upside -- difference between rni_equivalents under Full Adapation - No Adaptation. take mean for 2051-2060 and 2091-2100
 
-# report
+s <- chl %>%
+  mutate (
+    period = case_when (
+      year %in% c(2051:2060) ~ "midcentury",
+      year %in% c(2091:2100) ~ "endcentury"
+    )) %>%
+  filter (!is.na (period), scenario %in% c("No Adaptation", "Full Adaptation"), rcp == "RCP60") %>%
+  # take total sum of RNIs for each nutrient, year, and mgmt scenario
+  group_by (nutrient, year, period, scenario) %>%
+  summarize (tot_rnis = sum (rni_equivalents, na.rm = TRUE)) %>%
+  # for each year, take difference between full and no. probably could do full period avg in one fell swoop but feel more confident that i know what's going on this way...
+  group_by (nutrient, year, period) %>%
+  summarize (rni_diff = tot_rnis [scenario == "Full Adaptation"] - tot_rnis[scenario == "No Adaptation"]) %>%
+  # average by period
+  group_by (nutrient, period) %>%
+  summarize (rni_diff = mean (rni_diff))
+
+  
+
+# copying from compare_nutrient_upside_perc_change
+
+
+# not sure we need this....
 report_RNI_met_values <- function (country_name, anchovy = TRUE) {
   
   rni_nutr_ts <- readRDS(paste0("Data/annual_nutr_upside_childRNI_", country_name, ".Rds"))
@@ -526,300 +587,5 @@ report_RNI_met_values <- function (country_name, anchovy = TRUE) {
 
 }  
 
-report_RNI_met_values("Indonesia") %>% write.excel()
+indo_annual_vals <- report_RNI_met_values("Indonesia") 
   
-################################################################################
-# Reject figs ----
-
-
-# plot as 3 point time series, line graph, scenario as color ----
-# catch upside relative by period, from calculate_nutritional_upsides.r
-# expressed as catch ratios relative to base year for midcentury and end century, can multiply by landings
-catch_upside_relative <- readRDS("Data/nutricast_upside_relative.Rds")
-
-# averaged data for missing spp, scripts/check_SAU_nutricast_species
-catch_upside_relative_missing <- readRDS("Data/catch_upside_relative_repair_missing.Rds")
-
-catch_upside_relative_repaired <- 
-  rbind (catch_upside_relative, catch_upside_relative_missing)
-
-# Function to convert landings to ratio to children fed, by country ----
-# may need to specify division
-calc_nutr_upside_tonnes <- function (country_name) {
-  
-  if (country_name == "Chile") {
-    landings <- chl_landings %>%
-      filter (year == 2021) %>%
-      group_by (species) %>%
-      summarise (bau_current = sum (catch_mt)) %>%
-      mutate (country = "Chile")
-    
-  } else if (country_name == "Sierra Leone") {
-    landings <- sl_landings %>%
-      filter (year == 2017) %>%
-      group_by (species) %>%
-      summarise (bau_current = sum (catch_mt)) %>%
-      mutate (country = "Sierra Leone") 
-  } else {
-    
-    landings <- sau_2019 %>%
-      filter (country == country_name) %>%
-      group_by (country, species) %>%
-      summarise (bau_current = sum (tonnes))
-  }
-  
-  nutr_upside <- catch_upside_relative_repaired %>%
-    #okay. if I'm just trying to get the projected tons, makes sense to pivot longer, then multiply by current landings all in one go. but since I want to have the baseline value repeated across each scenario, going to mutate across, then pivot longer
-    inner_join (landings, by = c ("country", "species")) %>%
-    mutate (# multiply ratio by current landings
-      across(bau_ratio_midcentury:adapt_ratio_endcentury, ~.x * bau_current),
-      # make fake current columns
-      mey_current = bau_current,
-      adapt_current = bau_current) %>%
-    # remove "ratio" from column names, https://stackoverflow.com/questions/63459369/remove-prefix-letter-from-column-variables
-    rename_all (~stringr::str_replace(., "ratio_", "")) %>%
-    
-    pivot_longer (-c(country, rcp, species),
-                  names_to = c("scenario", "period"),
-                  names_sep = "_",
-                  values_to = "tonnes"
-    ) %>%
-    # get rid of non-matching species, NAs
-    filter (!is.na (rcp)) %>%
-    # convert to nutrients
-    mutate (children_fed = pmap (list (species = species, amount = tonnes, country_name = country), calc_children_fed_func)) %>%
-    unnest(cols = c(children_fed),  names_repair = "check_unique")
-
-  
-  # fix levels
-  nutr_upside$scenario <- factor(nutr_upside$scenario, levels = c ("bau", "mey", "adapt"))
-  nutr_upside$period <- factor(nutr_upside$period, levels = c("current", "midcentury", "endcentury"))
-  
-  return (nutr_upside)
-  
-}
-
-# calculate percentages
-# function for copying R output tables into word/excel----
-#https://stackoverflow.com/questions/24704344/copy-an-r-data-frame-to-an-excel-spreadsheet
-write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
-  write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
-}
-
-baseline_nutr <- full_baseline %>%
-  mutate (children_fed = pmap (list (species = species, amount = bl_tonnes, country_name = "Indonesia"), calc_children_fed_func)) %>%
-  unnest(cols = c(children_fed),  names_repair = "check_unique") %>%
-  group_by (country, nutrient) %>%
-  summarise (baseline_rni = sum (rni_equivalents, na.rm = TRUE))
-
-up <- nutr_upside %>%
-  filter (rcp == "RCP60", species == "Engraulis ringens") %>%
-  group_by (country, scenario, period, nutrient) %>%
-  summarise (future_rni = sum(rni_equivalents, na.rm = TRUE)) %>%
-  left_join (baseline_nutr, by = c("nutrient", "country")) %>%
-  mutate (perc_change = (future_rni - baseline_rni)/baseline_rni)
-
-up %>% filter (!period == "current") %>% write.excel()
-
-
-plot_nutr_absolutes_tonnes <- function (country_name) {
-  
-  upsides <- calc_nutr_upside_tonnes(country_name)
-  
-  q <- upsides %>%
-    group_by (country, rcp, scenario, period, nutrient) %>%
-    summarise (tot_fed = sum (children_fed, na.rm = TRUE)) %>%
-    filter (rcp == "RCP60", !nutrient == "Protein") %>%
-    filter (!nutrient == "Protein") %>%
-    ggplot (aes (x = factor(period), y = tot_fed/1000000, col = scenario, group = scenario)) +
-    geom_point() +
-    geom_line() +
-    facet_wrap (~nutrient) +
-    theme_bw() +
-    labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt\nscenario") +
-    ggtitle (paste0 ("Projected nutrient yield for ", country_name, ", RCP 6.0"))
-  
-}
-
-for (country in c("Chile", "Indonesia", "Peru", "Sierra Leone")) {
-  plot <- plot_nutr_absolutes_tonnes(country)
-  
-  png (paste0("Figures/nutricast_3pt_ts_", country, "_free.png"), width = 6.5, height = 4, units = "in", res = 300)
-  print (
-    plot +  
-      facet_wrap (~ nutrient, scales = "free_y") +
-      scale_x_discrete (labels = c ("current", "2050s", "2090s")) +
-      theme (axis.text = element_text (size = 10),
-             axis.title = element_text (size = 14)) 
-  )
-  
-  dev.off()
-}
-
-
-############################################################################
-# WHY is 3 point showing different dynamics for different nutrients?!?!?
-# indonesia is an example, vitamin A very different than the others
-# looking at one species, bau is same but adapt/mey is different. HUGE ratios for non-bau scenarios. 
-
-#NOW it works
-
-indo6 <- catch_upside_relative_repaired %>%
-  filter (country == "Indonesia", rcp == "RCP60")
-
-#is this consistent if I take averages of annual?
-indo6_annual_recreate <- catch_upside_annual_repaired %>%
-  filter (country == "Indonesia", rcp == "RCP60") %>%
-  mutate (
-    # baseline and mid century and end century
-    period = case_when (
-      year %in% c(2012:2021) ~ "2012-2021",
-      year %in% c(2051:2060) ~ "2051-2060",
-      year %in% c(2091:2100) ~ "2091-2100")) %>%
-
-  filter (!is.na (period)) %>%
-  group_by (country, rcp, scenario, period, species) %>%
-  summarise (mean_ratio = mean (catch_ratio, na.rm = TRUE))
-
-indo6 %>% filter (species == "Lutjanus")
-indo6_annual_recreate %>% filter (species == "Lutjanus")
-
-
-
-############################################################################
-# plot as bar, just mey and adapt difference ----
-# have to retool and take subtractions
-plot_bar_nutr_upside_ratios <- function (country_name, Selenium = FALSE) {
-  if (Selenium == TRUE) {
-    upside_summary <- upside_ratios %>%
-      group_by (rcp, upside, nutrient) %>%
-      summarise (total_fed = sum (children_fed, na.rm = TRUE)) %>%
-      filter (!nutrient %in% c("Protein"),
-              upside %in% c("mey_2050", "adapt_2050")) 
-  } else {
-    
-    upside_summary <- upside_ratios %>%
-      group_by (rcp, upside, nutrient) %>%
-      summarise (total_fed = sum (children_fed, na.rm = TRUE)) %>%
-      filter (!nutrient %in% c("Protein", "Selenium"),
-              upside %in% c("mey_2050", "adapt_2050")) 
-  }
-  
-    upside_summary %>%
-    # preliminary plot
-    ggplot (aes (x = reorder(nutrient, -total_fed), y = total_fed/1000000, fill = upside)) +
-    geom_col (position = "dodge") +
-    geom_hline (yintercept = 0, lty = 2) +
-    facet_wrap ( ~ rcp) +
-    theme_bw() +
-    # roughly match colors from gaines et al
-    scale_fill_manual (values = c ("mediumseagreen", "dodgerblue4")) +
-    labs (y = "Change in # children fed, millions", x = "", fill = "Management \nstrategy") +
-    ggtitle ("Nutrition upside from climate-adaptive management")
-}
-
-for (country in c("Chile", "Indonesia", "Peru", "Sierra Leone")) {
-  plot <- plot_bar_nutr_upside_ratios(country)
-  
-  png (paste0("Figures/nutricast_upside_overall_repaired_", country, ".png"), wwidth = 6, height = 5, units = "in", res = 300)
-  print (
-    plot +  
-      theme (plot.title = element_text (size = 17),
-             axis.text = element_text (size = 11),
-             axis.text.x = element_text (angle = 60, hjust = 1),
-             strip.text.x =  element_text (size = 12),
-             axis.title = element_text (size = 16),
-             legend.title = element_text (size = 14),
-             legend.text = element_text (size = 11)) 
-  )
-  
-  dev.off()
-}
-
-
-## plot BAU and amount, not difference ----
-
-plot_nutr_upside_absolute <- function (country_name, Selenium = FALSE) {
-  
-  if (country_name == "Chile") {
-    landings <- chl_landings %>%
-      filter (year == 2021) %>%
-      group_by (species) %>%
-      summarise (total_tonnes = sum (catch_mt)) %>%
-      mutate (country = "Chile")
-  } else {
-    
-    landings <- sau_2019 %>%
-      filter (country == country_name) %>%
-      group_by (country, species) %>%
-      summarise (total_tonnes = sum (tonnes))
-  }
-  
-  # fix colnames so can pivot_longer and break into period and scenario
-  better_scenario_colnames <- gsub("ratio_", "", colnames(catch_upside_relative_repaired)[4:9])
-  old_colnames <- colnames(catch_upside_relative_repaired)[4:9]
-  
-  upside_ratios_absolute <- landings %>% 
-    left_join(catch_upside_relative_repaired, by = c ("country", "species")) %>%
-    rename_with (~ better_scenario_colnames, all_of(old_colnames)) %>%
-    mutate (# multiply ratio by current landings
-      across(bau_midcentury:adapt_endcentury, ~.x * total_tonnes)) %>%
-    
-    select (country, rcp, species, bau_midcentury:adapt_endcentury) %>%
-    pivot_longer(bau_midcentury:adapt_endcentury, 
-                 names_to = c("scenario", "period"),
-                 names_sep = "_",
-                 values_to = "tonnes") %>%
-    # get rid of non-matching species, NAs
-    filter (!is.na (rcp)) %>%
-    # convert to nutrients
-    mutate (children_fed = pmap (list (species = species, amount = tonnes, country_name = country), calc_children_fed_func)) %>%
-    unnest(cols = c(children_fed),  names_repair = "check_unique") 
-  
-  # fix levels
-  upside_ratios_absolute$scenario <- factor(upside_ratios_absolute$scenario, levels = c ("bau", "mey", "adapt"))
-  upside_ratios_absolute$period <- factor(upside_ratios_absolute$period, levels = c ("midcentury", "endcentury"))
-  
-  if (Selenium == TRUE) {
-    upside_summary <- upside_ratios_absolute %>%
-      group_by (rcp, scenario, period, nutrient) %>%
-      summarise (total_fed = sum (children_fed, na.rm = TRUE)) %>%
-      filter (!nutrient %in% c("Protein")) 
-  } else {
-    
-    upside_summary <- upside_ratios_absolute %>%
-      group_by (rcp, scenario, period, nutrient) %>%
-      summarise (total_fed = sum (children_fed, na.rm = TRUE)) %>%
-      filter (!nutrient %in% c("Protein", "Selenium")) 
-  }
-  
-  upside_summary %>%
-    # preliminary plot
-    ggplot (aes (x = reorder(nutrient, -total_fed), y = total_fed/1000000, fill = scenario)) +
-    geom_col (position = "dodge") +
-    geom_hline (yintercept = 0, lty = 2) +
-    facet_wrap (period ~ rcp, ncol =4) +
-    theme_bw() +
-    # roughly match colors from gaines et al
-    scale_fill_manual (values = c ("firebrick", "mediumseagreen", "dodgerblue4")) +
-    labs (y = "# Child RNIs met, millions", x = "", fill = "Management \nstrategy") +
-    ggtitle ("Nutrition provisioning from climate-adaptive management")
-}
-
-for (country in c("Chile", "Indonesia", "Peru", "Sierra Leone")) {
-  plot <- plot_nutr_upside_absolute(country)
-  
-  png (paste0("Figures/nutricast_upside_overall_repaired_3scen_", country, ".png"), wwidth = 6, height = 5, units = "in", res = 300)
-  print (
-    plot +  
-      theme (plot.title = element_text (size = 17),
-             axis.text = element_text (size = 11),
-             axis.text.x = element_text (angle = 60, hjust = 1),
-             strip.text.x =  element_text (size = 12),
-             axis.title = element_text (size = 16),
-             legend.title = element_text (size = 14),
-             legend.text = element_text (size = 11)) 
-  )
-  
-  dev.off()
-}
