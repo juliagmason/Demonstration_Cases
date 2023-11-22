@@ -481,6 +481,8 @@ nutr_upside_diff_perc_baseline %>%
   write.excel()
 
 
+#########################################################################################################
+# Calculate annual timeseries of nutrient yield ----
 
 # function to convert annual to rni equiv ----
 calc_nutr_upside_tonnes_annual <- function (country_name) {
@@ -506,6 +508,17 @@ saveRDS(indo, file = "Data/annual_nutr_upside_childRNI_Indonesia.Rds")
 peru <-   calc_nutr_upside_tonnes_annual ("Peru"); beep()
 saveRDS(peru, file = "Data/annual_nutr_upside_childRNI_Peru.Rds")
 
+# split this into two here, think this will streamline things
+peru <- readRDS("Data/annual_nutr_upside_childRNI_Peru.Rds")
+peru_anchoveta <- peru %>%
+  filter (species == "Engraulis ringens")
+saveRDS(peru_anchoveta, file = "Data/annual_nutr_upside_childRNI_Peru_anchoveta.Rds")
+
+peru_non_anchoveta <- peru %>%
+  filter (species != "Engraulis ringens")
+# NOTE--overriding previous rds object, now does NOT INCLUDE anchoveta
+saveRDS(peru_non_anchoveta, file = "Data/annual_nutr_upside_childRNI_Peru.Rds")
+
 sl <-   calc_nutr_upside_tonnes_annual ("Sierra Leone"); beep()
 saveRDS(sl, file = "Data/annual_nutr_upside_childRNI_Sierra Leone.Rds")
 
@@ -515,36 +528,6 @@ saveRDS(chl, file = "Data/annual_nutr_upside_childRNI_Chile.Rds")
 
 
 ################################################################################################################
-# Calculate values to report in results ----
-# function for copying R output tables into word/excel----
-#https://stackoverflow.com/questions/24704344/copy-an-r-data-frame-to-an-excel-spreadsheet
-write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
-  write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
-}
-
-# nutrient upside -- difference between rni_equivalents under Full Adapation - No Adaptation. take mean for 2051-2060 and 2091-2100
-
-s <- chl %>%
-  mutate (
-    period = case_when (
-      year %in% c(2051:2060) ~ "midcentury",
-      year %in% c(2091:2100) ~ "endcentury"
-    )) %>%
-  filter (!is.na (period), scenario %in% c("No Adaptation", "Full Adaptation"), rcp == "RCP60") %>%
-  # take total sum of RNIs for each nutrient, year, and mgmt scenario
-  group_by (nutrient, year, period, scenario) %>%
-  summarize (tot_rnis = sum (rni_equivalents, na.rm = TRUE)) %>%
-  # for each year, take difference between full and no. probably could do full period avg in one fell swoop but feel more confident that i know what's going on this way...
-  group_by (nutrient, year, period) %>%
-  summarize (rni_diff = tot_rnis [scenario == "Full Adaptation"] - tot_rnis[scenario == "No Adaptation"]) %>%
-  # average by period
-  group_by (nutrient, period) %>%
-  summarize (rni_diff = mean (rni_diff))
-
-  
-
-# copying from compare_nutrient_upside_perc_change
-
 
 # not sure we need this....
 report_RNI_met_values <- function (country_name, anchovy = TRUE) {
