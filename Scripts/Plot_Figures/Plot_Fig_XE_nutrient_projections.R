@@ -9,7 +9,7 @@ library (tidyverse)
 # plot annual ts-----
 
 #Plot for each country and RCP
-plot_child_RNI_proj <- function (country_name, RCP) {
+plot_child_RNI_proj <- function (country_name, RCP, anchoveta = TRUE) {
   
   #projected nutrient yield in rni_equivalents for each country
   nutr_ts <- readRDS(paste0("Data/annual_nutr_upside_childRNI_", country_name, ".Rds"))
