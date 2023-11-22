@@ -2,14 +2,15 @@
 # 11 17 23
 # JGM
 
-# Drawing from plot_aggregate_nutricast_upsides, should rename that
-# in that script, I saved .rds objects of annual projected RNI values
+# plot annual timeseries of projected nutrient yield, in child RNI equivalents
+# calculated these in Calculate_projected_nutritional_upsides.R
+# note--Peru rds does not include anchoveta. Peru_anchoveta is anchoveta only. treat these as different country names
 
 library (tidyverse)
 # plot annual ts-----
 
 #Plot for each country and RCP
-plot_child_RNI_proj <- function (country_name, RCP, anchoveta = TRUE) {
+plot_child_RNI_proj <- function (country_name, RCP) {
   
   #projected nutrient yield in rni_equivalents for each country
   nutr_ts <- readRDS(paste0("Data/annual_nutr_upside_childRNI_", country_name, ".Rds"))
@@ -45,6 +46,7 @@ plot_child_RNI_proj <- function (country_name, RCP, anchoveta = TRUE) {
 }
 
 plot_child_RNI_proj("Chile", RCP = "RCP26")
+plot_child_RNI_proj("Peru_anchoveta", RCP = "RCP60")
 
 plot_child_RNI_proj("Indonesia", RCP = "RCP60") +
   labs (y = "Child RNI equiv., millions", x = "", col = "Mgmt. scenario") +
@@ -102,6 +104,46 @@ plot_child_RNI_proj("Sierra Leone", RCP = "RCP60") +
     panel.grid.minor = element_blank())
 
 ggsave ("Figures/FigXE_projected_SierraLeone.eps", width = 97, height = 70, units = "mm")
+
+
+plot_child_RNI_proj("Peru", RCP = "RCP60") +
+  labs (y = "Child RNI equiv., millions", x = "", col = "Mgmt. scenario") +
+  ggtitle ("Projected nutrient yield, RCP 6.0, Anchoveta excluded") +
+  scale_x_continuous (breaks = c(2020, 2050, 2090)) +
+  theme ( 
+    axis.text.x = element_text (size = 9),
+    axis.text.y = element_text (size = 9),
+    axis.title = element_text (size = 12),
+    legend.text = element_text (size = 9),
+    legend.title = element_text (size = 9),
+    legend.position = "bottom",
+    legend.margin = margin (t = -25),
+    strip.text = element_text (size = 9, margin = margin(0.5,0.5,0.5,0.5, "mm")),
+    plot.title = element_text (size = 13),
+    plot.margin=unit(c(1,1,1,1), 'mm'),
+    panel.grid.minor = element_blank())
+
+ggsave ("Figures/FigXE_projected_Peru_no_anchoveta.eps", width = 97, height = 70, units = "mm")
+
+plot_child_RNI_proj("Peru_anchoveta", RCP = "RCP60") +
+  labs (y = "Child RNI equiv., millions", x = "", col = "Mgmt. scenario") +
+  ggtitle ("Projected nutrient yield, RCP 6.0, Anchoveta only") +
+  scale_x_continuous (breaks = c(2020, 2050, 2090)) +
+  theme ( 
+    axis.text.x = element_text (size = 9),
+    axis.text.y = element_text (size = 9),
+    axis.title = element_text (size = 12),
+    legend.text = element_text (size = 9),
+    legend.title = element_text (size = 9),
+    legend.position = "bottom",
+    legend.margin = margin (t = -25),
+    strip.text = element_text (size = 9, margin = margin(0.5,0.5,0.5,0.5, "mm")),
+    plot.title = element_text (size = 13),
+    plot.margin=unit(c(1,1,1,1), 'mm'),
+    panel.grid.minor = element_blank())
+
+ggsave ("Figures/FigXE_projected_Peru_anchoveta.eps", width = 97, height = 70, units = "mm")
+
 
 # Apply to all countries, all RCPs for supplement
 pmap (expand_grid(country_name = c ("Chile", "Peru", "Sierra Leone", "Indonesia"), RCP = c("RCP26", "RCP45", "RCP60", "RCP85")), plot_child_RNI_proj)                   
