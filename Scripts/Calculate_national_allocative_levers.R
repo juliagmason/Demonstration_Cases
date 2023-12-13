@@ -428,7 +428,9 @@ chl_export %>%
 indo_foreign_sector_vol <- sau_2019 %>%
   filter (country == "Indonesia") %>%
   # make sector category with foreign, artisanal, industrial 
-  mutate (sector = ifelse (fleet == "Foreign catch", "Foreign catch", fishing_sector)) %>%
+  mutate (sector = ifelse (fleet == "Foreign catch", "Foreign catch", fishing_sector),
+          # group subsistence into artisanal
+          sector = ifelse (sector =="Subsistence", "Artisanal", sector)) %>%
   ungroup() %>%
   select (country, species, sector, tonnes)
 
