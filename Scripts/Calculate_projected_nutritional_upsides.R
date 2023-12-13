@@ -46,6 +46,38 @@ catch_upside_relative <-  ds_spp %>%
 
 saveRDS (catch_upside_relative, file = "Data/nutricast_upside_relative.Rds")
 
+# report total catch relative to baseline----
+catch_upside_totals <-  ds_spp %>%
+  filter (scenario %in% c("No Adaptation", "Full Adaptation"), catch_mt > 0) %>%
+  mutate (
+    # make life easier by making peru anchovy and not anchovy different countries so calculates separately
+    country = case_when (country == "Peru" & species == "Engraulis ringens" ~ "Peru_anchoveta",
+                         TRUE ~ country),
+    # baseline and mid century and end century
+    period = case_when (
+      year %in% c(2017:2021) ~ "baseline",
+      year %in% c(2051:2060) ~ "midcentury",
+      year %in% c(2091:2100) ~ "endcentury")) %>%
+  filter (!is.na (period)) %>%
+  group_by (country, rcp, scenario, period, species) %>%
+  summarise (catch_mt = mean (catch_mt, na.rm = TRUE)) %>%
+  ungroup() %>%
+  group_by (country, scenario, rcp, period) %>%
+  summarise (tot_cat = sum(catch_mt)) %>%
+  pivot_wider(names_from = period, values_from = tot_cat) %>%
+  mutate (mid_perc = midcentury/baseline * 100, end_perc = endcentury/baseline * 100)
+
+catch_upside_totals %>%
+  filter (!country %in% c("Ghana", "Mexico"), rcp == "RCP60") %>%
+  write.excel()
+
+ds_spp %>% filter (country == "Chile", rcp == "RCP60") %>% 
+  group_by (year, scenario) %>%
+  summarise (tot_cat = sum (catch_mt, na.rm = TRUE)) %>%
+  ggplot (aes (x = year, y = tot_cat, col = scenario)) + 
+  geom_line() + theme_bw() +
+  xlim (2017, 2100)
+
 # calculate annual catch upside for full time series----
 
 # probably can do this with brackets but just make a baseline value separately
@@ -340,7 +372,29 @@ catch_upside_ts <- catch_upside_annual %>%
 catch_upside_tonnes <- catch_upside_relative %>%
   # join to baseline
   inner_join(full_baseline, by = c ("country", "species")) %>%
-  mutate (across(where (is.double), ~. * bl_tonnes))
+  mutate (across(bau_ratio_midcentury:adapt_ratio_endcentury, ~. * bl_tonnes))
+
+
+# report projected change in overall catch, clipped to species we have nutrients
+
+catch_upside_tonnes %>%
+  filter (rcp == "RCP60") %>%
+  mutate(country = case_when (country == "Peru" & species == "Engraulis ringens" ~ "Peru_anchoveta",
+                       TRUE ~ country)
+  ) %>%
+  group_by (country) %>%
+  summarize (across(bau_ratio_midcentury:bl_tonnes, ~sum(.x))) %>%
+  select (-c(mey_ratio_midcentury, mey_ratio_endcentury)) %>%
+  mutate (across (bau_ratio_midcentury:adapt_ratio_endcentury, ~. / bl_tonnes * 100)) %>%
+  write.excel()
+
+catch_upside_tonnes %>%
+  filter (rcp == "RCP60") %>%
+  group_by (country) %>%
+  summarize (across(bau_ratio_midcentury:bl_tonnes, ~sum(.x))) %>%
+  select (-c(mey_ratio_midcentury, mey_ratio_endcentury)) %>%
+  mutate (across (bau_ratio_midcentury:adapt_ratio_endcentury, ~. / bl_tonnes * 100)) %>%
+  write.excel()
 
 ########################################################################################################################################################################
 # Convert to nutrients ----
