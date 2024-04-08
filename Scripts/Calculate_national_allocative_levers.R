@@ -753,7 +753,7 @@ peru_export_anchov <- sau_2019 %>%
                 names_to = "exports",
                 values_to = "catch_mt") 
 
-# calculate RNI equivalents and percent population needs met
+# calculate RNI equivalents and percent population needs met ----
 peru_export_nutr_anchov <- peru_export_anchov %>%
   # attempting to do both rni equiv and nutr_tonnes in one 
   mutate(rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = "Peru"), calc_children_fed_func),
@@ -844,6 +844,30 @@ peru_export_anchov %>%
 # Clean_Malawi_landings.R
 mal_landings <- readRDS("Data/Malawi_landings_cleaned.Rds")
 
+# just report overall RNIs and percent pop met ----
+mal_rnis <- mal_landings %>%
+  # filter to 2017 and add country columnt
+  filter (Year == 2017) %>%
+  # aggregate small and large scale
+  group_by (species) %>%
+  summarise (catch_mt = sum(tonnes, na.rm = TRUE)) %>%
+  mutate (country = "Malawi") %>%
+  mutate(rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = "Malawi"), calc_children_fed_func),
+         nutr_tonnes = pmap (list (species_name = species, catch_mt = catch_mt, country_name = "Malawi"), convert_catch_to_nutr_tons)) %>%
+  unnest (cols = c(rni_equivalents, nutr_tonnes),  names_repair = "check_unique", names_sep = ".") %>%
+  # this makes weird column names because I didn't think about running the functions together. duplicates the nutrient column
+  select (-c(nutr_tonnes.nutrient, catch_mt)) %>%
+  # remove text before "." in column names
+  rename_with (~gsub(".*\\.", "", .x)) %>%
+  group_by (country, nutrient) %>%
+  summarise (across( where(is.numeric), ~ sum(.x, na.rm = TRUE))) %>%
+  # join to population demand
+  left_join (filter (wpp_country_aggregate, Time == 2019), by = c("country", "nutrient")) %>%
+  mutate (perc_demand_met = nutr_tonnes / tot_nutr_annual_demand * 100) %>%
+  select (-c(Time, nutr_tonnes, tot_pop, tot_nutr_annual_demand))  
+
+mal_rnis %>% write.excel()
+
 # have to match species names, just at genus level for most of them
 mal_export <- exports %>% 
   filter (country == "Malawi") %>%
@@ -871,6 +895,24 @@ mwi_export <- mal_landings %>%
   pivot_longer (Exported:Retained, 
                 names_to = "exports",
                 values_to = "catch_mt") 
+
+
+mwi_export_nutr <- mwi_export %>%
+  # attempting to do both rni equiv and nutr_tonnes in one 
+  mutate(rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = "Malawi"), calc_children_fed_func),
+         nutr_tonnes = pmap (list (species_name = species, catch_mt = catch_mt, country_name = "Malawi"), convert_catch_to_nutr_tons)) %>%
+  unnest (cols = c(rni_equivalents, nutr_tonnes),  names_repair = "check_unique", names_sep = ".") %>%
+  # this makes weird column names because I didn't think about running the functions together. duplicates the nutrient column
+  select (-c(nutr_tonnes.nutrient, catch_mt)) %>%
+  # remove text before "." in column names
+  rename_with (~gsub(".*\\.", "", .x)) %>%
+  # group by nutrient, this makes it cleaner
+  group_by (country, exports, nutrient) %>%
+  summarise (across( where(is.numeric), ~ sum(.x, na.rm = TRUE))) %>%
+  # join to population demand
+  left_join (filter (wpp_country_aggregate, Time == 2019), by = c("country", "nutrient")) %>%
+  mutate (perc_demand_met = nutr_tonnes / tot_nutr_annual_demand * 100) %>%
+  select (-c(Time, nutr_tonnes, tot_pop, tot_nutr_annual_demand))  
 
   
 
