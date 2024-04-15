@@ -33,6 +33,7 @@ d_gigas_nutr <- data.frame (
 
 
 # afcd data for nonfish ----
+# compiled/cleaned in AFCD_explore.R
 
 # something weird with taxa! some are plural some not!!
 nonfish_afcd_nutr <- readRDS("Data/nonfish_afcd_nutr_compiled.Rds") %>%
