@@ -247,9 +247,11 @@ sl_export %>%
 #####################################################################################3
 # Chile ----
 
+# update 4/15/24 -- removing anchovy for chile
+
 # 2021 landings from sernapesca
 chl_noalgae <- chl_landings %>%
-  filter (year == 2021, chl_taxa != "Algae") %>%
+  filter (year == 2021, chl_taxa != "Algae", species != "Engraulis ringens") %>%
   mutate (country = "Chile") 
 
 chl_algae <- chl_landings %>%
