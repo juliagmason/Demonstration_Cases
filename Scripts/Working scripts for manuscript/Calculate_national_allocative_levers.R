@@ -325,7 +325,7 @@ chl_export_nutr <- chl_export %>%
   # group by nutrient, this makes it cleaner
   group_by (country, exports, nutrient) %>%
   summarise (across( where(is.numeric), ~ sum(.x, na.rm = TRUE))) %>%
-  # join to Sierra leone population demand
+  # join to population demand
   left_join (filter (wpp_country_aggregate, Time == 2021), by = c("country", "nutrient")) %>%
   mutate (perc_demand_met = nutr_tonnes / tot_nutr_annual_demand * 100) %>%
   select (-c(Time, nutr_tonnes, tot_pop, tot_nutr_annual_demand))  
@@ -423,6 +423,66 @@ chl_export %>%
   summarise (catch_volume = sum (catch_mt, na.rm = TRUE)) %>%
   mutate (perc_volume = catch_volume / sum(catch_volume) * 100) %>%
   write.excel()
+
+# Chile only anchoveta ----
+# no foreign fishing of anchoveta in SAU 2019
+
+chl_anchov <- chl_landings %>%
+  filter (year == 2021, species == "Engraulis ringens") %>%
+  mutate (country = "Chile")
+
+chl_anchov_sector_nutr <- chl_anchov %>%
+  mutate (rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = "Chile"), calc_children_fed_func),
+         nutr_tonnes = pmap (list (species_name = species, catch_mt = catch_mt, country_name = "Chile"), convert_catch_to_nutr_tons)) %>%
+  unnest (cols = c(rni_equivalents, nutr_tonnes),  names_repair = "check_unique", names_sep = ".") %>%
+  # this makes weird column names because I didn't think about running the functions together. duplicates the nutrient column
+  select (-c(nutr_tonnes.nutrient, catch_mt)) %>%
+  # remove text before "." in column names
+  rename_with (~gsub(".*\\.", "", .x)) %>%
+  # group by nutrient, this makes it cleaner
+  group_by (country, sector, nutrient) %>%
+  summarise (across( where(is.numeric), ~ sum(.x, na.rm = TRUE))) %>%
+  # join to population demand
+  left_join (filter (wpp_country_aggregate, Time == 2021), by = c("country", "nutrient")) %>%
+  mutate (perc_demand_met = nutr_tonnes / tot_nutr_annual_demand * 100) %>%
+  select (-c(Time, nutr_tonnes, tot_pop, tot_nutr_annual_demand))
+
+saveRDS(chl_anchov_sector_nutr, file = "Data/levers_RNI_pop_sector_Chile_anchov.Rds")
+
+chl_anchov_exports_vol <- chl_anchov %>%
+  # aggregate small and large scale
+  group_by (country, species) %>%
+  summarise (catch_mt = sum(catch_mt, na.rm = TRUE)) %>%
+  # join to ARTIS data
+  left_join(exports, by = c("species", "country")) %>%
+  mutate (Exported = catch_mt * prop_exp,
+          Retained = catch_mt * (1-prop_exp)) %>%
+  # cut unnecessary columns
+  select (country, species, Exported, Retained) %>%
+  # pivot longer
+  pivot_longer (Exported:Retained, 
+                names_to = "exports",
+                values_to = "catch_mt")
+
+chl_anchov_exports_nutr <- chl_anchov_exports_vol %>%
+  # attempting to do both rni equiv and nutr_tonnes in one 
+  mutate(rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = "Chile"), calc_children_fed_func),
+         nutr_tonnes = pmap (list (species_name = species, catch_mt = catch_mt, country_name = "Chile"), convert_catch_to_nutr_tons)) %>%
+  unnest (cols = c(rni_equivalents, nutr_tonnes),  names_repair = "check_unique", names_sep = ".") %>%
+  # this makes weird column names because I didn't think about running the functions together. duplicates the nutrient column
+  select (-c(nutr_tonnes.nutrient, catch_mt)) %>%
+  # remove text before "." in column names
+  rename_with (~gsub(".*\\.", "", .x)) %>%
+  # group by nutrient, this makes it cleaner
+  group_by (country, exports, nutrient) %>%
+  summarise (across( where(is.numeric), ~ sum(.x, na.rm = TRUE))) %>%
+  # join to population demand
+  left_join (filter (wpp_country_aggregate, Time == 2021), by = c("country", "nutrient")) %>%
+  mutate (perc_demand_met = nutr_tonnes / tot_nutr_annual_demand * 100) %>%
+  select (-c(Time, nutr_tonnes, tot_pop, tot_nutr_annual_demand))  
+
+saveRDS(chl_anchov_exports_nutr, "Data/levers_RNI_pop_export_Chile_anchov.Rds")
+  
 
 #####################################################################################3
 # Indonesia ----
