@@ -52,6 +52,7 @@ catch_upside_totals <-  ds_spp %>%
   mutate (
     # make life easier by making peru anchovy and not anchovy different countries so calculates separately
     country = case_when (country == "Peru" & species == "Engraulis ringens" ~ "Peru_anchoveta",
+                         country == "Chile" & species == "Engraulis ringens" ~ "Chile_anchoveta",
                          TRUE ~ country),
     # baseline and mid century and end century
     period = case_when (
@@ -76,7 +77,7 @@ ds_spp %>% filter (country == "Chile", rcp == "RCP60") %>%
   summarise (tot_cat = sum (catch_mt, na.rm = TRUE)) %>%
   ggplot (aes (x = year, y = tot_cat, col = scenario)) + 
   geom_line() + theme_bw() +
-  xlim (2017, 2100)
+  xlim (2017, 2100) 
 
 # calculate annual catch upside for full time series----
 
@@ -380,16 +381,9 @@ catch_upside_tonnes <- catch_upside_relative %>%
 catch_upside_tonnes %>%
   filter (rcp == "RCP60") %>%
   mutate(country = case_when (country == "Peru" & species == "Engraulis ringens" ~ "Peru_anchoveta",
+                              country == "Chile" & species == "Engraulis ringens" ~ "Chile_anchoveta",
                        TRUE ~ country)
   ) %>%
-  group_by (country) %>%
-  summarize (across(bau_ratio_midcentury:bl_tonnes, ~sum(.x))) %>%
-  select (-c(mey_ratio_midcentury, mey_ratio_endcentury)) %>%
-  mutate (across (bau_ratio_midcentury:adapt_ratio_endcentury, ~. / bl_tonnes * 100)) %>%
-  write.excel()
-
-catch_upside_tonnes %>%
-  filter (rcp == "RCP60") %>%
   group_by (country) %>%
   summarize (across(bau_ratio_midcentury:bl_tonnes, ~sum(.x))) %>%
   select (-c(mey_ratio_midcentury, mey_ratio_endcentury)) %>%
@@ -468,6 +462,7 @@ nutr_upside_rni_nutr_tonnes <- catch_upside_tonnes %>%
   mutate(
     # make life easier by making peru anchovy and not anchovy different countries so calculates separately
     country = case_when (country == "Peru" & species == "Engraulis ringens" ~ "Peru_anchoveta",
+                         country == "Chile" & species == "Engraulis ringens" ~ "Chile_anchoveta",
                          TRUE ~ country),
     rni_equivalents = pmap (list (species = species, amount = tonnes, country_name = country), calc_children_fed_func), 
          nutr_tonnes = pmap (list (species_name = species, catch_mt = tonnes, country_name = country), convert_catch_to_nutr_tons)) %>%
@@ -579,7 +574,17 @@ saveRDS(sl, file = "Data/annual_nutr_upside_childRNI_Sierra Leone.Rds")
 chl <-   calc_nutr_upside_tonnes_annual ("Chile"); beep()
 saveRDS(chl, file = "Data/annual_nutr_upside_childRNI_Chile.Rds")
 
+# update 4/15/24 separating anchoveta for chile as well
+chl <- readRDS("Data/annual_nutr_upside_childRNI_Chile.Rds")
 
+chl_anchoveta <- chl %>% 
+  filter (species == "Engraulis ringens")
+saveRDS(chl_anchoveta, file = "Data/annual_nutr_upside_childRNI_Chile_anchoveta.Rds")
+
+chl_non_anchoveta <- chl %>%
+  filter (species != "Engraulis ringens")
+# NOTE--overriding previous rds object, now does NOT INCLUDE anchoveta
+saveRDS(chl_non_anchoveta, file = "Data/annual_nutr_upside_childRNI_Chile.Rds")
 
 ################################################################################################################
 
