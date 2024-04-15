@@ -464,7 +464,7 @@ chl_anchov_exports_vol <- chl_anchov %>%
                 names_to = "exports",
                 values_to = "catch_mt")
 
-chl_anchov_exports_nutr <- chl_anchov_exports_vol %>%
+chl_anchov_export_nutr <- chl_anchov_exports_vol %>%
   # attempting to do both rni equiv and nutr_tonnes in one 
   mutate(rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = "Chile"), calc_children_fed_func),
          nutr_tonnes = pmap (list (species_name = species, catch_mt = catch_mt, country_name = "Chile"), convert_catch_to_nutr_tons)) %>%
@@ -481,8 +481,52 @@ chl_anchov_exports_nutr <- chl_anchov_exports_vol %>%
   mutate (perc_demand_met = nutr_tonnes / tot_nutr_annual_demand * 100) %>%
   select (-c(Time, nutr_tonnes, tot_pop, tot_nutr_annual_demand))  
 
-saveRDS(chl_anchov_exports_nutr, "Data/levers_RNI_pop_export_Chile_anchov.Rds")
-  
+saveRDS(chl_anchov_export_nutr, "Data/levers_RNI_pop_export_Chile_anchov.Rds")
+
+
+# report values ----
+
+# total current provisioning
+chl_anchov_sector_nutr %>%
+  #filter (sector != "Foreign catch") %>%
+  group_by (nutrient) %>%
+  summarise (across( where(is.numeric), sum)) %>%
+  write.excel()
+
+# No foreign catch 
+
+# artisanal vs industrial 
+chl_anchov_sector_nutr %>%
+  group_by(nutrient, sector) %>%
+  summarise (across( where(is.numeric), sum)) %>%
+  pivot_wider (names_from = sector,
+               values_from = c(rni_equivalents, perc_demand_met),
+               names_glue = "{sector}_{.value}") %>%
+  ungroup() %>%
+  mutate (SSF_perc_rnis = Artisanal_rni_equivalents/(Industrial_rni_equivalents + Artisanal_rni_equivalents)* 100,
+          LSF_perc_rnis = Industrial_rni_equivalents/(Industrial_rni_equivalents + Artisanal_rni_equivalents)* 100) %>%
+  write.excel()
+
+# percent catch by volume
+chl_anchov %>%
+  group_by (sector) %>%
+  summarise (catch_volume = sum (catch_mt, na.rm = TRUE)) %>%
+  mutate (perc_volume = catch_volume / sum(catch_volume) * 100) %>%
+  write.excel()
+
+# exports 
+chl_anchov_export_nutr %>%
+  pivot_wider (names_from = exports,
+               values_from = c(rni_equivalents, perc_demand_met),
+               names_glue = "{exports}_{.value}") %>%
+  ungroup() %>%
+  mutate (perc_rnis_Exported = Exported_rni_equivalents/(Retained_rni_equivalents + Exported_rni_equivalents)* 100) %>%
+  select (-country) %>%
+  write.excel()
+
+# percent catch by volume
+# this is just the artis anchoveta value
+exports %>% filter (country == "Chile", species == "Engraulis ringens")
 
 #####################################################################################3
 # Indonesia ----
