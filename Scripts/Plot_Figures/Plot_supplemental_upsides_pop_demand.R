@@ -122,8 +122,7 @@ plot_pop_needs_met_proj_anchov <- function (country_name, RCP, anchovy = FALSE) 
   }
   
   
-  
-}
+pmap (expand_grid(country_name = "Chile", RCP = c("RCP26", "RCP45", "RCP60", "RCP85"), anchovy = c(TRUE, FALSE)), plot_pop_needs_met_proj_anchov)
 
 
 
