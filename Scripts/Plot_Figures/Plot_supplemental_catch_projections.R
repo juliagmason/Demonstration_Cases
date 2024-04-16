@@ -24,7 +24,7 @@ ds_spp_anchov <- ds_spp %>%
 ds_spp_anchov$scenario <- factor (ds_spp_anchov$scenario, levels = c ("No Adaptation", "Productivity Only", "Full Adaptation"))
 
 plot_total_catch_projections <- function (country_name) {
-  # country names are Chile, "Peru, anchoveta only", "Peru, anchoveta removed", Sierra Leone, Indonesia 
+  # country names are "Chile, anchoveta only", "Chile, anchoveta removed" "Peru, anchoveta only", "Peru, anchoveta removed", Sierra Leone, Indonesia 
  
   catch_projection_plot <- ds_spp_anchov %>%
     filter (country == country_name) %>%
@@ -44,9 +44,13 @@ plot_total_catch_projections <- function (country_name) {
            axis.title = element_text (size = 14))
   
   #valid filenames
-  if (country_name == "Peru, anchoveta only") {
-    country_filename = "Peru_anchov"} else if (country_name == "Peru, anchoveta removed") {
-      country_filename = "Peru_noanchov"} else {
+  if (grepl ("only", country_name)) {
+    # take text before comma (country name) and append to "anchov"
+    country_filename = paste(gsub("(.+?)(\\,.*)", "\\1", country_name), "anchov", sep = "_")
+    } else if (grepl ("removed", country_name)) {
+      # take text before comma (country name) and append to "noanchov"
+      country_filename = paste(gsub("(.+?)(\\,.*)", "\\1", country_name), "noanchov", sep = "_")
+      } else {
         country_filename = country_name }
   
   
@@ -54,6 +58,8 @@ plot_total_catch_projections <- function (country_name) {
   print (catch_projection_plot)
   dev.off()
 }
+
+plot_total_catch_projections("Chile, anchoveta only")
 
 # clip to species for which we have nutrition and production data ----
 # based on production baselines 
@@ -73,6 +79,8 @@ catch_upside_ts <- catch_upside_annual %>%
           country = case_when (
             country == "Peru" & species == "Engraulis ringens" ~ "Peru, anchoveta only",
             country == "Peru" & species !="Engraulis ringens" ~ "Peru, anchoveta removed",
+            country == "Chile" & species == "Engraulis ringens" ~ "Chile, anchoveta only",
+            country == "Chile" & species !="Engraulis ringens" ~ "Chile, anchoveta removed",
             TRUE ~ country)
   )
 
@@ -102,10 +110,14 @@ plot_clipped_catch_projections <- function (country_name) {
            axis.title = element_text (size = 14))
   
   #valid filenames
-  if (country_name == "Peru, anchoveta only") {
-    country_filename = "Peru_anchov"} else if (country_name == "Peru, anchoveta removed") {
-      country_filename = "Peru_noanchov"} else {
-        country_filename = country_name }
+  if (grepl ("only", country_name)) {
+    # take text before comma (country name) and append to "anchov"
+    country_filename = paste(gsub("(.+?)(\\,.*)", "\\1", country_name), "anchov", sep = "_")
+  } else if (grepl ("removed", country_name)) {
+    # take text before comma (country name) and append to "noanchov"
+    country_filename = paste(gsub("(.+?)(\\,.*)", "\\1", country_name), "noanchov", sep = "_")
+  } else {
+    country_filename = country_name }
   
   
   png(paste0("Figures/Clipped_catch_projections_", country_filename, ".png"), width = 8, height = 6, units = "in", res = 300)
@@ -114,3 +126,4 @@ plot_clipped_catch_projections <- function (country_name) {
 }
 
 map (c("Chile", "Peru, anchoveta only", "Peru, anchoveta removed", "Sierra Leone", "Indonesia"), plot_clipped_catch_projections)
+plot_clipped_catch_projections ("Chile, anchoveta removed")
