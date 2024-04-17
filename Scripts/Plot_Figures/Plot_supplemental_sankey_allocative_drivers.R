@@ -8,7 +8,8 @@
 library (tidyverse)
 library (ggalluvial)
 
-
+library (RColorBrewer)
+brewer.pal(n = 6, "Set1")
 ####################################################################################
 
 # Foreign vs domestic
@@ -27,7 +28,7 @@ plot_foreign_sankey <- function (country_name) {
   foreign_nutr$sector <- factor (foreign_nutr$sector, levels = sector_levels)
   
   foreign_nutr  %>% 
-    filter (!nutrient %in% c("Protein", "Selenium")) %>%
+    filter (!nutrient %in% c("Protein")) %>%
     mutate (nutrient = case_when (
       nutrient == "Omega_3" ~ "Omega 3",
       nutrient == "Vitamin_A" ~ "Vit. A",
@@ -43,7 +44,8 @@ plot_foreign_sankey <- function (country_name) {
     geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 2.5) +
     theme_minimal() +
     ggtitle("National allocative driver") +
-    scale_fill_brewer (palette = "Set1") +
+    #scale_fill_brewer (palette = "Set1") +
+    scale_fill_manual(values = c("#E41A1C", "#377EB8", "#4DAF4A","#FFFF33", "#984EA3", "#FF7F00")) +
     theme ( 
       axis.text.x = element_blank(),
       axis.text.y = element_text (size = 9),
@@ -57,7 +59,44 @@ plot_foreign_sankey <- function (country_name) {
 
 map (c("Chile", "Peru_anchov", "Peru_noanchov", "SierraLeone", "Indo"), plot_foreign_sankey)
 
+### Chile anchoveta -- no foreign fishing
+library (RColorBrewer)
+brewer.pal(n = 6, "Set1")
 
+chl_sector <- readRDS("Data/levers_RNI_pop_foreign_sector_Chile.Rds")
+sector_levels = c("Artisanal", "Industrial")
+
+#set levels
+chl_sector$sector <- factor (chl_sector$sector, levels = sector_levels)
+
+chl_sector  %>% 
+  filter (!nutrient %in% c("Protein")) %>%
+  mutate (nutrient = case_when (
+    nutrient == "Omega_3" ~ "Omega 3",
+    nutrient == "Vitamin_A" ~ "Vit. A",
+    TRUE ~ nutrient)) %>%
+  ggplot (aes (axis1 = nutrient,
+               axis2 = sector,
+               y = rni_equivalents/1000000,
+               fill = nutrient)) +
+  scale_x_discrete (limits = c ("nutrient", "sector"), expand = c(.05, .05)) +
+  labs(y = "Child RNI equiv., millions", x = "") +
+  geom_flow(aes(fill = nutrient)) +
+  geom_stratum(aes(fill = nutrient)) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 2.5) +
+  theme_minimal() +
+  ggtitle("National allocative driver") +
+  #scale_fill_brewer (palette = "Set1") +
+  scale_fill_manual(values = c("#E41A1C", "#377EB8", "#4DAF4A","#FFFF33", "#984EA3", "#FF7F00")) +
+  theme ( 
+    axis.text.x = element_blank(),
+    axis.text.y = element_text (size = 9),
+    axis.title = element_text (size = 10),
+    plot.title = element_text (size = 12),
+    plot.margin=unit(c(1,1,1,1), 'mm'),
+    legend.position = "none")
+
+ggsave ("Figures/FigSI_foreign_sector_driver_Chile_anchov.png", width = 74, height = 70, units = "mm")
 
 ###########################################################################################
 # Reject figures
