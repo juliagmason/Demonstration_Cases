@@ -33,7 +33,7 @@ plot_exports_sankey <- function (country_name) {
     theme_minimal() +
     ggtitle("National allocative drivers") +
     #scale_fill_brewer (palette = "Set1") +
-    scale_fill_manual(values = c("#E41A1C", "#377EB8", "#4DAF4A","#FFFF33", "#984EA3", "#FF7F00"))
+    scale_fill_manual(values = c("#E41A1C", "#377EB8", "#4DAF4A","#FFFF33", "#984EA3", "#FF7F00"))+
     theme ( 
       axis.text.x = element_blank(),
       axis.text.y = element_text (size = 9),
