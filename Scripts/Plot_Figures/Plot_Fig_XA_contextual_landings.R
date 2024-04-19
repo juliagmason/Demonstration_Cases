@@ -103,7 +103,7 @@ sau_20yr_nutricast_clip %>%
     geom_area(aes (fill = commercial_group), position = "stack") +
     
     # add future time series, plot by commercial group, only two scenarios
-    geom_area (data = filter(upside_ts_bau_agg_comm_group, country == "Indonesia", rcp == "RCP60"), aes (fill = commercial_group), position = "stack") +
+    geom_area (data = filter(upside_ts_bau_agg_comm_group, country == "Indonesia", rcp == "RCP60", year <= 2060), aes (fill = commercial_group), position = "stack") +
     
     # add line of aggregated past landings to show what's missing
     geom_line (data = filter (sau_20yr_agg, country == "Indonesia"), lty = 2) +
@@ -142,7 +142,7 @@ sau_20yr_nutricast_clip %>%
     geom_area(aes (fill = commercial_group), position = "stack") +
     
     # add future time series, plot by commercial group, only two scenarios
-    geom_area (data = filter(upside_ts_bau_agg_comm_group, country == "Peru", rcp == "RCP60"), aes (fill = commercial_group), position = "stack") +
+    geom_area (data = filter(upside_ts_bau_agg_comm_group, country == "Peru", rcp == "RCP60", year <= 2060), aes (fill = commercial_group), position = "stack") +
     
     # add line of aggregated past landings to show what's missing
     geom_line (data = filter (sau_20yr_agg, country == "Peru"), lty = 2) +
@@ -216,7 +216,7 @@ sau_20yr_nutricast_clip %>%
     ggplot (aes (x = year, y = tonnes/1000000)) +
     geom_area(aes (fill = commercial_group), position = "stack") +
     # add future landings
-    geom_area (data = filter (upside_chile_groups, rcp == "RCP60"), aes (fill = commercial_group), position = "stack") +
+    geom_area (data = filter (upside_chile_groups, rcp == "RCP60", year <= 2060), aes (fill = commercial_group), position = "stack") +
     # add line of aggregated past landings to show what's missing
     geom_line (data = chl_landings_agg ) +
     # add line to show SAU landings
@@ -286,7 +286,7 @@ ggsave ("Figures/FigXA_contextual_Chile.eps", width = 174, height = 60, units = 
     ggplot (aes (x = year, y = tonnes/1000000)) +
     geom_area(aes(fill = commercial_group), position = "stack") +
     # add future landings
-    geom_area (data = filter (upside_sl_groups, rcp == "RCP60"), aes(fill = commercial_group), position = "stack") +
+    geom_area (data = filter (upside_sl_groups, rcp == "RCP60", year <= 2060), aes(fill = commercial_group), position = "stack") +
     
     # add line of aggregated past landings to show what's missing
     geom_line (data = ihh_agg_landings ) +
