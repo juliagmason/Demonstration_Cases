@@ -10,8 +10,18 @@ library (stringr) # for wrangling species, family, genus names
 library (rfishbase) # for interpolating missing species
 library (beepr) # calc_nutr_upside_tonnes_annual takes many minutes
 
+
+# function for copying R output tables into word/excel----
+#https://stackoverflow.com/questions/24704344/copy-an-r-data-frame-to-an-excel-spreadsheet
+write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
+  write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
+}
+
+# function for converting catch in mt to child RNI equivalents ----
+source ("Scripts/Function_convert_catch_amt_children_fed.R")
+
 # major update 3/27/23 is that I'm going to calculate children fed from current landings, and then multiply ratios for nutrient yield. doing this to preserve matched species. but maybe doesn't matter?
-# 11/21/23 overhauling code--this is calculating, not plotting. bring in calculation of catch upsides from calculate_nutritional_upsides.R, which was misnamed, only calculated catch upsides there
+# 11/21/23 overhauling code--this is calculating, not plotting. bring in calculation of catch upsides from calculate_nutritional_upsides.R, which was misnamed, only calculated catch upsides there. rename to calculate_relative_catch_upsides
 
 
 # projection data from free et al. 2020. smaller version to reduce processing time, just has 3 management scenarios
@@ -507,6 +517,7 @@ baseline_rni_nutr_tonnes <- baseline_nutricast_clip %>%
   # group by nutrient, this makes it cleaner
   # make peru anchoveta its own country
   mutate(country = case_when (country == "Peru" & species == "Engraulis ringens" ~ "Peru_anchoveta",
+                              country == "Chile" & species == "Engraulis ringens" ~ "Chile_anchoveta",
                          TRUE ~ country)) %>%
   group_by (country, nutrient) %>%
   summarise (across( where(is.numeric), ~ sum(.x, na.rm = TRUE)))
