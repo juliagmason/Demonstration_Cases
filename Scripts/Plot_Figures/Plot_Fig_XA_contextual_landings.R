@@ -238,7 +238,33 @@ sau_20yr_nutricast_clip %>%
     ggtitle (paste0("Recent and projected total landings, ", "Chile")) 
   
 ggsave ("Figures/FigXA_contextual_Chile.eps", width = 174, height = 60, units = "mm") 
-  
+
+
+
+# which perch likes are accounting for steady rise?
+chl_landings_check <- chl_landings %>%
+     filter (!commercial_group == "Algae") %>%
+       mutate (country = "Chile") %>%
+       # clips to nutricast spp
+       right_join (nutricast_spp, by = c("country", "species")) %>%
+       
+       # condense to 8 commercial groups
+       # cut to 8 comm groups
+       mutate (commercial_group = case_when (
+           commercial_group %in% c("Flatfishes", "Scorpionfishes", "Cod-likes") ~ "Other fishes & inverts",
+          TRUE ~ commercial_group
+         )) %>%
+  group_by (species, year, commercial_group) %>%
+  summarise (catch_mt = sum (catch_mt, na.rm = TRUE)) %>% ungroup()
+
+chl_landings_check %>%
+  filter (commercial_group == "Perch-likes", catch_mt > 1000) %>% 
+  ggplot (aes (x = year, y = catch_mt/1000000, col = species, group = species)) +
+  geom_line ()
+
+chl_landings_check %>% filter (species == "Engraulis ringens") %>%
+  ggplot (aes (x = year, y = catch_mt/1000000, col = species, group = species)) +
+  geom_line ()
 
 # Sierra Leone ----
   show_col(brewer_pal(palette = "Dark2")(8))
