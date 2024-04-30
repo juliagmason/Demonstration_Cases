@@ -38,13 +38,6 @@ catch_upside_relative <-  ds_spp %>%
 
 saveRDS (catch_upside_relative, file = "Data/nutricast_upside_relative.Rds")
 
-catch_upside_relative %>%
-  filter (rcp == "RCP60") %>%
-  right_join (priority_spp, by = c("country", "species")) %>%
-  filter (!country == "Indonesia") %>%
-  arrange (country, rank) %>%
-  write.excel()
-
 # also do this for each year so I can plot a full time series----
 
 # probably can do this with brackets but just make a baseline value separately
