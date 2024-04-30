@@ -56,38 +56,6 @@ catch_upside_relative <-  ds_spp %>%
 
 saveRDS (catch_upside_relative, file = "Data/nutricast_upside_relative.Rds")
 
-# report total catch relative to baseline----
-catch_upside_totals <-  ds_spp %>%
-  filter (scenario %in% c("No Adaptation", "Full Adaptation"), catch_mt > 0) %>%
-  mutate (
-    # make life easier by making peru anchovy and not anchovy different countries so calculates separately
-    country = case_when (country == "Peru" & species == "Engraulis ringens" ~ "Peru_anchoveta",
-                         country == "Chile" & species == "Engraulis ringens" ~ "Chile_anchoveta",
-                         TRUE ~ country),
-    # baseline and mid century and end century
-    period = case_when (
-      year %in% c(2017:2021) ~ "baseline",
-      year %in% c(2051:2060) ~ "midcentury",
-      year %in% c(2091:2100) ~ "endcentury")) %>%
-  filter (!is.na (period)) %>%
-  group_by (country, rcp, scenario, period, species) %>%
-  summarise (catch_mt = mean (catch_mt, na.rm = TRUE)) %>%
-  ungroup() %>%
-  group_by (country, scenario, rcp, period) %>%
-  summarise (tot_cat = sum(catch_mt)) %>%
-  pivot_wider(names_from = period, values_from = tot_cat) %>%
-  mutate (mid_perc = midcentury/baseline * 100, end_perc = endcentury/baseline * 100)
-
-catch_upside_totals %>%
-  filter (!country %in% c("Ghana", "Mexico"), rcp == "RCP60") %>%
-  write.excel()
-
-ds_spp %>% filter (country == "Chile", rcp == "RCP60") %>% 
-  group_by (year, scenario) %>%
-  summarise (tot_cat = sum (catch_mt, na.rm = TRUE)) %>%
-  ggplot (aes (x = year, y = tot_cat, col = scenario)) + 
-  geom_line() + theme_bw() +
-  xlim (2017, 2100) 
 
 # calculate annual catch upside for full time series----
 
@@ -192,7 +160,7 @@ match_nutricast_taxa <- function (species_name, country_name) {
     match_mean <- match %>%
       group_by (rcp, Family) %>%
       # take mean of all the ratio columns
-      summarise (across(bau_ratio_midcentury:adapt_ratio_endcentury, mean, na.rm = TRUE)) %>%
+      summarise (across(bau_ratio_midcentury:adapt_ratio_endcentury,  \(x) mean (x, na.rm = TRUE))) %>%
       #rename (species = Family) %>%
       # remove to avoid name duplication
       select (-Family)
@@ -245,8 +213,6 @@ nutricast_repair <- nutricast_missing_spp %>%
   mutate (nutricast = pmap(list(species_name = species, country_name = country), match_nutricast_taxa)
   ) %>% 
   unnest (cols = c(nutricast), names_repair = "check_unique")
-
-#saveRDS(nutricast_repair, file = "Data/catch_upside_relative_repair_missing.Rds")
 
 # join
 catch_upside_repaired <- catch_upside_relative %>%
