@@ -174,6 +174,41 @@ plot_sau_rnis_met("Chile") +
 
 ggsave ("Figures/FigXB_TNY_Chile.eps", width = 74, height = 60, units = "mm")
 
+# supplemental including algae
+png ("Figures/FigSX_Chile_TNY_algae.png", width = 7, height = 4, units = "in", res = 300)
+chl_landings %>%
+  filter (year == 2021) %>%
+  # cut to 8 commercial groups
+  mutate (commercial_group = case_when (
+    commercial_group %in% c("Flatfishes", "Scorpionfishes", "Cod-likes", "Salmon, smelts, etc") ~ "Other fishes & inverts",
+    TRUE ~ commercial_group
+  )) %>%
+  group_by (species, commercial_group) %>%
+  summarise (catch_mt = sum (catch_mt)) %>%
+  mutate (rni_equivalents = pmap (list (species = species, amount = catch_mt, country_name = "Chile"), calc_children_fed_func)) %>%
+  unnest(cols = c(rni_equivalents),  names_repair = "check_unique") %>%
+  filter (!nutrient %in% c("Protein", "Selenium")) %>%
+  # just have alphabetical so nutrients are always in the same order
+  ggplot (aes (x = nutrient, y = rni_equivalents/1000000, fill = commercial_group)) +
+  geom_col() +
+  theme_bw() +
+  labs (x = "", y = "Child RNI equivalents, millions", fill = "Commercial group") +
+  ggtitle ("Potential nutrient provisioning, 2021 landings") +
+  # have to add a color for algae
+  scale_fill_manual(values = c("#4EB3D3", "#1B9E77", "#D95F02", "#7570b3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D", "#666666")) +
+  theme (axis.text = element_text (size = 11),
+         axis.title = element_text (size = 12),
+         legend.text = element_text (size = 11),
+         legend.title = element_text (size = 12),
+         legend.key.size = unit (3.5, "mm"),
+         legend.margin=margin(1,1,1,2),
+         legend.box.margin=margin(-10,-10,-10,-10),
+         plot.title = element_text(size = 13),
+         plot.margin=unit(c(1,1,1,1), 'mm')) 
+
+dev.off()
+  
+
 # Malawi ----
 # plot separately
 # ssf has 2018 but industrial most recent is 2017
