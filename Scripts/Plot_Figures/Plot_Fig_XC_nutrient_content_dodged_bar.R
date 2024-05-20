@@ -233,13 +233,16 @@ chl_top_alg <- chl_landings %>%
   filter (commercial_group == "Algae") %>%
   group_by (species) %>%
   summarise (tot = sum (catch_mt)) %>%
-  slice_max (tot, n = 4)
+  slice_max (tot, n = 5) %>%
+  # no nutrient data for M. pyriphera
+  filter (species != "Macrocystus pyriphera")
 
-png ("Figures/Chl_top_spp_nutr_dodge_bar_alg.png", width = 5, height = 4, units = "in", res = 300)
+# supplemental figure with algae
+png ("Figures/FigSX_Chl_nutr_alg.png", width = 7, height = 4, units = "in", res = 300)
 print(
   plot_colorful_spp_nutr_dodge_bar(chl_top_alg$species, Selenium = FALSE) +
     ggtitle ("Nutrient content of top algal species by volume") +
-    # scale_x_discrete(labels = c ())
+    scale_fill_brewer(palette = "Set1") +
     theme ( 
       axis.text.y = element_text (size = 13),
       axis.text.x = element_text (size = 11),
