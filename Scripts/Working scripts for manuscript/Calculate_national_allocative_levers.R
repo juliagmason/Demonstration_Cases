@@ -258,7 +258,7 @@ chl_algae <- chl_landings %>%
   filter (year == 2021) %>%
   mutate (country = "Chile")
 
-# foreign catch from SAU
+# foreign catch from SAU (no foreign catch of anchoveta)
 chl_foreign <- sau_2019 %>%
   ungroup () %>%
   filter (country == "Chile", fleet == "Foreign catch") %>%
@@ -400,11 +400,11 @@ chl_foreign_sector_vol %>%
   mutate (perc_volume = catch_volume / sum(catch_volume) * 100) %>%
   write.excel()
 
-# artisanal catch more omega 3s, is this bc of anchovy?
+# artisanal catch more omega 3s, is this bc of anchovy? still the case with non-anchovy, what are the other spp? 
 chl_noalgae %>% filter (species == "Engraulis ringens")
 
 chl_noalgae %>% filter (sector == "Artisanal") %>%
-  mutate (catch_prop = catch_mt / sum (catch_mt)) %>%
+  mutate (catch_prop = catch_mt / sum (catch_mt, na.rm = TRUE)) %>%
 arrange (desc(catch_prop)) %>% View()
 
 # exports 
