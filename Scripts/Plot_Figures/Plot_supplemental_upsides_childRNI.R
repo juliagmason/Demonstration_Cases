@@ -46,8 +46,7 @@ plot_child_RNI_proj_facet <- function (country_name) {
     facet_wrap (nutrient~rcp, scales = "free_y", ncol = 4) +
     theme_bw() +
     labs (y = "Child RNI equivalents, millions", x = "", col = "Mgmt. scenario") +
-    #ggtitle (plot_title) +
-    ggtitle (paste0("Projected nutrient yield for ", country_name)) +
+    ggtitle (plot_title) +
     theme (axis.text.y = element_text (size = 12),
            axis.text.x = element_text (size = 10),
            axis.title = element_text (size = 14),
