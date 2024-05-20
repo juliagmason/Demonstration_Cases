@@ -268,6 +268,15 @@ chl_landings_check %>% filter (species == "Engraulis ringens") %>%
 
 # Sierra Leone ----
   show_col(brewer_pal(palette = "Dark2")(8))
+
+# check which species are the dominant herring-likes
+sl_ihh_landings %>%
+  filter (year == 2017) %>% 
+  mutate (country = "Sierra Leone") %>%
+  #clip to nutricast
+  right_join (nutricast_spp, by = c("country", "species")) %>%
+  mutate (catch_prop = catch_mt / sum (catch_mt)) %>%
+  arrange (desc(catch_prop)) %>% View()
   
   sl_landings_agg_clip_commgroup <- sl_ihh_landings %>%
     mutate (country = "Sierra Leone") %>%
